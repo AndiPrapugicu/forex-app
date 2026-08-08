@@ -14,7 +14,7 @@ import { ALL_SYMBOLS } from '@/config/symbols.config';
 import { fetchCotData, type CotSeries } from '@/lib/connectors/cftc';
 import { fetchFxStreetHistory } from '@/lib/connectors/fxstreet';
 import { fetchPrices } from '@/lib/connectors/prices';
-import { fetchTechnicals, type Technicals } from '@/lib/connectors/technicals';
+import { fetchTechnicals, fetchYield2y, type Technicals } from '@/lib/connectors/technicals';
 import { buildSetupsMatrix, type SetupsMatrix } from '@/lib/scoring/setups';
 import type { NormalizedEvent, Result, SourceHealth } from '@/lib/types';
 
@@ -37,11 +37,13 @@ function toHealth(res: Result<unknown>): SourceHealth {
 }
 
 export async function runSetupsPipeline(now = new Date()): Promise<SetupsPayload> {
-  const [history, cot, technicals, prices] = await Promise.all([
+  const [history, cot, technicals, prices, yield2y] = await Promise.all([
     fetchFxStreetHistory(now),
     fetchCotData(),
     fetchTechnicals(ALL_SYMBOLS.map((s) => ({ symbol: s.symbol, yahoo: s.yahoo }))),
     fetchPrices(),
+    // Never throws; a null just leaves the 2-year yield column blank.
+    fetchYield2y().catch(() => null),
   ]);
 
   const health = [toHealth(history), toHealth(cot), toHealth(technicals), toHealth(prices)];
@@ -65,6 +67,7 @@ export async function runSetupsPipeline(now = new Date()): Promise<SetupsPayload
     cot: cotData,
     technicals: techData,
     prices: priceMap,
+    yield2y,
     now,
   });
 

@@ -23,7 +23,7 @@ import type { CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
 import { scoreCot, scoreCrowd, type CotScore, type CrowdScore } from '@/lib/scoring/cot';
 import { combinePairCells, scoreSlot, type CellStatus, type SlotResult } from '@/lib/scoring/discrete';
-import { scoreSeasonality, scoreTrend } from '@/lib/scoring/technical';
+import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/technical';
 import { MAJORS, type Currency, type NormalizedEvent } from '@/lib/types';
 
 export interface MatrixCell {
@@ -106,6 +106,8 @@ export interface BuildMatrixInput {
   cot: Map<string, CotSeries>;
   technicals: Map<string, Technicals>;
   prices?: Map<string, { price: number; changePct: number | null }>;
+  /** 2-year Treasury yield and its 21-day average. Scored for the dollar. */
+  yield2y?: { current: number; sma: number } | null;
   now?: Date;
 }
 
@@ -128,7 +130,31 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
     for (const slot of SLOTS) {
       let cell: MatrixCell;
 
-      if (slot.kind === 'technical') {
+      if (slot.kind === 'yield') {
+        /**
+         * The 2-year yield is a USD reading, so it enters a pair the same way any
+         * other dollar indicator does: straight through when USD is the base,
+         * inverted when USD is the quote (which is what makes it bearish for gold).
+         */
+        const score = input.yield2y
+          ? scoreYield2y(input.yield2y.current, input.yield2y.sma)
+          : null;
+
+        if (!score) {
+          cell = { slotKey: slot.key, cell: null, status: 'no-data', explanation: '2-year yield unavailable' };
+        } else {
+          const usdSide = def.base === 'USD' ? 1 : def.quote === 'USD' ? -1 : 0;
+          cell = {
+            slotKey: slot.key,
+            cell: usdSide === 0 ? null : score.cell * usdSide,
+            status: usdSide === 0 ? 'no-data' : 'scored',
+            explanation:
+              usdSide === 0
+                ? 'No USD leg — the 2-year yield does not apply'
+                : score.explanation + (usdSide === -1 ? ' Inverted: USD is the quote leg.' : ''),
+          };
+        }
+      } else if (slot.kind === 'technical') {
         // Per-symbol, never derived from legs.
         const score = slot.key === 'trend' ? scoreTrend(tech) : scoreSeasonality(tech, now);
         cell = score

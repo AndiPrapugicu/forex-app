@@ -87,24 +87,27 @@ describe('computeSeasonality', () => {
 });
 
 describe('scoreTrend', () => {
-  it('scores price above all four averages as +2', () => {
-    expect(scoreTrend(makeTech({ aboveCount: 4 }))!.cell).toBe(2);
+  it('scores price above both short-term averages as +2', () => {
+    expect(scoreTrend(makeTech({ price: 1.2, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(2);
   });
 
-  it('scores price below all four as -2', () => {
-    expect(scoreTrend(makeTech({ aboveCount: 0 }))!.cell).toBe(-2);
+  it('scores price below both as -2', () => {
+    expect(scoreTrend(makeTech({ price: 1.0, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(-2);
   });
 
   it('scores a split as 0', () => {
-    expect(scoreTrend(makeTech({ aboveCount: 2 }))!.cell).toBe(0);
+    expect(scoreTrend(makeTech({ price: 1.12, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(0);
   });
 
-  it('refuses to score without all four averages', () => {
-    // A "trend" off two averages is not comparable with the rest of the column.
-    expect(scoreTrend(makeTech({ smaCount: 2, aboveCount: 2 }))).toBeNull();
+  it('IGNORES the 100- and 200-day averages', () => {
+    // The gold case: above the short pair, below the long pair. Counting all
+    // four gave 0 where the reference product reads +2.
+    const gold = makeTech({ price: 4399.7, sma20: 4084.76, sma50: 4169.27, sma100: 4408.08, sma200: 4478.67 });
+    expect(scoreTrend(gold)!.cell).toBe(2);
   });
 
-  it('returns null for a missing symbol', () => {
+  it('returns null when the short averages are unavailable', () => {
+    expect(scoreTrend(makeTech({ sma20: null }))).toBeNull();
     expect(scoreTrend(undefined)).toBeNull();
   });
 });
@@ -115,18 +118,14 @@ describe('scoreSeasonality', () => {
   const withMonth = (stats: { meanPct: number; winRatePct: number; years: number }) =>
     scoreSeasonality(makeTech({ seasonality: { 8: stats } }), august);
 
-  it('scores a strong, consistent month as +2', () => {
-    expect(withMonth({ meanPct: 1.2, winRatePct: 70, years: 10 })!.cell).toBe(2);
+  it('caps at +1 even for a strong, consistent month', () => {
+    // Seasonality is the weaker half of the technical pair; a 10-year average
+    // must not carry the same weight as the live trend.
+    expect(withMonth({ meanPct: 1.2, winRatePct: 70, years: 10 })!.cell).toBe(1);
   });
 
-  it('scores a strong, consistently negative month as -2', () => {
-    expect(withMonth({ meanPct: -1.2, winRatePct: 30, years: 10 })!.cell).toBe(-2);
-  });
-
-  it('will not score +2 on a big average with a coin-flip win rate', () => {
-    // One outlier year can drag the mean without being a tendency.
-    const score = withMonth({ meanPct: 1.2, winRatePct: 50, years: 10 })!;
-    expect(score.cell).toBe(1);
+  it('caps at -1 for a strong, consistently negative month', () => {
+    expect(withMonth({ meanPct: -1.2, winRatePct: 30, years: 10 })!.cell).toBe(-1);
   });
 
   it('scores a flat month as 0', () => {

@@ -17,7 +17,7 @@ import {
   CELL_MIN,
   DEFAULT_MAX_AGE_DAYS,
   PRIMARY_COUNTRY,
-  SIGMA_BUCKETS,
+  TERNARY_EPSILON,
   type SlotDefinition,
 } from '@/config/setups.config';
 import { computeSurprise } from '@/lib/scoring/surprise';
@@ -40,19 +40,31 @@ export interface SlotResult {
 }
 
 /**
- * Buckets a signed sigma into a discrete cell.
+ * Ternary read of a release: beat, miss, or on forecast.
  *
- * Boundaries are inclusive at the lower edge (|sigma| exactly 0.25 scores ±1)
- * and the middle band is deliberately wide — most releases land near forecast,
- * and a matrix where every cell reads ±1 carries no information.
+ * Takes the RAW difference rather than sigma, because sigma is a normalisation
+ * and this scale has no use for one — the only question is which side of the
+ * forecast the print landed on.
+ *
+ * Deliberately has no deadband. The previous sigma bucketing used ±0.25 and
+ * swallowed genuine misses (JOLTS 7.359 against a 7.4 forecast scored 0). The
+ * epsilon here only absorbs float noise between values the feed itself reports
+ * as equal.
  */
-export function bucketSigma(sigma: number): number {
-  const magnitude = Math.abs(sigma);
-  const sign = sigma >= 0 ? 1 : -1;
+export function ternarySign(actual: number, consensus: number): number {
+  const diff = actual - consensus;
+  if (Math.abs(diff) < TERNARY_EPSILON) return 0;
+  return diff > 0 ? 1 : -1;
+}
 
-  if (magnitude >= SIGMA_BUCKETS.strong) return sign * 2;
-  if (magnitude >= SIGMA_BUCKETS.mild) return sign * 1;
-  return 0;
+/**
+ * Collapses JavaScript's negative zero to positive zero.
+ *
+ * `0 * -1` is `-0`, which renders as "-0" in the UI and fails Object.is against
+ * `0`. Every place a cell is multiplied by a polarity or an inversion needs this.
+ */
+export function normalizeZero(n: number): number {
+  return n === 0 ? 0 : n;
 }
 
 function ageInDays(iso: string, now: Date): number {
@@ -136,20 +148,34 @@ export function scoreSlot(
     };
   }
 
-  const surprise = computeSurprise(event);
-  if (surprise.sigma === null) {
+  /**
+   * Ternary needs a forecast to compare against. Without one there is no beat or
+   * miss to read, so the slot goes unscored rather than falling back to the
+   * previous print — "above last month" is a different claim from "above what
+   * the market expected", and conflating them was never intended here.
+   */
+  if (event.consensus === null || event.actual === null) {
     return {
       ...base,
       event,
       ageDays: Math.round(age),
       status: 'not-released',
-      explanation: surprise.detail,
+      explanation: `${event.name}: no forecast to compare against`,
     };
   }
 
+  // Sigma no longer drives the cell, but it is still the most informative thing
+  // to show a reader, so it is computed and carried through.
+  const surprise = computeSurprise(event);
+
   // Polarity converts "the number went up" into "the currency should go up".
   const polarity = slot.polarity ?? 1;
-  const cell = Math.max(CELL_MIN, Math.min(CELL_MAX, bucketSigma(surprise.sigma) * polarity));
+  const cell = normalizeZero(
+    Math.max(CELL_MIN, Math.min(CELL_MAX, ternarySign(event.actual, event.consensus) * polarity)),
+  );
+
+  const sigmaNote =
+    surprise.sigma === null ? '' : ` (${surprise.sigma > 0 ? '+' : ''}${surprise.sigma.toFixed(2)}σ)`;
 
   return {
     slotKey: slot.key,
@@ -157,11 +183,11 @@ export function scoreSlot(
     cell,
     status: 'scored',
     event,
-    sigma: Math.round(surprise.sigma * 100) / 100,
+    sigma: surprise.sigma === null ? null : Math.round(surprise.sigma * 100) / 100,
     ageDays: Math.round(age),
     explanation:
-      `${event.name}: ${event.actual}${event.unit ?? ''} vs ${event.consensus ?? '—'} forecast ` +
-      `(${surprise.sigma > 0 ? '+' : ''}${surprise.sigma.toFixed(2)}σ)` +
+      `${event.name}: ${event.actual}${event.unit ?? ''} vs ${event.consensus}${event.unit ?? ''} forecast` +
+      sigmaNote +
       (polarity === -1 ? ', inverted — higher is bearish here' : ''),
   };
 }
@@ -181,5 +207,8 @@ export function combinePairCells(
   if (baseCell === null && quoteCell === null) return { cell: null, status: 'no-data' };
 
   const value = (baseCell ?? 0) - (quoteCell ?? 0);
-  return { cell: Math.max(CELL_MIN, Math.min(CELL_MAX, value)), status: 'scored' };
+  return {
+    cell: normalizeZero(Math.max(CELL_MIN, Math.min(CELL_MAX, value))),
+    status: 'scored',
+  };
 }

@@ -12,7 +12,7 @@
  * to null rather than corrupting the fundamental ones.
  */
 
-import { SEASONALITY_YEARS } from '@/config/setups.config';
+import { SEASONALITY_YEARS, YIELD_SMA_DAYS } from '@/config/setups.config';
 import { YAHOO } from '@/config/sources.config';
 import { fetchJson, useFixtures } from '@/lib/connectors/base';
 import { ok, type Result } from '@/lib/types';
@@ -249,4 +249,32 @@ export async function fetchTechnicals(
     out,
     failed.length > 0 ? `${failed.length} symbol(s) unavailable: ${failed.slice(0, 5).join(', ')}` : undefined,
   );
+}
+
+// ---------------------------------------------------------------------------
+// 2-year Treasury yield
+// ---------------------------------------------------------------------------
+
+export interface Yield2y {
+  current: number;
+  sma: number;
+}
+
+/**
+ * 2-year yield and its 21-day average.
+ *
+ * `2YY=F` is the CBOT 2-Year Yield future, which quotes the yield directly
+ * rather than a price — verified live at 3.961 during planning. A rising short
+ * yield is hawkish, so this feeds the dollar leg of the scorecard.
+ */
+export async function fetchYield2y(): Promise<Yield2y | null> {
+  if (useFixtures()) return null;
+
+  const series = await fetchSeries('2YY=F', '3mo', '1d', 3600);
+  if (!series || series.closes.length < YIELD_SMA_DAYS) return null;
+
+  const window = series.closes.slice(-YIELD_SMA_DAYS);
+  const sma = window.reduce((a, b) => a + b, 0) / window.length;
+
+  return { current: series.price, sma };
 }

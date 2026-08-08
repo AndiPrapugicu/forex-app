@@ -43,6 +43,12 @@ const NAV: NavItem[] = [
     icon: <Icon path="M3 3v18h18M7 15l4-4 3 3 5-6" />,
   },
   {
+    href: '/heatmap',
+    label: 'Heatmap',
+    hint: 'Economic data by currency',
+    icon: <Icon path="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
+  },
+  {
     href: '/cot',
     label: 'COT',
     hint: 'Institutional positioning',

@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SLOTS } from '@/config/setups.config';
-import { bucketSigma, combinePairCells, resolveSlotEvent, scoreSlot } from '@/lib/scoring/discrete';
+import { combinePairCells, resolveSlotEvent, scoreSlot, ternarySign } from '@/lib/scoring/discrete';
 import { buildSetupsMatrix } from '@/lib/scoring/setups';
 import type { NormalizedEvent } from '@/lib/types';
 
@@ -45,22 +45,22 @@ function makeEvent(overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
 
 const slot = (key: string) => SLOTS.find((s) => s.key === key)!;
 
-describe('bucketSigma', () => {
-  it('maps magnitude to cells symmetrically', () => {
-    expect(bucketSigma(2.5)).toBe(2);
-    expect(bucketSigma(0.5)).toBe(1);
-    expect(bucketSigma(0)).toBe(0);
-    expect(bucketSigma(-0.5)).toBe(-1);
-    expect(bucketSigma(-2.5)).toBe(-2);
+describe('ternarySign', () => {
+  it('reads any beat as +1 and any miss as -1, regardless of size', () => {
+    expect(ternarySign(3.4, 3.1)).toBe(1);
+    expect(ternarySign(3.10001, 3.1)).toBe(1); // a hair above forecast is still a beat
+    expect(ternarySign(2.9, 3.1)).toBe(-1);
+    expect(ternarySign(7.359, 7.4)).toBe(-1); // the JOLTS case the old deadband ate
   });
 
-  it('is inclusive at the lower edge of each band', () => {
-    expect(bucketSigma(1.0)).toBe(2);
-    expect(bucketSigma(0.999)).toBe(1);
-    expect(bucketSigma(0.25)).toBe(1);
-    expect(bucketSigma(0.249)).toBe(0);
-    expect(bucketSigma(-0.25)).toBe(-1);
-    expect(bucketSigma(-1.0)).toBe(-2);
+  it('reads an exact match as 0', () => {
+    expect(ternarySign(3.3, 3.3)).toBe(0);
+  });
+
+  it('has no deadband — only a float-noise epsilon', () => {
+    // Deliberate: a 0.15 sigma miss and a 3 sigma miss score identically.
+    expect(ternarySign(3.1000000000001, 3.1)).toBe(0); // below epsilon
+    expect(ternarySign(3.101, 3.1)).toBe(1); // above it
   });
 });
 
@@ -111,10 +111,16 @@ describe('resolveSlotEvent', () => {
 });
 
 describe('scoreSlot', () => {
-  it('scores a beat as positive under positive polarity', () => {
+  it('scores a beat as +1 under positive polarity', () => {
     const result = scoreSlot(slot('cpi'), 'USD', [makeEvent({ ratioDeviation: 1.5 })], NOW);
     expect(result.status).toBe('scored');
-    expect(result.cell).toBe(2);
+    expect(result.cell).toBe(1);
+  });
+
+  it('keeps sigma available even though it no longer drives the cell', () => {
+    const result = scoreSlot(slot('cpi'), 'USD', [makeEvent({ ratioDeviation: 1.5 })], NOW);
+    expect(result.sigma).toBe(1.5);
+    expect(result.explanation).toMatch(/σ/);
   });
 
   it('inverts polarity for unemployment', () => {
@@ -126,7 +132,7 @@ describe('scoreSlot', () => {
     });
     const result = scoreSlot(slot('unemployment'), 'USD', [rising], NOW);
     // Higher unemployment than forecast is bearish for the currency.
-    expect(result.cell).toBe(-2);
+    expect(result.cell).toBe(-1);
     expect(result.explanation).toMatch(/inverted/);
   });
 
@@ -217,11 +223,11 @@ describe('buildSetupsMatrix', () => {
 
     // USD is the quote leg in EURUSD, so a bullish USD print pushes it down.
     const eurusd = matrix.rows.find((r) => r.symbol === 'EURUSD')!;
-    expect(eurusd.cells.cpi.cell).toBe(-2);
+    expect(eurusd.cells.cpi.cell).toBe(-1);
 
     // USD is the base leg in USDJPY, so the same print pushes it up.
     const usdjpy = matrix.rows.find((r) => r.symbol === 'USDJPY')!;
-    expect(usdjpy.cells.cpi.cell).toBe(2);
+    expect(usdjpy.cells.cpi.cell).toBe(1);
   });
 
   it('keeps category subtotals consistent with the total', () => {

@@ -64,8 +64,8 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
   ];
 
   return (
-    <div className="px-4 py-4">
-      <header className="mb-4 flex flex-wrap items-baseline gap-3">
+    <div className="px-4 py-3">
+      <header className="mb-3 flex flex-wrap items-baseline gap-3">
         <Link href="/" className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
           ← Top Setups
         </Link>
@@ -84,9 +84,9 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
         )}
       </header>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:h-[calc(100vh-4.75rem)] lg:grid-cols-12">
         {/* --- Left: the verdict ------------------------------------------ */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:col-span-3">
           <Panel>
             <div className="flex flex-col items-center gap-2 px-4 py-5">
               <ScoreGauge
@@ -97,7 +97,6 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 confidence={Math.round((row.populated / SLOTS.length) * 100)}
                 label={`${row.populated} of ${SLOTS.length} indicators had data`}
                 displayScore={row.totalScore}
-                displaySuffix="/ 36"
               />
               <div className={`text-lg font-bold ${BIAS_COLOR[row.bias]}`}>{row.bias}</div>
             </div>
@@ -128,52 +127,18 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             </dl>
           </Panel>
 
-          {/* Price stats */}
-          <Panel title="Price statistics">
-            <dl className="divide-y divide-[var(--color-border)]">
-              {smaRows.map((s) => (
-                <div key={s.label} className="flex items-center justify-between px-4 py-1.5">
-                  <dt className="text-[11px] text-[var(--color-muted)]">{s.label} SMA</dt>
-                  <dd className="flex items-center gap-2">
-                    <span className="tnum text-xs text-[var(--color-faint)]">
-                      {s.value ? s.value.toFixed(s.value > 100 ? 2 : 5) : '—'}
-                    </span>
-                    {s.value && row.price !== null && (
-                      <span
-                        className={`text-[10px] font-medium ${row.price > s.value ? 'text-[var(--color-bull)]' : 'text-[var(--color-bear)]'}`}
-                      >
-                        {row.price > s.value ? 'above' : 'below'}
-                      </span>
-                    )}
-                  </dd>
-                </div>
-              ))}
-              <div className="flex items-center justify-between px-4 py-1.5">
-                <dt className="text-[11px] text-[var(--color-muted)]">Realized vol (annual)</dt>
-                <dd className="tnum text-xs">{tech?.realizedVolPct ?? '—'}%</dd>
-              </div>
-              <div className="flex items-center justify-between px-4 py-1.5">
-                <dt className="text-[11px] text-[var(--color-muted)]">Avg daily move (7d)</dt>
-                <dd className="tnum text-xs">{tech?.avgDailyMove7Pct ?? '—'}%</dd>
-              </div>
-              <div className="flex items-center justify-between px-4 py-1.5">
-                <dt className="text-[11px] text-[var(--color-muted)]">Avg daily move (90d)</dt>
-                <dd className="tnum text-xs">{tech?.avgDailyMove90Pct ?? '—'}%</dd>
-              </div>
-            </dl>
-          </Panel>
         </div>
 
-        {/* --- Right: the evidence ---------------------------------------- */}
-        <div className="flex flex-col gap-4 lg:col-span-2">
+        {/* --- Centre: the evidence, the tall element --------------------- */}
+        <div className="flex min-h-0 flex-col gap-3 overflow-hidden lg:col-span-6">
           <Panel
             title="Indicator detail"
             subtitle={`Every slot, and the release it resolved to${matrix.cotReportDate ? ` · COT as of ${matrix.cotReportDate}` : ''}`}
           >
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-13rem)] overflow-auto">
               <table className="w-full text-left text-[11px]">
                 <thead>
-                  <tr className="border-b border-[var(--color-border)] text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+                  <tr className="sticky top-0 z-10 bg-[var(--color-surface)] text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
                     <th className="px-3 py-1.5">Indicator</th>
                     <th className="px-2 py-1.5 text-center">Cell</th>
                     {def.base && <th className="px-2 py-1.5 text-center">{def.base}</th>}
@@ -237,6 +202,10 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             </p>
           </Panel>
 
+        </div>
+
+        {/* --- Right: context ------------------------------------------- */}
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:col-span-3">
           {/* Sentiment detail, where a single contract backs the symbol. */}
           {(cotDetail || crowdDetail) && (
             <Panel title="Positioning detail" subtitle={def.cotContract}>
@@ -282,6 +251,41 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             </Panel>
           )}
 
+
+          {/* Price stats */}
+          <Panel title="Price statistics">
+            <dl className="divide-y divide-[var(--color-border)]">
+              {smaRows.map((s) => (
+                <div key={s.label} className="flex items-center justify-between px-4 py-1.5">
+                  <dt className="text-[11px] text-[var(--color-muted)]">{s.label} SMA</dt>
+                  <dd className="flex items-center gap-2">
+                    <span className="tnum text-xs text-[var(--color-faint)]">
+                      {s.value ? s.value.toFixed(s.value > 100 ? 2 : 5) : '—'}
+                    </span>
+                    {s.value && row.price !== null && (
+                      <span
+                        className={`text-[10px] font-medium ${row.price > s.value ? 'text-[var(--color-bull)]' : 'text-[var(--color-bear)]'}`}
+                      >
+                        {row.price > s.value ? 'above' : 'below'}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-4 py-1.5">
+                <dt className="text-[11px] text-[var(--color-muted)]">Realized vol (annual)</dt>
+                <dd className="tnum text-xs">{tech?.realizedVolPct ?? '—'}%</dd>
+              </div>
+              <div className="flex items-center justify-between px-4 py-1.5">
+                <dt className="text-[11px] text-[var(--color-muted)]">Avg daily move (7d)</dt>
+                <dd className="tnum text-xs">{tech?.avgDailyMove7Pct ?? '—'}%</dd>
+              </div>
+              <div className="flex items-center justify-between px-4 py-1.5">
+                <dt className="text-[11px] text-[var(--color-muted)]">Avg daily move (90d)</dt>
+                <dd className="tnum text-xs">{tech?.avgDailyMove90Pct ?? '—'}%</dd>
+              </div>
+            </dl>
+          </Panel>
           {tech && Object.keys(tech.seasonality).length > 0 && (
             <SeasonalityStrip seasonality={tech.seasonality} />
           )}

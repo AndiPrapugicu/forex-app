@@ -68,7 +68,7 @@ export interface SlotDefinition {
    * `economic` slots resolve to a calendar release and score off its surprise.
    * `technical` and `sentiment` slots are computed elsewhere and injected.
    */
-  kind: 'economic' | 'technical' | 'sentiment';
+  kind: 'economic' | 'technical' | 'sentiment' | 'yield';
 
   /** +1 = a higher reading is bullish for the currency. Economic slots only. */
   polarity?: 1 | -1;
@@ -315,6 +315,55 @@ export const SLOTS: SlotDefinition[] = [
     maxAgeDays: 75, // published with a long lag
     match: [/^JOLTS Job Openings$/i],
   },
+  {
+    /**
+     * Wages. Every major except Switzerland publishes something here, which is
+     * what makes crosses like AUDCAD scoreable in the jobs block at all — PCE,
+     * claims, ADP and JOLTS are genuinely US-only, so without wages and
+     * participation a non-USD cross had almost nothing in this category.
+     */
+    key: 'wages',
+    label: 'Wages',
+    title: 'Wage growth',
+    category: 'jobs',
+    kind: 'economic',
+    polarity: 1,
+    maxAgeDays: 120, // several are quarterly (AUD, NZD, EUR)
+    match: [/^Average Hourly Earnings \(YoY\)$/i, /^Average Hourly Earnings \(MoM\)$/i],
+    matchByCurrency: {
+      AUD: [/^Wage Price Index \(YoY\)$/i, /^Wage Price Index \(QoQ\)$/i],
+      CAD: [/^Average Hourly Wages \(YoY\)$/i],
+      GBP: [/^Average Earnings Excluding Bonus \(3Mo\/Yr\)$/i, /^Average Earnings Including Bonus \(3Mo\/Yr\)$/i],
+      JPY: [/^Labor Cash Earnings \(YoY\)$/i],
+      NZD: [/^Labour Cost Index \(QoQ\)$/i, /^Labour Cost Index \(YoY\)$/i],
+      EUR: [/^Negotiated Wage Rates \(QoQ\)$/i, /^Labor Cost Index$/i],
+    },
+  },
+  {
+    key: 'participation',
+    label: 'Particip.',
+    title: 'Labour force participation rate',
+    category: 'jobs',
+    kind: 'economic',
+    polarity: 1,
+    maxAgeDays: 60,
+    // USD, AUD, NZD and CAD only; others leave the cell blank.
+    match: [/^Participation Rate$/i, /^Labor Force Participation Rate$/i],
+  },
+  {
+    /**
+     * 2-year yield direction. EdgeFinder carries this and we did not.
+     *
+     * Not a calendar release — it is scored from the price series in
+     * lib/connectors/technicals.ts against its own 21-day average. A rising
+     * short yield is hawkish: bullish for the dollar, bearish for gold.
+     */
+    key: 'yield2y',
+    label: '2Y Yield',
+    title: '2-year Treasury yield vs its 21-day average',
+    category: 'inflation',
+    kind: 'yield',
+  },
 ];
 
 /** Default staleness window when a slot does not set one. */
@@ -325,23 +374,49 @@ export const DEFAULT_MAX_AGE_DAYS = 60;
 // ---------------------------------------------------------------------------
 
 /**
- * Surprise (in sigma) -> discrete cell.
+ * Fundamentals are TERNARY: a release either beat, missed, or landed on forecast.
  *
- * Thresholds are symmetric and deliberately wide in the middle: most releases
- * land near forecast, and a matrix where everything is +/-1 carries no signal.
+ * This deliberately discards magnitude, and that is EdgeFinder's model rather
+ * than an approximation of it — reconstructing their published GOLD scorecard
+ * only reproduces their four stated sub-totals (3 / 1 / 4 / 8) if every
+ * fundamental contributes exactly +/-1.
+ *
+ * The previous approach bucketed by sigma with a +/-0.25 deadband, which quietly
+ * swallowed real misses: JOLTS at 7.359 against a 7.4 forecast is -0.15 sigma
+ * and scored 0, when it is plainly a miss.
+ *
+ * The trade-off is real and accepted: a 0.15 sigma miss and a 3 sigma miss now
+ * score the same. Sigma is still computed, kept on the SlotResult, and rendered
+ * in the detail column, so magnitude is one hover away.
+ *
+ * EPSILON absorbs float noise between values that are equal at the feed's own
+ * precision (3.3 vs 3.3 must be 0). It is NOT a deadband.
  */
-export const SIGMA_BUCKETS = {
-  strong: 1.0, // |sigma| >= 1.0  -> +/-2
-  mild: 0.25, // |sigma| >= 0.25 -> +/-1
-} as const;
+export const TERNARY_EPSILON = 1e-9;
 
 export const CELL_MIN = -2;
 export const CELL_MAX = 2;
 
 /**
- * COT index: where the current net position sits within its own trailing range.
- * Percentile, not absolute size — 200k net long means nothing without knowing
- * whether that is high or low for this contract.
+ * COT scores from the LONG SHARE, in two parts that sum to +/-2 — mirroring the
+ * two rows EdgeFinder shows ("COT - Net Positioning" and "COT - Latest
+ * Buys/Sells"). Gold at 85.4% long with a +0.78% weekly change gives +1 and +1,
+ * which is what reproduces their stated Sentiment+COT subtotal of 1 once the
+ * contrarian crowd reading of -1 is added.
+ *
+ * We previously scored this from the 3-year percentile instead. That is arguably
+ * the better analytical measure — it is what reveals gold's large net long as
+ * actually BELOW its own median — so it is still computed and displayed. It just
+ * no longer drives the cell.
+ */
+export const COT_LONG_PCT_BUCKETS = {
+  bullish: 55,
+  bearish: 45,
+} as const;
+
+/**
+ * Percentile bands, retained for DISPLAY only. See COT_LONG_PCT_BUCKETS above
+ * for why this no longer feeds the score.
  */
 export const COT_PERCENTILE_BUCKETS = {
   veryBullish: 80,
@@ -358,19 +433,21 @@ export const COT_LOOKBACK_WEEKS = 156; // ~3 years
  * is why these map to negative cells.
  */
 export const CROWD_LONG_PCT_BUCKETS = {
-  veryBearish: 70, // >70% of small traders long -> -2
-  bearish: 60,
-  bullish: 40,
-  veryBullish: 30, // <30% long -> +2
+  bearish: 55, // crowd leaning long -> -1 (contrarian)
+  bullish: 45, // crowd leaning short -> +1
 } as const;
 
-/** Price above N of the four moving averages -> cell value. */
+/**
+ * Trend is read SHORT-TERM, from the 20- and 50-day averages only.
+ *
+ * Counting all four put gold at 0 (above 20/50, below 100/200) where EdgeFinder
+ * reads +2 — their "4H / Daily Chart Trend" is a near-term measure. The 100- and
+ * 200-day averages stay on the scorecard as context; they just do not vote.
+ */
 export const TREND_BUCKETS: Record<number, number> = {
-  4: 2,
-  3: 1,
-  2: 0,
-  1: -1,
-  0: -2,
+  2: 2, // above both short averages
+  1: 0, // mixed
+  0: -2, // below both
 };
 
 /**
@@ -383,6 +460,15 @@ export const SEASONALITY_BUCKETS = {
   mildPct: 0.15,
 } as const;
 
+/** Seasonality contributes at most +/-1, matching EdgeFinder's technical split. */
+export const SEASONALITY_CELL_MAX = 1;
+
+/**
+ * A rising 2-year yield is hawkish. Compared against its own 21-day average so
+ * the reading is direction, not level.
+ */
+export const YIELD_SMA_DAYS = 21;
+
 /** Years of monthly history used for the seasonal average. */
 export const SEASONALITY_YEARS = 10;
 
@@ -393,18 +479,23 @@ export const SEASONALITY_YEARS = 10;
 export type Bias = 'Very Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Very Bearish';
 
 /**
- * Total score -> label. Thresholds are on the SUM of all populated cells.
+ * Total score -> label.
  *
- * With 18 slots the theoretical range is +/-36, but real totals cluster within
- * roughly +/-15 because no symbol has every slot populated and the cells rarely
- * all agree. These cuts are set for that real distribution, not the theoretical
- * one — calibrate them against live output rather than arithmetic.
+ * Calibrated against the labels EdgeFinder publishes beside its own scores
+ * rather than guessed from the theoretical range:
+ *
+ *   8 Very Bullish · 7 Very Bullish · 6 Bullish · 5 Bullish · 4 Bullish
+ *  -4 Bearish      · -5 Bearish
+ *
+ * which puts the cuts at +/-7 and +/-4. The theoretical range is +/-20 for a
+ * single-leg symbol and +/-34 for a pair, but real totals cluster inside +/-15
+ * because no symbol populates every slot and the cells rarely all agree.
  */
 export const BIAS_THRESHOLDS: { min: number; bias: Bias }[] = [
-  { min: 9, bias: 'Very Bullish' },
+  { min: 7, bias: 'Very Bullish' },
   { min: 4, bias: 'Bullish' },
   { min: -3, bias: 'Neutral' },
-  { min: -8, bias: 'Bearish' },
+  { min: -6, bias: 'Bearish' },
   { min: -Infinity, bias: 'Very Bearish' },
 ];
 

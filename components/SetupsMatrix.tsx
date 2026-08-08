@@ -67,6 +67,30 @@ function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProp
 
 type SortKey = 'score' | 'symbol';
 
+/** Every indicator column is this wide, so the grid reads as a grid. */
+const INDICATOR_COL_WIDTH = 52;
+
+/**
+ * Explicit widths for the three sticky columns, and the left offsets derived
+ * from them.
+ *
+ * These MUST be declared rather than left to the content. The offsets were
+ * previously hardcoded against widths the browser chose, so changing the row
+ * padding shifted the columns and the sticky Bias cell began covering the first
+ * indicator column — Trend was clipped to "end" at scroll position zero.
+ * Deriving the offsets from the widths makes that impossible.
+ */
+const STICKY = {
+  symbol: 74,
+  score: 42,
+  bias: 112,
+} as const;
+const STICKY_LEFT = {
+  symbol: 0,
+  score: STICKY.symbol,
+  bias: STICKY.symbol + STICKY.score,
+} as const;
+
 export function SetupsMatrix({
   rows,
   cotReportDate,
@@ -148,12 +172,16 @@ export function SetupsMatrix({
       </header>
 
       {/* --- Matrix ------------------------------------------------------ */}
-      <div className="overflow-x-auto">
+      <div className="max-h-[calc(100vh-13rem)] overflow-auto">
         <table className="w-full border-separate border-spacing-0 text-center text-[11px]">
-          <thead>
+          <thead className="sticky top-0 z-30 bg-[var(--color-surface)]">
             {/* Category band */}
             <tr>
-              <th className="sticky left-0 z-20 bg-[var(--color-surface)]" colSpan={3} />
+              <th
+                style={{ left: 0, minWidth: STICKY.symbol + STICKY.score + STICKY.bias }}
+                className="sticky z-20 bg-[var(--color-surface)]"
+                colSpan={3}
+              />
               {visibleCategories.map((cat) => {
                 const span = visibleSlots.filter((s) => s.category === cat.key).length;
                 if (span === 0) return null;
@@ -170,20 +198,33 @@ export function SetupsMatrix({
             </tr>
             {/* Column headers */}
             <tr>
-              <th className="sticky left-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]">
+              <th
+                style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol }}
+                className="sticky z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]"
+              >
                 Symbol
               </th>
-              <th className="sticky left-[76px] z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-1.5 text-[10px] font-semibold text-[var(--color-faint)]">
+              <th
+                style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
+                className="sticky z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-1.5 text-[10px] font-semibold text-[var(--color-faint)]"
+              >
                 Score
               </th>
-              <th className="sticky left-[118px] z-20 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]">
+              <th
+                style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
+                className="sticky z-20 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]"
+              >
                 Bias
               </th>
               {visibleSlots.map((slot) => (
                 <th
                   key={slot.key}
                   title={slot.title}
-                  className="border-b border-[var(--color-border)] px-1 py-1.5 text-[9px] font-medium whitespace-nowrap text-[var(--color-faint)]"
+                  /* Fixed width on every indicator column. Without this the
+                     header text sizes each one and the grid comes out ragged —
+                     "Crowd Sentiment" was three times the width of "COT". */
+                  style={{ width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
+                  className="border-b border-[var(--color-border)] px-0.5 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)]"
                 >
                   {slot.label}
                 </th>
@@ -194,7 +235,10 @@ export function SetupsMatrix({
           <tbody>
             {filtered.map((row) => (
               <tr key={row.symbol} className="group">
-                <td className="sticky left-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-left group-hover:bg-[var(--color-surface-2)]">
+                <td
+                  style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol }}
+                  className="sticky z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-left group-hover:bg-[var(--color-surface-2)]"
+                >
                   <Link
                     href={`/scorecard/${row.symbol}`}
                     className="font-mono text-[11px] font-medium text-[var(--color-text)] hover:text-[var(--color-bull)] hover:underline"
@@ -203,14 +247,20 @@ export function SetupsMatrix({
                   </Link>
                 </td>
 
-                <td className="tnum sticky left-[76px] z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-1 font-bold group-hover:bg-[var(--color-surface-2)]">
+                <td
+                  style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
+                  className="tnum sticky z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 font-bold group-hover:bg-[var(--color-surface-2)]"
+                >
                   <span className={BIAS_STYLE[row.bias]}>
                     {row.totalScore > 0 ? '+' : ''}
                     {row.totalScore}
                   </span>
                 </td>
 
-                <td className="sticky left-[118px] z-10 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-left whitespace-nowrap group-hover:bg-[var(--color-surface-2)]">
+                <td
+                  style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
+                  className="sticky z-10 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-left whitespace-nowrap group-hover:bg-[var(--color-surface-2)]"
+                >
                   <span className={`text-[10px] ${BIAS_STYLE[row.bias]}`}>{row.bias}</span>
                   {/* Populated count keeps a thin row from reading as confident. */}
                   <span className="ml-1.5 text-[9px] text-[var(--color-faint)]">{row.populated}</span>
@@ -223,8 +273,8 @@ export function SetupsMatrix({
                     <td
                       key={slot.key}
                       title={`${slot.label}: ${cell.explanation}`}
-                      className={`tnum border-b border-[var(--color-border)] px-1 py-1 ${s.className}`}
-                      style={s.style}
+                      className={`tnum border-b border-[var(--color-border)] px-0.5 py-0.5 text-center ${s.className}`}
+                      style={{ ...s.style, width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
                     >
                       {s.text}
                     </td>

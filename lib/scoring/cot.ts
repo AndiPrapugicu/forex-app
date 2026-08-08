@@ -15,6 +15,7 @@
  */
 
 import {
+  COT_LONG_PCT_BUCKETS,
   COT_PERCENTILE_BUCKETS,
   CROWD_LONG_PCT_BUCKETS,
   CELL_MAX,
@@ -24,9 +25,19 @@ import type { CotReport, CotSeries } from '@/lib/connectors/cftc';
 import { clamp } from '@/lib/scoring/surprise';
 
 export interface CotScore {
-  /** -2..+2 for the COT column. */
+  /** -2..+2 for the COT column: netPositioning + latestBuysSells. */
   cell: number;
-  /** Where the current net position sits in its own range, 0..100. */
+  /** Long share vs 55/45 thresholds. EdgeFinder's "COT - Net Positioning". */
+  netPositioning: number;
+  /** Sign of the week-on-week change. EdgeFinder's "COT - Latest Buys/Sells". */
+  latestBuysSells: number;
+  /**
+   * Where the net position sits in its own 3-year range, 0..100.
+   *
+   * DISPLAY ONLY — it no longer drives the cell. Retained because it is the more
+   * informative measure: gold's 197,634 net long looks overwhelming until you see
+   * it is the 39th percentile of its own history.
+   */
   percentile: number;
   net: number;
   netChange: number | null;
@@ -66,12 +77,20 @@ export function percentileRank(value: number, history: number[]): number {
   return ((below + equal / 2) / history.length) * 100;
 }
 
-function bucketPercentile(p: number): number {
-  if (p >= COT_PERCENTILE_BUCKETS.veryBullish) return 2;
-  if (p >= COT_PERCENTILE_BUCKETS.bullish) return 1;
-  if (p <= COT_PERCENTILE_BUCKETS.veryBearish) return -2;
-  if (p <= COT_PERCENTILE_BUCKETS.bearish) return -1;
+/** Long share -> +/-1. Gold at 85.4% long reads +1. */
+function bucketLongPct(pct: number): number {
+  if (pct >= COT_LONG_PCT_BUCKETS.bullish) return 1;
+  if (pct <= COT_LONG_PCT_BUCKETS.bearish) return -1;
   return 0;
+}
+
+/** Human label for where the percentile sits. Display only. */
+function describePercentile(p: number): string {
+  if (p >= COT_PERCENTILE_BUCKETS.veryBullish) return 'near the top of its 3-year range';
+  if (p >= COT_PERCENTILE_BUCKETS.bullish) return 'in the upper half of its range';
+  if (p <= COT_PERCENTILE_BUCKETS.veryBearish) return 'near the bottom of its 3-year range';
+  if (p <= COT_PERCENTILE_BUCKETS.bearish) return 'in the lower half of its range';
+  return 'mid-range';
 }
 
 /**
@@ -87,26 +106,34 @@ export function scoreCot(series: CotSeries | undefined): CotScore | null {
   const latest = series.reports[0];
   const history = series.reports.map((r) => r.specNet);
 
-  const MIN_HISTORY = 26;
-  if (history.length < MIN_HISTORY) return null;
+  // Percentile is display-only now, so a short history no longer blocks scoring —
+  // the long share is meaningful from the very first report.
+  const percentile = history.length > 0 ? percentileRank(latest.specNet, history) : 50;
 
-  const percentile = percentileRank(latest.specNet, history);
-  const cell = bucketPercentile(percentile);
+  /**
+   * Two sub-scores summed, mirroring the two rows EdgeFinder shows.
+   *
+   * Net positioning reads the long SHARE, not the percentile. That is the change
+   * that reconciles gold: 85.4% long gives +1 here, where ranking the same
+   * position against its own 3-year range gave -1.
+   */
+  const netPositioning = bucketLongPct(latest.specLongPct);
+  const latestBuysSells =
+    latest.specNetChange === null || latest.specNetChange === 0
+      ? 0
+      : latest.specNetChange > 0
+        ? 1
+        : -1;
+
+  const cell = Math.max(CELL_MIN, Math.min(CELL_MAX, netPositioning + latestBuysSells));
 
   const position = latest.specNet >= 0 ? 'net long' : 'net short';
-  const where =
-    percentile >= 80
-      ? 'near the top of its 3-year range'
-      : percentile >= 60
-        ? 'in the upper half of its range'
-        : percentile <= 20
-          ? 'near the bottom of its 3-year range'
-          : percentile <= 40
-            ? 'in the lower half of its range'
-            : 'mid-range';
+  const where = describePercentile(percentile);
 
   return {
     cell,
+    netPositioning,
+    latestBuysSells,
     percentile: Math.round(percentile),
     net: latest.specNet,
     netChange: latest.specNetChange,
@@ -114,8 +141,12 @@ export function scoreCot(series: CotSeries | undefined): CotScore | null {
     reportDate: latest.reportDate,
     sampleSize: history.length,
     explanation:
-      `Large speculators are ${position} ${Math.abs(latest.specNet).toLocaleString()} contracts, ` +
-      `${where} (${Math.round(percentile)}th percentile of ${history.length} weeks).`,
+      `Large speculators are ${latest.specLongPct.toFixed(1)}% long, ${position} ` +
+      `${Math.abs(latest.specNet).toLocaleString()} contracts` +
+      (latest.specNetChange !== null
+        ? `, ${latest.specNetChange > 0 ? 'adding' : 'trimming'} this week`
+        : '') +
+      `. For context that position is ${where} (${Math.round(percentile)}th percentile).`,
   };
 }
 
@@ -136,10 +167,9 @@ export function scoreCrowd(series: CotSeries | undefined): CrowdScore | null {
   // percentage, so no signal is better than a spurious one.
   if (latest.retailLong + latest.retailShort < 500) return null;
 
+  // Ternary and inverted: a crowd leaning long is a bearish signal.
   let cell: number;
-  if (pct >= CROWD_LONG_PCT_BUCKETS.veryBearish) cell = -2;
-  else if (pct >= CROWD_LONG_PCT_BUCKETS.bearish) cell = -1;
-  else if (pct <= CROWD_LONG_PCT_BUCKETS.veryBullish) cell = 2;
+  if (pct >= CROWD_LONG_PCT_BUCKETS.bearish) cell = -1;
   else if (pct <= CROWD_LONG_PCT_BUCKETS.bullish) cell = 1;
   else cell = 0;
 
@@ -149,7 +179,7 @@ export function scoreCrowd(series: CotSeries | undefined): CrowdScore | null {
   const divergence = retailLong !== specLong;
 
   const crowding =
-    pct >= 70 ? 'heavily long' : pct >= 60 ? 'leaning long' : pct <= 30 ? 'heavily short' : pct <= 40 ? 'leaning short' : 'balanced';
+    pct >= 70 ? 'heavily long' : pct >= 55 ? 'leaning long' : pct <= 30 ? 'heavily short' : pct <= 45 ? 'leaning short' : 'balanced';
 
   return {
     cell,

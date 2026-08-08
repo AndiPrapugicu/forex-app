@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SetupsMatrix } from '@/components/SetupsMatrix';
 import { SourceHealthBar } from '@/components/AlertPanel';
 import { Skeleton } from '@/components/ui';
+import { SLOTS } from '@/config/setups.config';
 import type { SetupsMatrix as Matrix } from '@/lib/scoring/setups';
 import type { SourceHealth } from '@/lib/types';
 
@@ -75,7 +76,7 @@ export function SetupsView({
         <div>
           <h1 className="text-lg font-bold">Top Setups</h1>
           <p className="text-xs text-[var(--color-faint)]">
-            {rows.length} symbols scored across 18 indicators
+            {rows.length} symbols scored across {SLOTS.length} indicators
             {matrix?.cotReportDate && ` · COT as of ${matrix.cotReportDate}`}
           </p>
         </div>

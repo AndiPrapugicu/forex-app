@@ -9,6 +9,7 @@
 
 import {
   SEASONALITY_BUCKETS,
+  SEASONALITY_CELL_MAX,
   TREND_BUCKETS,
 } from '@/config/setups.config';
 import type { Technicals } from '@/lib/connectors/technicals';
@@ -35,29 +36,31 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Trend from how many moving averages the price sits above.
+ * Trend, read SHORT-TERM from the 20- and 50-day averages.
  *
- * Requires all four to be available. A symbol with under 200 sessions of history
- * would otherwise be scored on a two-average "trend" that is not comparable with
- * everything else in the column.
+ * Counting all four averages scored gold 0 — it sits above the 20 and 50 but
+ * below the 100 and 200 — where the reference product reads +2. Their "4H /
+ * Daily Chart Trend" is a near-term measure, so this follows suit. The 100- and
+ * 200-day averages remain on the scorecard as context; they simply do not vote.
  */
 export function scoreTrend(tech: Technicals | undefined): TrendScore | null {
-  if (!tech || tech.aboveCount === null || tech.smaCount < 4) return null;
+  if (!tech || tech.sma20 === null || tech.sma50 === null) return null;
 
-  const cell = TREND_BUCKETS[tech.aboveCount] ?? 0;
+  const above = [tech.sma20, tech.sma50].filter((sma) => tech.price > sma).length;
+  const cell = TREND_BUCKETS[above] ?? 0;
 
   const description =
-    tech.aboveCount === 4
-      ? 'above all four moving averages'
-      : tech.aboveCount === 0
-        ? 'below all four moving averages'
-        : `above ${tech.aboveCount} of 4 moving averages`;
+    above === 2
+      ? 'above both short-term moving averages'
+      : above === 0
+        ? 'below both short-term moving averages'
+        : 'between its short-term moving averages';
 
   return {
     cell,
-    aboveCount: tech.aboveCount,
-    smaCount: tech.smaCount,
-    explanation: `Price is ${description} (20/50/100/200-day).`,
+    aboveCount: above,
+    smaCount: 2,
+    explanation: `Price is ${description} (20/50-day).`,
   };
 }
 
@@ -89,10 +92,13 @@ export function scoreSeasonality(
   const bearishStrong =
     meanPct <= -SEASONALITY_BUCKETS.strongPct && winRatePct <= 100 - SEASONALITY_BUCKETS.strongWinRate;
 
-  if (bullishStrong) cell = 2;
-  else if (bearishStrong) cell = -2;
-  else if (meanPct >= SEASONALITY_BUCKETS.mildPct) cell = 1;
-  else if (meanPct <= -SEASONALITY_BUCKETS.mildPct) cell = -1;
+  // Capped at +/-1: seasonality is the weaker half of the technical pair, and
+  // letting it reach +/-2 would give a 10-year average as much weight as the
+  // live trend.
+  if (bullishStrong) cell = SEASONALITY_CELL_MAX;
+  else if (bearishStrong) cell = -SEASONALITY_CELL_MAX;
+  else if (meanPct >= SEASONALITY_BUCKETS.mildPct) cell = SEASONALITY_CELL_MAX;
+  else if (meanPct <= -SEASONALITY_BUCKETS.mildPct) cell = -SEASONALITY_CELL_MAX;
 
   return {
     cell,
@@ -103,5 +109,44 @@ export function scoreSeasonality(
     explanation:
       `${MONTH_NAMES[month - 1]} has averaged ${meanPct > 0 ? '+' : ''}${meanPct}% over ` +
       `${stats.years} years, higher ${winRatePct}% of the time.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2-year yield
+// ---------------------------------------------------------------------------
+
+export interface YieldScore {
+  cell: number;
+  yield: number;
+  sma: number;
+  explanation: string;
+}
+
+/**
+ * 2-year Treasury yield against its own 21-day average.
+ *
+ * Direction, not level: a rising short yield prices in a tighter Fed, which is
+ * bullish for the dollar and therefore bearish for gold and for everything
+ * quoted against USD. Scored for the DOLLAR, so consumers invert it the same way
+ * they do any other USD reading.
+ */
+export function scoreYield2y(
+  current: number | null,
+  sma: number | null,
+): YieldScore | null {
+  if (current === null || sma === null || sma === 0) return null;
+
+  const rising = current > sma;
+  const flat = Math.abs(current - sma) / sma < 0.005; // within 0.5%, call it flat
+
+  return {
+    cell: flat ? 0 : rising ? 1 : -1,
+    yield: Math.round(current * 1000) / 1000,
+    sma: Math.round(sma * 1000) / 1000,
+    explanation: flat
+      ? `2-year yield ${current.toFixed(2)}% is flat against its 21-day average (${sma.toFixed(2)}%).`
+      : `2-year yield ${current.toFixed(2)}% is ${rising ? 'above' : 'below'} its 21-day average ` +
+        `(${sma.toFixed(2)}%) — ${rising ? 'hawkish, bullish USD' : 'dovish, bearish USD'}.`,
   };
 }

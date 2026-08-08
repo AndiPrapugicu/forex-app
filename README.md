@@ -32,7 +32,7 @@ npm run dev                        # http://localhost:3000
 free and keyless. Keys only add AI commentary, Telegram alerts, and durable storage.
 
 ```bash
-npm test               # 188 scoring/alert/connector tests
+npm test               # 216 scoring/alert/connector tests
 npm run ingest:dry     # hit every live source, print a health table
 npm run drill:fxstreet # verify the app degrades when the primary source dies
 npm run check:supabase # verify Supabase credentials, schema and write access
@@ -70,13 +70,29 @@ the auth mechanism, and the API returns 401 without it.
 
 ### The Top Setups scorecard
 
-33 symbols scored across 18 indicators, grouped into Technical / Sentiment / Growth /
+33 symbols scored across 21 indicators, grouped into Technical / Sentiment / Growth /
 Inflation / Jobs. Each cell is a discrete −2..+2, summed into a total and a bias label.
 
-The layout is modelled on A1 Trading's EdgeFinder, but **none of their data or scoring
-is used** — their model is proprietary and undisclosed by their own FAQ. Everything
-here is computed from free public sources with rules you can read and change in
-`config/setups.config.ts`.
+The layout and scoring model follow A1 Trading's EdgeFinder. Their marketing page does
+not document the model, but **their product UI publishes every input and every
+sub-total**, so reading those off a screenshot reconstructs it — verified against their
+GOLD card, which states Technical 3 / Sentiment+COT 1 / Fundamentals 4 / total 8:
+
+```
+Technical      2 trend + 1 seasonality                      = 3  ✓
+Sentiment+COT  1 net positioning + 1 buys/sells − 1 crowd   = 1  ✓
+Fundamentals   growth +2, inflation +1, jobs +1             = 4  ✓
+                                                      TOTAL = 8  ✓
+```
+
+All four reproduce, and `lib/scoring/edgefinder-parity.test.ts` pins it. **No data or
+code of theirs is used** — nothing fetches from a1trading.com. Everything is computed
+from free public sources with rules you can read and change in `config/setups.config.ts`.
+
+**Fundamentals are ternary**: any beat is +1, any miss −1, exactly on forecast 0 —
+regardless of magnitude. That is their model, and it is a deliberate trade-off: a 0.15σ
+miss and a 3σ miss score identically. Sigma is still computed and shown in the detail
+column, so the distinction is one hover away.
 
 ```
 cell(pair, indicator) = clamp(score(base) − score(quote), −2, +2)
@@ -101,10 +117,14 @@ EdgeFinder's "Crowd Sentiment" normally needs a paid broker feed. It doesn't hav
 the CFTC's **non-reportable** positions are small-trader money, published in the same
 free weekly file as the institutional data.
 
-- **COT** — large speculator net position as a percentile of its own 3-year range.
-  Percentile, not absolute size: gold routinely runs hundreds of thousands of contracts
-  while the franc trades in tens of thousands, so raw numbers aren't comparable.
+- **COT** — two sub-scores summed to ±2: net positioning from the long share (>55% → +1,
+  <45% → −1) and latest buys/sells from the week-on-week change.
 - **Crowd** — retail long %, **inverted**, because crowd positioning is contrarian.
+
+The 3-year **percentile is still computed and displayed** even though it no longer drives
+the score. It is the more revealing measure: gold's 197,634 net long looks overwhelming
+until you see it is only the 39th percentile of its own history — below its 3-year median.
+Both matter; only one votes.
 
 COT is surveyed Tuesday and published Friday, so it **always lags by at least 3 days**.
 The report date is displayed next to every panel that uses it.
@@ -246,9 +266,10 @@ A dashboard that 500s because one RSS feed is down is worse than useless.
 ## Project layout
 
 ```
-app/            / (Top Setups) · /scorecard/[symbol] · /cot · /charts · /news
+app/            / (Top Setups) · /scorecard/[symbol] · /heatmap · /cot · /charts · /news
                 /event/[id] · /api/{setups,ingest,dashboard,actual,ai}
-components/     SetupsMatrix, Sidebar, CotPanel, IndicatorChart, SeasonalityStrip,
+components/     SetupsMatrix, Sidebar, CotPanel, EconomicHeatmap, IndicatorChart,
+                SeasonalityStrip,
                 Gauge, CurrencyHeatmap, EventCard, AssetPanel, AlertPanel
 config/         setups.config.ts · symbols.config.ts   <- scorecard tuning
                 scoring.config.ts · assets.config.ts · sources.config.ts
@@ -280,7 +301,10 @@ scripts/        ingest-dry · drill-fxstreet-down · capture-fixtures
   the calendar backfilled into Postgres, which is worth doing once Supabase is set up.
 - Scorecard coverage runs around 64% of currency/indicator combinations. The gaps are
   real: Switzerland publishes no manufacturing PMI here, Canada no consumer confidence,
-  and PCE/ADP/JOLTS/claims are US-only by construction.
+  and PCE/ADP/JOLTS/claims are US-only by construction. Wages and Participation were
+  added specifically so non-USD crosses have a populated Jobs block.
+- Consumer confidence for USD resolves to the **Michigan** sentiment index. EdgeFinder
+  uses the Conference Board series, which has no released values in this feed.
 - Single-user by design: no auth beyond a shared cron secret, no multi-tenancy.
 
 Not financial advice.

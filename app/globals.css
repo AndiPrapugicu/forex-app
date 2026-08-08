@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+
+/**
+ * Dark trading theme.
+ *
+ * Committed to dark only — this is a dashboard meant to sit on a second monitor
+ * for hours, and a light variant would be dead code.
+ *
+ * Colour rules that matter for a trading UI:
+ *  - Bullish/bearish are the ONLY saturated hues. Everything else is neutral, so
+ *    the eye lands on direction first.
+ *  - Amber means "uncertain", never "slightly bad". Confidence and direction are
+ *    separate axes and must never share a colour.
+ *  - Green/red are teal-green and rose rather than pure hues, which keeps them
+ *    distinguishable for the most common forms of colour blindness. Direction is
+ *    also always carried by a glyph and a sign, never colour alone.
+ */
+
+@theme {
+  --color-bg: #0a0d14;
+  --color-surface: #111621;
+  --color-surface-2: #171d2b;
+  --color-border: #232b3d;
+  --color-border-bright: #2f3950;
+
+  --color-text: #e8edf7;
+  --color-muted: #8b97b0;
+  --color-faint: #5a6580;
+
+  --color-bull: #26d0a4;
+  --color-bull-dim: #178f70;
+  --color-bear: #f2506e;
+  --color-bear-dim: #a8324a;
+  --color-neutral: #6b7794;
+  --color-uncertain: #e0a03a;
+
+  --color-critical: #f2506e;
+  --color-high: #f28b3a;
+  --color-medium: #e0c53a;
+  --color-info: #6b7794;
+
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers must align across rows for scanning — tabular figures everywhere. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Subtle grid texture, so large empty panels do not read as broken. */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@keyframes pulse-ring {
+  0% { opacity: 0.55; }
+  50% { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+
+.live-dot {
+  animation: pulse-ring 2.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #171d2b 0%, #232b3d 50%, #171d2b 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Respect reduced-motion for the ambient animations above. */
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .skeleton {
+    animation: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-bright);
+}

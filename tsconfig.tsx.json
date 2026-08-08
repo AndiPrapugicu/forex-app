@@ -1,0 +1,13 @@
+{
+  "_comment": "Used by tsx for the CLI scripts in scripts/ — Next's own tsconfig targets the bundler and cannot run them directly.",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] },
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  }
+}

@@ -1,0 +1,61 @@
+# Keeps the app fresh when nobody has it open.
+#
+# Vercel Hobby only allows cron once per day, which is useless for news alerts.
+# A scheduled GitHub Action is free and runs every 10 minutes, so Telegram
+# alerts fire whether or not the dashboard is open anywhere.
+#
+# Setup:
+#   1. Push this repo to GitHub.
+#   2. Settings -> Secrets and variables -> Actions -> New repository secret:
+#        INGEST_URL    https://<your-app>.vercel.app/api/ingest
+#        CRON_SECRET   the same value as in your Vercel env vars
+#
+# Note: GitHub throttles scheduled workflows on busy runners, so 10 minutes is
+# a floor rather than a guarantee. It also disables schedules on repos with no
+# activity for 60 days — a single commit re-enables them.
+
+name: Ingest
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  # Manual trigger, for verifying the wiring immediately after setup.
+  workflow_dispatch:
+
+# If a run overruns the interval, let it finish rather than stacking ingests.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger ingest
+        env:
+          INGEST_URL: ${{ secrets.INGEST_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$INGEST_URL" ]; then
+            echo "INGEST_URL secret is not set"
+            exit 1
+          fi
+
+          # --fail-with-body so a non-2xx still prints the reason before failing.
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            --retry 2 --retry-delay 10 --retry-all-errors \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$INGEST_URL")
+
+          echo "$response"
+
+          # Surface the two states that silently degrade the app: a store that
+          # cannot dedupe alerts, and an unprotected ingest endpoint.
+          echo "$response" | grep -q '"alertDedupeReliable":false' \
+            && echo "::warning::Alert dedupe unreliable — Supabase is not configured, alerts may repeat"
+          echo "$response" | grep -q '"unsecured":true' \
+            && echo "::warning::/api/ingest has no CRON_SECRET set and is publicly triggerable"
+
+          exit 0

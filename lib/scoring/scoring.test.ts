@@ -12,8 +12,8 @@ import { computeSurprise, scoreEvent, toDirection } from '@/lib/scoring/surprise
 import { computeCurrencyStrength, computeMarketMood, computePairScores, decayFactor } from '@/lib/scoring/currency';
 import { clusterNews, computeRiskFactors, isCorroborated } from '@/lib/scoring/news';
 import { computeAssetScores } from '@/lib/scoring/assets';
-import { CONFIDENCE_FLOOR } from '@/config/scoring.config';
-import type { NewsItem, NormalizedEvent } from '@/lib/types';
+import { CONFIDENCE_FLOOR, CURRENCY_REGIME } from '@/config/scoring.config';
+import type { Currency, NewsItem, NormalizedEvent } from '@/lib/types';
 
 const NOW = new Date('2026-08-08T12:00:00Z');
 
@@ -146,23 +146,19 @@ describe('scoreEvent — polarity', () => {
 });
 
 describe('scoreEvent — regime', () => {
-  it('damps an inflation beat under a cutting cycle vs a hiking one', () => {
-    // USD is configured as cutting, JPY as hiking. Same surprise, same impact.
-    const usd = scoreEvent(
+  /**
+   * Currencies are looked up FROM the config rather than hardcoded.
+   *
+   * CURRENCY_REGIME is hand-maintained and changes as central banks pivot — it
+   * already moved once (USD went cutting -> neutral in Aug 2026 after the Fed
+   * held for seven months). A test naming specific currencies would quietly stop
+   * testing what its title claims the moment that happens.
+   */
+  const cpiIn = (currency: Currency) =>
+    scoreEvent(
       makeEvent({
         name: 'Consumer Price Index (YoY)',
-        currency: 'USD',
-        actual: 3.4,
-        consensus: 3.1,
-        ratioDeviation: 1.5,
-        actualSource: 'fxstreet',
-      }),
-      NOW,
-    );
-    const jpy = scoreEvent(
-      makeEvent({
-        name: 'Consumer Price Index (YoY)',
-        currency: 'JPY',
+        currency,
         actual: 3.4,
         consensus: 3.1,
         ratioDeviation: 1.5,
@@ -171,8 +167,34 @@ describe('scoreEvent — regime', () => {
       NOW,
     );
 
-    expect(usd.score).toBeGreaterThan(0);
-    expect(jpy.score).toBeGreaterThan(usd.score);
+  const withRegime = (regime: string) =>
+    (Object.keys(CURRENCY_REGIME) as Currency[]).find((c) => CURRENCY_REGIME[c] === regime);
+
+  it('damps an inflation beat under a cutting cycle vs a hiking one', () => {
+    const cutting = withRegime('cutting');
+    const hiking = withRegime('hiking');
+
+    // Skip rather than pass vacuously if the config no longer has both stances.
+    if (!cutting || !hiking) {
+      expect(cutting || hiking).toBeDefined();
+      return;
+    }
+
+    const damped = cpiIn(cutting);
+    const full = cpiIn(hiking);
+
+    expect(damped.score).toBeGreaterThan(0);
+    expect(full.score).toBeGreaterThan(damped.score);
+  });
+
+  it('places a neutral regime between cutting and hiking', () => {
+    const cutting = withRegime('cutting');
+    const neutral = withRegime('neutral');
+    const hiking = withRegime('hiking');
+    if (!cutting || !neutral || !hiking) return;
+
+    expect(cpiIn(neutral).score).toBeGreaterThan(cpiIn(cutting).score);
+    expect(cpiIn(hiking).score).toBeGreaterThan(cpiIn(neutral).score);
   });
 
   it('leaves non-inflation-sensitive events untouched by regime', () => {

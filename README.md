@@ -26,9 +26,10 @@ npm run dev                        # http://localhost:3000
 free and keyless. Keys only add AI commentary, Telegram alerts, and durable storage.
 
 ```bash
-npm test               # 78 scoring/alert/connector tests
+npm test               # 79 scoring/alert/connector tests
 npm run ingest:dry     # hit every live source, print a health table
 npm run drill:fxstreet # verify the app degrades when the primary source dies
+npm run check:supabase # verify Supabase credentials, schema and write access
 npm run fixtures       # refresh offline fixtures from live data
 USE_FIXTURES=true npm run dev   # run fully offline on captured data
 ```
@@ -139,8 +140,16 @@ A surprise alert requires a forecast. Without one there is nothing to be surpris
 
 ### 1. Supabase (required in production)
 
-Create a free project, run `lib/db/schema.sql` in the SQL editor, then copy the URL
-and **service_role** key into your env vars.
+Create a free project, run `lib/db/schema.sql` in the SQL editor, then:
+
+- `SUPABASE_URL` — **Settings → Data API → Project URL** (`https://<ref>.supabase.co`).
+  This is *not* the dashboard URL you see in the browser bar.
+- `SUPABASE_SERVICE_KEY` — **Settings → API Keys → Secret keys**, reveal `default`
+  and copy the `sb_secret_…` value. The `sb_publishable_…` key above it cannot write.
+  (Older projects instead show a `service_role` JWT under the *Legacy* tab; either works.)
+
+Verify with `npm run check:supabase`, which tests credentials, schema and write access
+separately so a failure tells you which one is wrong.
 
 Without it the app falls back to in-memory storage. That is fine locally, but on
 Vercel each serverless invocation has its own memory, so **alert dedupe cannot work

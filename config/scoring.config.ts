@@ -317,19 +317,49 @@ export type Regime = 'hiking' | 'cutting' | 'neutral';
 
 /**
  * Current policy stance per central bank. THIS IS THE MAIN DIAL TO KEEP CURRENT.
- * Update it when a central bank pivots; it is the difference between "hot CPI is
- * bullish because hikes are coming" and "hot CPI merely delays the next cut".
  *
- * Last reviewed: 2026-08. Treat as an assumption, not a fact.
+ * It is the difference between "hot CPI is bullish because hikes are coming" and
+ * "hot CPI merely delays the next cut". Nothing else in the app needs manual
+ * upkeep — this does, because no free feed publishes "what stance is the ECB in".
+ *
+ * ---------------------------------------------------------------------------
+ * LAST REVIEWED: 2026-08-08, against each central bank's most recent decision.
+ *
+ * Backdrop: the Middle East conflict pushed energy prices up and flipped much of
+ * the developed world hawkish through mid-2026. That is why so many of these are
+ * hiking or on hold rather than cutting.
+ *
+ *   USD  Fed   3.63%  Cut 4.33% -> 3.63% into Jan 2026, then FLAT for 7 months.
+ *                     The cutting cycle is over; this is a hold.        -> neutral
+ *   EUR  ECB   2.25%  HIKED +25bp in June 2026 on energy-driven
+ *                     inflation, held 23 July.                          -> hiking
+ *   GBP  BoE   3.75%  Held since Feb, but the dissent flipped direction:
+ *                     Feb was 5-4 with four wanting CUTS, July was 6-3
+ *                     with three wanting a HIKE to 4%. On hold with a
+ *                     hawkish drift.                                    -> neutral
+ *   JPY  BoJ   1.00%  Hiked to 1.00% in June 2026, held July, signalling
+ *                     another hike as soon as September.                -> hiking
+ *   AUD  RBA   4.35%  Three consecutive hikes Feb/Mar/May 2026 took the
+ *                     cash rate 3.60% -> 4.35%. Hold expected August.   -> hiking
+ *   NZD  RBNZ  2.50%  Cut to 2.50% on 8 July, further easing signalled.  -> cutting
+ *   CAD  BoC   2.25%  Held April and July, Governing Council explicitly
+ *                     calling the risks balanced.                       -> neutral
+ *   CHF  SNB   0.00%  Held at zero, 2026 inflation forecast nudged UP
+ *                     0.5% -> 0.6%, FX intervention readiness raised.   -> neutral
+ *
+ * To re-check: each bank publishes its decision statement, and the app's own
+ * upcoming-events panel lists the next rate decisions. Update this block and the
+ * dashboard rescores immediately — no other code changes.
+ * ---------------------------------------------------------------------------
  */
 export const CURRENCY_REGIME: Record<Currency, Regime> = {
-  USD: 'cutting',
-  EUR: 'neutral',
-  GBP: 'cutting',
+  USD: 'neutral',
+  EUR: 'hiking',
+  GBP: 'neutral',
   JPY: 'hiking',
-  AUD: 'neutral',
+  AUD: 'hiking',
   NZD: 'cutting',
-  CAD: 'cutting',
+  CAD: 'neutral',
   CHF: 'neutral',
 };
 

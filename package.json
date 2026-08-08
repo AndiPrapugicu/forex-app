@@ -7,11 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ingest:dry": "npx tsx --tsconfig tsconfig.tsx.json scripts/ingest-dry.ts",
+    "ingest:dry": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/ingest-dry.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "drill:fxstreet": "npx tsx --tsconfig tsconfig.tsx.json scripts/drill-fxstreet-down.ts",
-    "fixtures": "npx tsx --tsconfig tsconfig.tsx.json scripts/capture-fixtures.ts"
+    "drill:fxstreet": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/drill-fxstreet-down.ts",
+    "fixtures": "npx tsx --tsconfig tsconfig.tsx.json scripts/capture-fixtures.ts",
+    "check:supabase": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-supabase.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

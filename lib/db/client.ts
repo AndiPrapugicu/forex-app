@@ -16,6 +16,18 @@ export interface Store {
   readonly durable: boolean;
   readonly kind: 'supabase' | 'memory';
 
+  /**
+   * Does the store actually work right now?
+   *
+   * Being CONFIGURED and being FUNCTIONAL are different things, and conflating
+   * them hides the worst failure mode this app has. With credentials set but the
+   * schema never run, every query fails, `hasAlert` falls back to "already seen",
+   * and alerts are silently suppressed forever — while the health endpoint
+   * cheerfully reports that dedupe is reliable. This makes the difference
+   * observable instead of invisible.
+   */
+  verify(): Promise<{ ok: boolean; detail?: string }>;
+
   upsertEvents(events: NormalizedEvent[]): Promise<void>;
   getEvents(fromUtc: string, toUtc: string): Promise<NormalizedEvent[]>;
   getEvent(id: string): Promise<NormalizedEvent | null>;
@@ -58,6 +70,11 @@ const mem = {
 class MemoryStore implements Store {
   readonly durable = false;
   readonly kind = 'memory' as const;
+
+  async verify() {
+    // Always functional, but never durable across serverless invocations.
+    return { ok: true, detail: 'in-memory — not shared between deployments' };
+  }
 
   async upsertEvents(events: NormalizedEvent[]) {
     for (const e of events) mem.events.set(e.id, e);
@@ -186,6 +203,26 @@ class SupabaseStore implements Store {
   readonly kind = 'supabase' as const;
 
   constructor(private db: SupabaseClient) {}
+
+  /**
+   * Cheapest query that proves credentials AND schema are both good.
+   *
+   * Deliberately a real GET rather than a HEAD: a HEAD returns no body, so
+   * supabase-js has nothing to parse an error from and reports success even
+   * against a database with no tables at all.
+   */
+  async verify() {
+    const { error } = await this.db.from('alert_log').select('hash').limit(1);
+    if (!error) return { ok: true };
+
+    if (/schema cache|does not exist|PGRST205/i.test(error.message)) {
+      return { ok: false, detail: 'tables missing — run lib/db/schema.sql' };
+    }
+    if (/JWT|api key|Invalid/i.test(error.message)) {
+      return { ok: false, detail: 'credentials rejected — check SUPABASE_SERVICE_KEY' };
+    }
+    return { ok: false, detail: error.message };
+  }
 
   async upsertEvents(events: NormalizedEvent[]) {
     if (!events.length) return;

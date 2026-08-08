@@ -50,13 +50,18 @@ async function handle(request: Request) {
     const result = await runPipeline({ deliverAlerts: true });
     const store = getStore();
 
+    // Configured is not the same as working. With credentials set but no schema,
+    // every query fails and alerts are silently suppressed — so dedupe is only
+    // reported reliable when the store is BOTH durable and actually functional.
+    const storage = await store.verify();
+
     return NextResponse.json({
       ok: true,
       durationMs: Date.now() - startedAt,
       storage: store.kind,
-      // Surfaced so a misconfigured deploy is obvious: without durable storage,
-      // alert dedupe cannot work across serverless invocations.
-      alertDedupeReliable: store.durable,
+      storageOk: storage.ok,
+      storageDetail: storage.detail,
+      alertDedupeReliable: store.durable && storage.ok,
       unsecured: !process.env.CRON_SECRET,
       events: result.dashboard.upcoming.length + result.dashboard.recent.length,
       newAlerts: result.newAlerts.length,

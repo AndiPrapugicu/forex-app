@@ -53,6 +53,19 @@ export async function runPipeline(
 
   const health: SourceHealth[] = [...calendar.health];
 
+  // Storage health belongs on the dashboard alongside the feeds. A broken store
+  // does not blank the page — it suppresses alerts — which is exactly the kind
+  // of silent failure worth putting in front of the user.
+  const storage = await store.verify().catch(() => ({ ok: false, detail: 'unreachable' }));
+  if (!storage.ok) {
+    health.push({
+      source: `Storage (${store.kind})`,
+      ok: false,
+      detail: `${storage.detail ?? 'unavailable'} — alerts will not be delivered`,
+      fetchedAtUtc: now.toISOString(),
+    });
+  }
+
   const news: NewsItem[] = newsRes.ok ? newsRes.data : [];
   health.push({
     source: newsRes.source,

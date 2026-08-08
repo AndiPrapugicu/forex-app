@@ -66,11 +66,18 @@ async function main() {
   });
 
   // 1. Credentials + schema
+  //
+  // NOTE: do NOT use `{ head: true }` here. It issues a HEAD request, which by
+  // definition returns no response body, so supabase-js has no JSON error to
+  // parse and reports success even when the table does not exist. This check
+  // originally did exactly that and cheerfully declared "all 6 tables present"
+  // against a completely empty database. A normal GET with limit(1) returns the
+  // PGRST205 error body we actually need to see.
   const missing: string[] = [];
   for (const table of REQUIRED_TABLES) {
-    const { error } = await db.from(table).select('*', { count: 'exact', head: true });
+    const { error } = await db.from(table).select('*').limit(1);
     if (error) {
-      if (/JWT|api key|Invalid/i.test(error.message)) {
+      if (/JWT|api key|Invalid|401/i.test(error.message)) {
         console.log(`\n  FAIL  credentials rejected: ${error.message}`);
         console.log('        Re-copy the Secret key from Settings -> API Keys.\n');
         process.exit(1);
@@ -80,8 +87,17 @@ async function main() {
   }
 
   if (missing.length) {
+    const allMissing = missing.length === REQUIRED_TABLES.length;
     console.log(`\n  FAIL  missing table(s): ${missing.join(', ')}`);
-    console.log('        Run lib/db/schema.sql in the Supabase SQL editor.\n');
+    console.log(
+      allMissing
+        ? '\n        No tables exist yet — the schema has not been run.\n' +
+            '        Supabase dashboard -> SQL Editor -> New query, paste the\n' +
+            '        contents of lib/db/schema.sql, and Run.\n'
+        : '\n        Re-run lib/db/schema.sql in the Supabase SQL editor.\n' +
+            '        It is idempotent (every statement is CREATE TABLE IF NOT EXISTS),\n' +
+            '        so running it again is safe.\n',
+    );
     process.exit(1);
   }
   console.log(`  schema    all ${REQUIRED_TABLES.length} tables present`);

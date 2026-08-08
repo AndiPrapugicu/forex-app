@@ -80,12 +80,10 @@ export function DashboardView({
   }, []);
 
   return (
-    <div className="grid-bg min-h-screen">
+    <div>
       <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-bg)]/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <h1 className="text-sm font-bold tracking-wide text-[var(--color-text)]">
-            FX<span className="text-[var(--color-bull)]">INTEL</span>
-          </h1>
+          <h1 className="text-sm font-bold tracking-wide text-[var(--color-text)]">News &amp; Alerts</h1>
 
           {data && <SourceHealthBar health={data.health} />}
 

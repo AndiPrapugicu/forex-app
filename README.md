@@ -1,8 +1,14 @@
 # FX Intel
 
-A personal forex news intelligence dashboard. It ingests economic releases, market
-news and geopolitical headlines, then turns them into an **explainable**
-bullish/bearish score per currency, per pair, and for gold, silver, platinum and WTI.
+A personal trading scorecard. It ingests economic releases, COT positioning, price
+technicals and news flow, then turns them into an **explainable** bullish/bearish
+score across 33 symbols — 28 major FX pairs, gold, silver, platinum, WTI and the
+dollar index.
+
+Four views: **Top Setups** (every symbol against 18 indicators), **Asset Scorecard**
+(one symbol in full), **COT** (institutional and retail positioning), and
+**Indicators** (actual vs forecast over time), plus the original news and alerts
+dashboard.
 
 The design goal is a screen that answers, in under five seconds: *what's coming,
 what just printed, who does it help, how much, and how sure are we?*
@@ -26,7 +32,7 @@ npm run dev                        # http://localhost:3000
 free and keyless. Keys only add AI commentary, Telegram alerts, and durable storage.
 
 ```bash
-npm test               # 79 scoring/alert/connector tests
+npm test               # 188 scoring/alert/connector tests
 npm run ingest:dry     # hit every live source, print a health table
 npm run drill:fxstreet # verify the app degrades when the primary source dies
 npm run check:supabase # verify Supabase credentials, schema and write access
@@ -46,6 +52,7 @@ Every source below was probed live before being wired in.
 | ForexFactory (FairEconomy) | none | Schedule fallback if FXStreet dies |
 | Yahoo Finance | none | Prices for gold, silver, platinum, WTI, FX, DXY |
 | RSS ×8 (BBC, CNBC, WSJ, Al Jazeera, Reuters, Fed, ECB, BoE) | none | News, geopolitics, corroboration |
+| **CFTC Commitments of Traders** | none | COT positioning **and retail sentiment** |
 | DBnomics | none | Policy rates |
 | OpenAI *or* Ollama | optional | Plain-English commentary only |
 
@@ -60,6 +67,47 @@ the auth mechanism, and the API returns 401 without it.
 - **DBnomics for actuals** — its statistics mirrors lag badly (US CPI last observation
   was ~18 months old, euro HICP ~8 months). It would have produced confident-looking
   cross-checks against year-old data, so it is scoped to policy rates, which are current.
+
+### The Top Setups scorecard
+
+33 symbols scored across 18 indicators, grouped into Technical / Sentiment / Growth /
+Inflation / Jobs. Each cell is a discrete −2..+2, summed into a total and a bias label.
+
+The layout is modelled on A1 Trading's EdgeFinder, but **none of their data or scoring
+is used** — their model is proprietary and undisclosed by their own FAQ. Everything
+here is computed from free public sources with rules you can read and change in
+`config/setups.config.ts`.
+
+```
+cell(pair, indicator) = clamp(score(base) − score(quote), −2, +2)
+```
+
+A missing leg counts as 0, which is why NZDUSD shows a value under NFP — New Zealand
+publishes no payrolls, so the cell is the inverted US reading.
+
+**Two subtleties that took measuring to get right:**
+
+- **EUR must scope to the euro-area aggregate.** "Consumer Price Index (YoY)" tagged
+  EUR is a *member state* print (DE, IT, ES…); the aggregate is "Harmonized Index of
+  Consumer Prices (YoY)" under country `EMU`. Without the country filter the column
+  shows whichever member state printed last.
+- **Stale is not neutral.** A five-month-old GDP print and a print that landed exactly
+  on forecast are both "0" if you only look at the number. Slots carry a `maxAgeDays`
+  and render greyed when they exceed it.
+
+### COT and crowd sentiment — both free
+
+EdgeFinder's "Crowd Sentiment" normally needs a paid broker feed. It doesn't have to:
+the CFTC's **non-reportable** positions are small-trader money, published in the same
+free weekly file as the institutional data.
+
+- **COT** — large speculator net position as a percentile of its own 3-year range.
+  Percentile, not absolute size: gold routinely runs hundreds of thousands of contracts
+  while the franc trades in tens of thousands, so raw numbers aren't comparable.
+- **Crowd** — retail long %, **inverted**, because crowd positioning is contrarian.
+
+COT is surveyed Tuesday and published Friday, so it **always lags by at least 3 days**.
+The report date is displayed next to every panel that uses it.
 
 ### Where `actual` values come from
 
@@ -198,12 +246,17 @@ A dashboard that 500s because one RSS feed is down is worse than useless.
 ## Project layout
 
 ```
-app/            routes — dashboard, event detail, /api/{ingest,dashboard,actual,ai}
-components/     Gauge, CurrencyHeatmap, EventCard, AssetPanel, AlertPanel, ActualInput
-config/         scoring.config.ts · assets.config.ts · sources.config.ts   <- tuning lives here
+app/            / (Top Setups) · /scorecard/[symbol] · /cot · /charts · /news
+                /event/[id] · /api/{setups,ingest,dashboard,actual,ai}
+components/     SetupsMatrix, Sidebar, CotPanel, IndicatorChart, SeasonalityStrip,
+                Gauge, CurrencyHeatmap, EventCard, AssetPanel, AlertPanel
+config/         setups.config.ts · symbols.config.ts   <- scorecard tuning
+                scoring.config.ts · assets.config.ts · sources.config.ts
 lib/
   connectors/   base.ts (retry, cooldown, stale cache) + one file per source
-  scoring/      surprise · currency · news · assets  — pure, clock injected, no I/O
+                cftc.ts (COT) · technicals.ts (SMA, seasonality, vol)
+  scoring/      surprise · currency · news · assets · discrete · setups · cot ·
+                technical · indicator-history — pure, clock injected, no I/O
   alerts/       rules · telegram
   ai/           provider (OpenAI + Ollama) · prompts
   db/           schema.sql · client (Supabase + in-memory fallback)
@@ -223,6 +276,11 @@ scripts/        ingest-dry · drill-fxstreet-down · capture-fixtures
   returns few upcoming events. It is a safety net, not a replacement.
 - **`CURRENCY_REGIME` is a manual assumption** and will drift as central banks pivot.
 - Currency tagging on news is keyword-based and will occasionally mis-attribute.
+- **Indicator history is limited to 150 days** (~5 monthly prints). Longer charts need
+  the calendar backfilled into Postgres, which is worth doing once Supabase is set up.
+- Scorecard coverage runs around 64% of currency/indicator combinations. The gaps are
+  real: Switzerland publishes no manufacturing PMI here, Canada no consumer confidence,
+  and PCE/ADP/JOLTS/claims are US-only by construction.
 - Single-user by design: no auth beyond a shared cron secret, no multi-tenancy.
 
 Not financial advice.

@@ -25,10 +25,29 @@ export const FXSTREET = {
     'User-Agent': 'Mozilla/5.0',
     Accept: 'application/json',
   },
-  /** How far back/forward to pull on each ingest. */
+  /** How far back/forward to pull on each ingest, for news and alerts. */
   lookbackHours: 48,
   lookaheadHours: 168,
   cacheTtlSeconds: 300,
+
+  /**
+   * Separate, much longer window for the scorecard.
+   *
+   * The 48-hour ingest window is right for "what just came out", but useless for
+   * the Top Setups matrix, which needs the LATEST print of each indicator — and
+   * most publish monthly, GDP quarterly. With the short window nearly every
+   * fundamental column came back empty.
+   *
+   * 150 days covers the longest staleness allowance (120 days for GDP and rate
+   * decisions) with margin. Measured cost: ~3.9 MB / 6,078 events, against
+   * 2.4 MB at 90 days (too short for GDP) and 5.2 MB at 200 (no extra coverage).
+   */
+  historyLookbackDays: 150,
+  /**
+   * Historical releases do not change, so this is cached hard. Only the leading
+   * edge moves, and the 48-hour ingest window handles that.
+   */
+  historyCacheTtlSeconds: 3600,
 } as const;
 
 export const FAIRECONOMY = {

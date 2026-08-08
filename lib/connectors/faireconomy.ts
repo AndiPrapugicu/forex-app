@@ -54,6 +54,10 @@ function normalize(raw: FfEvent): NormalizedEvent | null {
     seriesId: null,
     name: raw.title,
     currency: raw.country,
+    // This feed keys by currency, not country. Leaving it null lets the
+    // scorecard's country filter fall back to the primary country rather than
+    // excluding these rows outright.
+    countryCode: null,
     dateUtc: date.toISOString(),
     impact: toImpact(raw.impact),
 

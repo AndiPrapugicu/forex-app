@@ -35,12 +35,25 @@ export function ScoreGauge({
   confidence,
   size = 180,
   label,
+  displayScore,
+  displaySuffix,
 }: {
+  /** Drives the needle. Always on the -10..+10 scale. */
   score: number;
   direction: Direction;
   confidence: number;
   size?: number;
   label?: string;
+  /**
+   * Number to print under the gauge, when it differs from the needle value.
+   *
+   * The scorecard needs this: its total is a sum of 18 cells on a roughly
+   * ±15 scale, rescaled to ±10 to position the needle. Printing the rescaled
+   * value showed "+0.7" directly above "Total score +1" — two numbers for the
+   * same thing, which reads as a bug.
+   */
+  displayScore?: number;
+  displaySuffix?: string;
 }) {
   const cx = size / 2;
   const cy = size / 2;
@@ -115,7 +128,16 @@ export function ScoreGauge({
       </svg>
 
       <div className="-mt-1 text-center">
-        <div className={`tnum text-3xl font-bold ${style.color}`}>{formatScore(score)}</div>
+        <div className={`tnum text-3xl font-bold ${style.color}`}>
+          {displayScore === undefined
+            ? formatScore(score)
+            : `${displayScore > 0 ? '+' : ''}${displayScore}`}
+          {displaySuffix && (
+            <span className="ml-0.5 text-base font-normal text-[var(--color-faint)]">
+              {displaySuffix}
+            </span>
+          )}
+        </div>
         <div className={`text-xs font-medium ${style.color}`}>
           {style.glyph} {style.label}
         </div>

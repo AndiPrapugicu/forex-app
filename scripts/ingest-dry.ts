@@ -11,6 +11,9 @@ import { fetchFairEconomyCalendar } from '@/lib/connectors/faireconomy';
 import { fetchNews } from '@/lib/connectors/rss';
 import { fetchPrices } from '@/lib/connectors/prices';
 import { fetchPolicyRates } from '@/lib/connectors/dbnomics';
+import { fetchCotData, latestReportDate, reportAgeDays } from '@/lib/connectors/cftc';
+import { fetchTechnicals } from '@/lib/connectors/technicals';
+import { ALL_SYMBOLS } from '@/config/symbols.config';
 import type { Result } from '@/lib/types';
 
 function report(label: string, res: Result<unknown[]>) {
@@ -26,12 +29,14 @@ function report(label: string, res: Result<unknown[]>) {
 async function main() {
   console.log('\nConnector health check\n' + '-'.repeat(60));
 
-  const [fxs, ff, news, prices, rates] = await Promise.all([
+  const [fxs, ff, news, prices, rates, cot, tech] = await Promise.all([
     fetchFxStreetCalendar(),
     fetchFairEconomyCalendar(),
     fetchNews(),
     fetchPrices(),
     fetchPolicyRates(),
+    fetchCotData(),
+    fetchTechnicals(ALL_SYMBOLS.map((s) => ({ symbol: s.symbol, yahoo: s.yahoo }))),
   ]);
 
   report('FXStreet calendar', fxs);
@@ -39,6 +44,14 @@ async function main() {
   report('RSS news', news);
   report('Prices', prices);
   report('Policy rates', rates);
+  // Maps, not arrays — report() wants something with a length.
+  report('CFTC COT', cot.ok ? { ...cot, data: [...cot.data.values()] } : cot);
+  report('Technicals', tech.ok ? { ...tech, data: [...tech.data.values()] } : tech);
+
+  if (cot.ok) {
+    const date = latestReportDate(cot.data);
+    if (date) console.log(`\nCOT report ${date} (${reportAgeDays(date)} days old — 3-10 is normal)`);
+  }
 
   console.log('-'.repeat(60));
 

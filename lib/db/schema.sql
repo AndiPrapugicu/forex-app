@@ -12,6 +12,9 @@ create table if not exists events (
   series_id               text,
   name                    text not null,
   currency                text not null,
+  -- Publishing country/region. Distinct from currency: the euro area publishes
+  -- under EMU plus every member state, all tagged EUR.
+  country_code            text,
   date_utc                timestamptz not null,
   impact                  text not null,
 

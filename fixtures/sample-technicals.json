@@ -1,0 +1,2197 @@
+[
+  {
+    "symbol": "EURGBP",
+    "price": 0.8567,
+    "sma20": 0.8540965020656586,
+    "sma50": 0.8583362007141113,
+    "sma100": 0.8629555010795593,
+    "sma200": 0.8676225009560585,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 3.4,
+    "avgDailyMove7Pct": 0.1,
+    "avgDailyMove90Pct": 0.14,
+    "seasonality": {
+      "1": {
+        "meanPct": -1.1,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.21,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.5,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.51,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.65,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.15,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.59,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.09,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.25,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.4,
+        "winRatePct": 60,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURAUD",
+    "price": 1.6348,
+    "sma20": 1.6361549973487854,
+    "sma50": 1.6394663977622985,
+    "sma100": 1.6406071984767914,
+    "sma200": 1.6814852488040923,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 5,
+    "avgDailyMove7Pct": 0.25,
+    "avgDailyMove90Pct": 0.26,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.54,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.09,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.05,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.1,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.45,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.13,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.5,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.05,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.02,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.24,
+        "winRatePct": 40,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURNZD",
+    "price": 1.9607,
+    "sma20": 1.9631844997406005,
+    "sma50": 1.981913993358612,
+    "sma100": 1.986355493068695,
+    "sma200": 1.9956419950723647,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 4.8,
+    "avgDailyMove7Pct": 0.2,
+    "avgDailyMove90Pct": 0.29,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.36,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.43,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.83,
+        "winRatePct": 90,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.43,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.79,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.19,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 1.33,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.15,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.17,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.21,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "price": 1.1562,
+    "sma20": 1.1456584334373474,
+    "sma50": 1.147265362739563,
+    "sma100": 1.156989711523056,
+    "sma200": 1.16276242852211,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 4.4,
+    "avgDailyMove7Pct": 0.29,
+    "avgDailyMove90Pct": 0.25,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.13,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.65,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.61,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.24,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.45,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.11,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.88,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.68,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.94,
+        "winRatePct": 80,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURCAD",
+    "price": 1.6106,
+    "sma20": 1.609837007522583,
+    "sma50": 1.6142162013053893,
+    "sma100": 1.6093130004405976,
+    "sma200": 1.6106860506534577,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 3.8,
+    "avgDailyMove7Pct": 0.23,
+    "avgDailyMove90Pct": 0.2,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.46,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.16,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.79,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.28,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.04,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.05,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.29,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.3,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.12,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.37,
+        "winRatePct": 60,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURCHF",
+    "price": 0.9335,
+    "sma20": 0.9293980032205582,
+    "sma50": 0.924277799129486,
+    "sma100": 0.9210301023721695,
+    "sma200": 0.9219450515508651,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 3.4,
+    "avgDailyMove7Pct": 0.24,
+    "avgDailyMove90Pct": 0.17,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.02,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.08,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.96,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.82,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.35,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.25,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.2,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.06,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.15,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.57,
+        "winRatePct": 30,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "EURJPY",
+    "price": 182.378,
+    "sma20": 184.73680114746094,
+    "sma50": 184.9215200805664,
+    "sma100": 185.08976989746094,
+    "sma200": 183.74860466003418,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 7.3,
+    "avgDailyMove7Pct": 0.57,
+    "avgDailyMove90Pct": 0.24,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.37,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.08,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 2.05,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.11,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.91,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.79,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.09,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.37,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.05,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.59,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPAUD",
+    "price": 1.9088,
+    "sma20": 1.9155219912528991,
+    "sma50": 1.9098963975906371,
+    "sma100": 1.9010195779800414,
+    "sma200": 1.9376070433855057,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 5.4,
+    "avgDailyMove7Pct": 0.21,
+    "avgDailyMove90Pct": 0.27,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.63,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.3,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.56,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.6,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.15,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.07,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.08,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.19,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.36,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.28,
+        "winRatePct": 30,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPNZD",
+    "price": 2.2888,
+    "sma20": 2.298695993423462,
+    "sma50": 2.3090531873703,
+    "sma100": 2.3018572974205016,
+    "sma200": 2.3000478982925414,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 4.5,
+    "avgDailyMove7Pct": 0.18,
+    "avgDailyMove90Pct": 0.29,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.6,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.68,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.46,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -1.03,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.19,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.1,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.82,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.29,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.41,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.19,
+        "winRatePct": 50,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPUSD",
+    "price": 1.3493,
+    "sma20": 1.3412719786167144,
+    "sma50": 1.336526494026184,
+    "sma100": 1.3406148874759674,
+    "sma200": 1.3401164174079896,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 6.1,
+    "avgDailyMove7Pct": 0.3,
+    "avgDailyMove90Pct": 0.31,
+    "seasonality": {
+      "1": {
+        "meanPct": 1.15,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.41,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.15,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.56,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.36,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.52,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.48,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.6,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.38,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.56,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPCAD",
+    "price": 1.8807,
+    "sma20": 1.8847880065441132,
+    "sma50": 1.880468201637268,
+    "sma100": 1.8648042571544647,
+    "sma200": 1.8563822388648987,
+    "aboveCount": 3,
+    "smaCount": 4,
+    "realizedVolPct": 5.6,
+    "avgDailyMove7Pct": 0.27,
+    "avgDailyMove90Pct": 0.25,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.6,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.4,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.31,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.79,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.56,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.03,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.21,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.16,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.42,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.05,
+        "winRatePct": 50,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPCHF",
+    "price": 1.0897,
+    "sma20": 1.0880404949188232,
+    "sma50": 1.0767203998565673,
+    "sma100": 1.0672147023677825,
+    "sma200": 1.0625317972898483,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 3.9,
+    "avgDailyMove7Pct": 0.25,
+    "avgDailyMove90Pct": 0.2,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.96,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.17,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.49,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -1.33,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.86,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.27,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.64,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.09,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.41,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.83,
+        "winRatePct": 30,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "GBPJPY",
+    "price": 212.884,
+    "sma20": 216.28589935302733,
+    "sma50": 215.42917907714843,
+    "sma100": 214.47383239746094,
+    "sma200": 211.79327125549315,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 7.7,
+    "avgDailyMove7Pct": 0.57,
+    "avgDailyMove90Pct": 0.28,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.7,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.18,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.63,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.48,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.31,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.71,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.39,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.5,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.34,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.19,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "AUDNZD",
+    "price": 1.1988,
+    "sma20": 1.1999690055847168,
+    "sma50": 1.2088967776298523,
+    "sma100": 1.2107970488071442,
+    "sma200": 1.1876522731781005,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 4.8,
+    "avgDailyMove7Pct": 0.17,
+    "avgDailyMove90Pct": 0.23,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.21,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.26,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.94,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.28,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 0.39,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.15,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.72,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.33,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.17,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.03,
+        "winRatePct": 40,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "AUDUSD",
+    "price": 0.7071,
+    "sma20": 0.700159877538681,
+    "sma50": 0.6997653949260711,
+    "sma100": 0.7052554726600647,
+    "sma200": 0.6921518561244011,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 6.3,
+    "avgDailyMove7Pct": 0.52,
+    "avgDailyMove90Pct": 0.4,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.89,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.5,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -0.72,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.05,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.25,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.71,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.34,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.84,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.65,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.78,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "AUDCAD",
+    "price": 0.9844,
+    "sma20": 0.9838668525218963,
+    "sma50": 0.984550279378891,
+    "sma100": 0.980913850069046,
+    "sma200": 0.9586969804763794,
+    "aboveCount": 3,
+    "smaCount": 4,
+    "realizedVolPct": 6.3,
+    "avgDailyMove7Pct": 0.44,
+    "avgDailyMove90Pct": 0.34,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.12,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.07,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -0.09,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.28,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.35,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.05,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.14,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.19,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.07,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.16,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "AUDCHF",
+    "price": 0.57,
+    "sma20": 0.5679513484239578,
+    "sma50": 0.5636823797225952,
+    "sma100": 0.5613382411003113,
+    "sma200": 0.5486799302697182,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 5.5,
+    "avgDailyMove7Pct": 0.29,
+    "avgDailyMove90Pct": 0.28,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.58,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.13,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -0.03,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.62,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.71,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.3,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.56,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.02,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.16,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.73,
+        "winRatePct": 50,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "AUDJPY",
+    "price": 111.52,
+    "sma20": 112.89817810058594,
+    "sma50": 112.78348602294922,
+    "sma100": 112.81246276855468,
+    "sma200": 109.40725631713867,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 7.8,
+    "avgDailyMove7Pct": 0.6,
+    "avgDailyMove90Pct": 0.37,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.26,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.1,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.12,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.17,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.49,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.71,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.32,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.44,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.05,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.37,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "NZDUSD",
+    "price": 0.5895,
+    "sma20": 0.5834790498018265,
+    "sma50": 0.5788597428798675,
+    "sma100": 0.5824342948198319,
+    "sma200": 0.5827025681734085,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 7.2,
+    "avgDailyMove7Pct": 0.47,
+    "avgDailyMove90Pct": 0.46,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.61,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.93,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -1.34,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.41,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.54,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.99,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -1.29,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -1.11,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.55,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.67,
+        "winRatePct": 60,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "NZDCAD",
+    "price": 0.8214,
+    "sma20": 0.8197956949472427,
+    "sma50": 0.8142918765544891,
+    "sma100": 0.8099849504232407,
+    "sma200": 0.8069667449593544,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 6.2,
+    "avgDailyMove7Pct": 0.38,
+    "avgDailyMove90Pct": 0.36,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.05,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.38,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -0.87,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.1,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.69,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.5,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.19,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.55,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "9": {
+        "meanPct": -0.19,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.27,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "NZDCHF",
+    "price": 0.4754,
+    "sma20": 0.473158997297287,
+    "sma50": 0.46619018077850344,
+    "sma100": 0.46349619001150133,
+    "sma200": 0.46182572454214094,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 4.9,
+    "avgDailyMove7Pct": 0.27,
+    "avgDailyMove90Pct": 0.28,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.36,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.47,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "3": {
+        "meanPct": -0.91,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.27,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -1.11,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.09,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -1.36,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.21,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.01,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.6,
+        "winRatePct": 30,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "NZDJPY",
+    "price": 92.988,
+    "sma20": 94.0675006866455,
+    "sma50": 93.28030075073242,
+    "sma100": 93.15405807495117,
+    "sma200": 92.07022354125976,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 7.3,
+    "avgDailyMove7Pct": 0.44,
+    "avgDailyMove90Pct": 0.39,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.1,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.71,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.43,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.59,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.09,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.62,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.95,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.14,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.89,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.36,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "USDCAD",
+    "price": 1.3938,
+    "sma20": 1.4054569959640504,
+    "sma50": 1.4072712016105653,
+    "sma100": 1.3913482022285462,
+    "sma200": 1.3855969512462616,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 3.8,
+    "avgDailyMove7Pct": 0.22,
+    "avgDailyMove90Pct": 0.19,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.63,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.78,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.34,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.35,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.01,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.69,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.24,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.65,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.76,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.51,
+        "winRatePct": 40,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "USDCHF",
+    "price": 0.8077,
+    "sma20": 0.8113041937351226,
+    "sma50": 0.8057234787940979,
+    "sma100": 0.7962150400876999,
+    "sma200": 0.7930550789833068,
+    "aboveCount": 3,
+    "smaCount": 4,
+    "realizedVolPct": 6.8,
+    "avgDailyMove7Pct": 0.47,
+    "avgDailyMove90Pct": 0.33,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.17,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.59,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.48,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.78,
+        "winRatePct": 20,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.45,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.77,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.12,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.69,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.86,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -1.38,
+        "winRatePct": 20,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "USDJPY",
+    "price": 157.745,
+    "sma20": 161.27239990234375,
+    "sma50": 161.2039010620117,
+    "sma100": 160.00223037719726,
+    "sma200": 158.05887466430664,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 8.4,
+    "avgDailyMove7Pct": 0.67,
+    "avgDailyMove90Pct": 0.24,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.47,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.59,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.54,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.13,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.66,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -1.18,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.01,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 1.28,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.72,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.31,
+        "winRatePct": 50,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "CADCHF",
+    "price": 0.5785,
+    "sma20": 0.5771230071783066,
+    "sma50": 0.5724533998966217,
+    "sma100": 0.572173199057579,
+    "sma200": 0.5722566491365433,
+    "aboveCount": 4,
+    "smaCount": 4,
+    "realizedVolPct": 5.4,
+    "avgDailyMove7Pct": 0.35,
+    "avgDailyMove90Pct": 0.24,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.47,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.21,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.09,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.37,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.36,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.15,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.51,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.25,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.1,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.86,
+        "winRatePct": 40,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "CADJPY",
+    "price": 113.179,
+    "sma20": 114.73449974060058,
+    "sma50": 114.53920013427734,
+    "sma100": 114.99225463867188,
+    "sma200": 114.07007820129394,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 8.4,
+    "avgDailyMove7Pct": 0.66,
+    "avgDailyMove90Pct": 0.25,
+    "seasonality": {
+      "1": {
+        "meanPct": 0.16,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.31,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.24,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 0.54,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 1.88,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.76,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.09,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.71,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.01,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 0.22,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "CHFJPY",
+    "price": 195.274,
+    "sma20": 198.74578399658202,
+    "sma50": 200.04895874023438,
+    "sma100": 200.93443588256835,
+    "sma200": 199.29505798339844,
+    "aboveCount": 0,
+    "smaCount": 4,
+    "realizedVolPct": 7.4,
+    "avgDailyMove7Pct": 0.58,
+    "avgDailyMove90Pct": 0.27,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.39,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "2": {
+        "meanPct": -0.1,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 1.06,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "4": {
+        "meanPct": 1.07,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "5": {
+        "meanPct": 2.12,
+        "winRatePct": 80,
+        "years": 10
+      },
+      "6": {
+        "meanPct": -0.55,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": 0.54,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "8": {
+        "meanPct": 0.38,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 0.92,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "12": {
+        "meanPct": 1.19,
+        "winRatePct": 70,
+        "years": 10
+      }
+    }
+  },
+  {
+    "symbol": "XAUUSD",
+    "price": 4399.7,
+    "sma20": 4084.7600219726564,
+    "sma50": 4169.274013671875,
+    "sma100": 4408.082998046875,
+    "sma200": 4478.671489257813,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 23.1,
+    "avgDailyMove7Pct": 1.55,
+    "avgDailyMove90Pct": 1.21,
+    "seasonality": {
+      "1": {
+        "meanPct": 1.64,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "2": {
+        "meanPct": -0.48,
+        "winRatePct": 29,
+        "years": 7
+      },
+      "3": {
+        "meanPct": 3.32,
+        "winRatePct": 63,
+        "years": 8
+      },
+      "4": {
+        "meanPct": 1.72,
+        "winRatePct": 71,
+        "years": 7
+      },
+      "5": {
+        "meanPct": 1.43,
+        "winRatePct": 63,
+        "years": 8
+      },
+      "6": {
+        "meanPct": -1.96,
+        "winRatePct": 38,
+        "years": 8
+      },
+      "7": {
+        "meanPct": 2.53,
+        "winRatePct": 88,
+        "years": 8
+      },
+      "8": {
+        "meanPct": 2.89,
+        "winRatePct": 75,
+        "years": 8
+      },
+      "9": {
+        "meanPct": -0.74,
+        "winRatePct": 17,
+        "years": 6
+      },
+      "10": {
+        "meanPct": 0.28,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "11": {
+        "meanPct": -0.16,
+        "winRatePct": 43,
+        "years": 7
+      },
+      "12": {
+        "meanPct": 2.37,
+        "winRatePct": 86,
+        "years": 7
+      }
+    }
+  },
+  {
+    "symbol": "XAGUSD",
+    "price": 63.499,
+    "sma20": 58.60959949493408,
+    "sma50": 62.78985961914063,
+    "sma100": 69.36090957641602,
+    "sma200": 70.14333494186401,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 38.2,
+    "avgDailyMove7Pct": 2.22,
+    "avgDailyMove90Pct": 2.39,
+    "seasonality": {
+      "1": {
+        "meanPct": 1.85,
+        "winRatePct": 67,
+        "years": 6
+      },
+      "2": {
+        "meanPct": -2.08,
+        "winRatePct": 14,
+        "years": 7
+      },
+      "3": {
+        "meanPct": 3.24,
+        "winRatePct": 50,
+        "years": 8
+      },
+      "4": {
+        "meanPct": -0.71,
+        "winRatePct": 43,
+        "years": 7
+      },
+      "5": {
+        "meanPct": 5.41,
+        "winRatePct": 75,
+        "years": 8
+      },
+      "6": {
+        "meanPct": -4.39,
+        "winRatePct": 25,
+        "years": 8
+      },
+      "7": {
+        "meanPct": 4.99,
+        "winRatePct": 50,
+        "years": 8
+      },
+      "8": {
+        "meanPct": 4.98,
+        "winRatePct": 63,
+        "years": 8
+      },
+      "9": {
+        "meanPct": -1.44,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "10": {
+        "meanPct": 0.71,
+        "winRatePct": 67,
+        "years": 6
+      },
+      "11": {
+        "meanPct": 0.71,
+        "winRatePct": 29,
+        "years": 7
+      },
+      "12": {
+        "meanPct": 6.08,
+        "winRatePct": 71,
+        "years": 7
+      }
+    }
+  },
+  {
+    "symbol": "XPTUSD",
+    "price": 1759.6,
+    "sma20": 1643.3799926757813,
+    "sma50": 1685.849990234375,
+    "sma100": 1842.205001220703,
+    "sma200": 1912.1035009765626,
+    "aboveCount": 2,
+    "smaCount": 4,
+    "realizedVolPct": 37.9,
+    "avgDailyMove7Pct": 2.31,
+    "avgDailyMove90Pct": 1.9,
+    "seasonality": {
+      "1": {
+        "meanPct": 2.04,
+        "winRatePct": 83,
+        "years": 6
+      },
+      "2": {
+        "meanPct": -1.12,
+        "winRatePct": 43,
+        "years": 7
+      },
+      "3": {
+        "meanPct": -0.63,
+        "winRatePct": 50,
+        "years": 8
+      },
+      "4": {
+        "meanPct": 1.25,
+        "winRatePct": 57,
+        "years": 7
+      },
+      "5": {
+        "meanPct": 0.53,
+        "winRatePct": 50,
+        "years": 8
+      },
+      "6": {
+        "meanPct": -6.14,
+        "winRatePct": 13,
+        "years": 8
+      },
+      "7": {
+        "meanPct": 2.58,
+        "winRatePct": 63,
+        "years": 8
+      },
+      "8": {
+        "meanPct": 2.24,
+        "winRatePct": 75,
+        "years": 8
+      },
+      "9": {
+        "meanPct": 1.08,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "10": {
+        "meanPct": 0.71,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "11": {
+        "meanPct": -1.4,
+        "winRatePct": 29,
+        "years": 7
+      },
+      "12": {
+        "meanPct": 4.64,
+        "winRatePct": 57,
+        "years": 7
+      }
+    }
+  },
+  {
+    "symbol": "WTIUSD",
+    "price": 78.18,
+    "sma20": 81.81899948120117,
+    "sma50": 80.47020004272461,
+    "sma100": 89.32949989318848,
+    "sma200": 76.28059989929199,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 59.5,
+    "avgDailyMove7Pct": 2.54,
+    "avgDailyMove90Pct": 3.17,
+    "seasonality": {
+      "1": {
+        "meanPct": 11.63,
+        "winRatePct": 100,
+        "years": 6
+      },
+      "2": {
+        "meanPct": 2.03,
+        "winRatePct": 57,
+        "years": 7
+      },
+      "3": {
+        "meanPct": 1.51,
+        "winRatePct": 63,
+        "years": 8
+      },
+      "4": {
+        "meanPct": -0.42,
+        "winRatePct": 57,
+        "years": 7
+      },
+      "5": {
+        "meanPct": 5.57,
+        "winRatePct": 38,
+        "years": 8
+      },
+      "6": {
+        "meanPct": 3.23,
+        "winRatePct": 75,
+        "years": 8
+      },
+      "7": {
+        "meanPct": 4.85,
+        "winRatePct": 75,
+        "years": 8
+      },
+      "8": {
+        "meanPct": -4.22,
+        "winRatePct": 25,
+        "years": 8
+      },
+      "9": {
+        "meanPct": 0.58,
+        "winRatePct": 50,
+        "years": 6
+      },
+      "10": {
+        "meanPct": -1.12,
+        "winRatePct": 33,
+        "years": 6
+      },
+      "11": {
+        "meanPct": -6.89,
+        "winRatePct": 29,
+        "years": 7
+      },
+      "12": {
+        "meanPct": 1.25,
+        "winRatePct": 43,
+        "years": 7
+      }
+    }
+  },
+  {
+    "symbol": "DXY",
+    "price": 99.604,
+    "sma20": 100.65100059509277,
+    "sma50": 100.48680038452149,
+    "sma100": 99.71020042419434,
+    "sma200": 99.16645023345947,
+    "aboveCount": 1,
+    "smaCount": 4,
+    "realizedVolPct": 4.5,
+    "avgDailyMove7Pct": 0.3,
+    "avgDailyMove90Pct": 0.24,
+    "seasonality": {
+      "1": {
+        "meanPct": -0.49,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "2": {
+        "meanPct": 0.87,
+        "winRatePct": 90,
+        "years": 10
+      },
+      "3": {
+        "meanPct": 0.22,
+        "winRatePct": 60,
+        "years": 10
+      },
+      "4": {
+        "meanPct": -0.21,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "5": {
+        "meanPct": -0.11,
+        "winRatePct": 40,
+        "years": 10
+      },
+      "6": {
+        "meanPct": 0.22,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "7": {
+        "meanPct": -0.45,
+        "winRatePct": 30,
+        "years": 10
+      },
+      "8": {
+        "meanPct": -0.04,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "9": {
+        "meanPct": 1.03,
+        "winRatePct": 78,
+        "years": 9
+      },
+      "10": {
+        "meanPct": 0.99,
+        "winRatePct": 70,
+        "years": 10
+      },
+      "11": {
+        "meanPct": -0.44,
+        "winRatePct": 50,
+        "years": 10
+      },
+      "12": {
+        "meanPct": -0.85,
+        "winRatePct": 20,
+        "years": 10
+      }
+    }
+  }
+]

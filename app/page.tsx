@@ -1,31 +1,30 @@
 /**
- * Dashboard.
+ * Top Setups — the landing page.
  *
- * Server component for the first paint (fast, no loading flash), with a client
- * island polling for updates while the tab is open. Layout order follows how a
- * trader actually reads the screen: mood first, then who is strong, then what is
- * about to happen, then what just happened.
+ * Server-rendered for the first paint, with a client island polling for updates.
+ * The underlying data moves slowly (calendar daily, COT weekly), so the poll
+ * interval is deliberately long compared with the news dashboard.
  */
 
-import { runPipeline } from '@/lib/pipeline';
-import type { DashboardData } from '@/lib/types';
-import { DashboardView } from '@/components/DashboardView';
+import { runSetupsPipeline } from '@/lib/setups-pipeline';
+import { SetupsView } from '@/components/SetupsView';
+import type { SetupsMatrix } from '@/lib/scoring/setups';
+import type { SourceHealth } from '@/lib/types';
 
-// Never statically rendered — the whole point is live data.
 export const dynamic = 'force-dynamic';
 
-export default async function Home() {
-  let initial: DashboardData | null = null;
+export default async function TopSetupsPage() {
+  let matrix: SetupsMatrix | null = null;
+  let health: SourceHealth[] = [];
   let error: string | null = null;
 
   try {
-    const result = await runPipeline({ deliverAlerts: false });
-    initial = result.dashboard;
+    const result = await runSetupsPipeline();
+    matrix = result.matrix;
+    health = result.health;
   } catch (err) {
-    // A total pipeline failure still renders the shell with an explanation
-    // rather than Next's error page — the user should see what broke.
-    error = err instanceof Error ? err.message : 'Failed to load data';
+    error = err instanceof Error ? err.message : 'Failed to build the scorecard';
   }
 
-  return <DashboardView initial={initial} initialError={error} />;
+  return <SetupsView initial={matrix} initialHealth={health} initialError={error} />;
 }

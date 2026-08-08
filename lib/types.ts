@@ -63,6 +63,14 @@ export interface NormalizedEvent {
   seriesId?: string | null;
   name: string;
   currency: Currency;
+  /**
+   * Publishing country/region, e.g. "US", "EMU", "DE".
+   *
+   * Distinct from `currency` and NOT redundant: the euro area publishes under
+   * EMU plus every member state (DE, IT, ES...), all tagged EUR. The scorecard
+   * must scope to the aggregate, or German CPI gets read as euro-area CPI.
+   */
+  countryCode?: string | null;
   /** ISO-8601 UTC. */
   dateUtc: string;
   impact: Impact;

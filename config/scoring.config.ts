@@ -52,7 +52,10 @@ export const EVENT_RULES: EventRule[] = [
   // --- Central bank decisions: the heaviest hitters -------------------------
   {
     key: 'rate-decision',
-    match: /(interest rate decision|rate statement|policy rate|official cash rate|bank rate|fed interest rate|monetary policy statement)/i,
+    // The ECB variants are named after the facility rather than "rate decision"
+    // ("ECB Rate On Deposit Facility", "ECB Main Refinancing Operations Rate"),
+    // so they need explicit patterns or euro policy moves score as unclassified.
+    match: /(interest rate decision|rate statement|policy rate|official cash rate|bank rate|fed interest rate|monetary policy statement|deposit facility|refinancing operations rate)/i,
     category: 'central-bank',
     polarity: 1,
     typicalDeviation: 0.25,
@@ -98,8 +101,19 @@ export const EVENT_RULES: EventRule[] = [
     weight: 0.8,
   },
   {
+    // The Fed's preferred inflation gauge, so it outweighs PPI. Tested before
+    // the generic inflation-gauge rule below.
+    key: 'pce',
+    match: /(personal consumption expenditures)/i,
+    category: 'inflation',
+    polarity: 1,
+    typicalDeviation: 0.15,
+    inflationSensitive: true,
+    weight: 1.1,
+  },
+  {
     key: 'inflation-gauge',
-    match: /(inflation gauge|inflation expectations|prices paid|price index.*paid)/i,
+    match: /(inflation gauge|inflation expectations|prices paid|price index.*paid|kof leading indicator)/i,
     category: 'inflation',
     polarity: 1,
     typicalDeviation: 1.5,
@@ -118,19 +132,32 @@ export const EVENT_RULES: EventRule[] = [
 
   // --- Labour --------------------------------------------------------------
   {
+    // MUST be tested before `nfp`: "ADP Employment Change" contains the words
+    // "employment change", so the broader nfp pattern would otherwise swallow it
+    // and the private-payrolls print would be scored as though it were NFP.
+    key: 'adp',
+    match: /(adp employment|adp national employment)/i,
+    category: 'labor',
+    polarity: 1,
+    typicalDeviation: 40,
+    weight: 0.7,
+  },
+  {
     key: 'nfp',
-    match: /(nonfarm payrolls|non-farm payrolls|net change in employment|employment change)/i,
+    match: /(nonfarm payrolls|non-farm payrolls|net change in employment|employment change|employment level)/i,
     category: 'labor',
     polarity: 1,
     typicalDeviation: 50,
     weight: 1.25,
   },
   {
-    key: 'adp',
-    match: /(adp employment)/i,
+    // Japan publishes no monthly payrolls; this ratio is the standard
+    // labour-tightness read and is what the scorecard uses for JPY.
+    key: 'jobs-applicants-ratio',
+    match: /(jobs ?\/ ?applicants ratio|job-to-applicant)/i,
     category: 'labor',
     polarity: 1,
-    typicalDeviation: 40,
+    typicalDeviation: 0.03,
     weight: 0.7,
   },
   {
@@ -184,9 +211,28 @@ export const EVENT_RULES: EventRule[] = [
     typicalDeviation: 0.3,
     weight: 1.2,
   },
+  // Manufacturing and services PMI are split so the scorecard can give them
+  // separate columns. Order matters: both must be tested before the generic
+  // /pmi/ catch-all below, or every PMI would match the generic rule first.
+  {
+    key: 'mpmi',
+    match: /(manufacturing pmi|ism manufacturing|manufacturing purchasing managers|business nz pmi)/i,
+    category: 'growth',
+    polarity: 1,
+    typicalDeviation: 1.5,
+    weight: 1.0,
+  },
+  {
+    key: 'spmi',
+    match: /(services pmi|ism services|services purchasing managers|business nz psi|non-manufacturing pmi)/i,
+    category: 'growth',
+    polarity: 1,
+    typicalDeviation: 1.5,
+    weight: 1.0,
+  },
   {
     key: 'pmi',
-    match: /(pmi|purchasing managers|ism manufacturing|ism services|ivey)/i,
+    match: /(pmi|purchasing managers|ivey)/i,
     category: 'growth',
     polarity: 1,
     typicalDeviation: 1.5,

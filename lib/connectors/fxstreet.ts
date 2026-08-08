@@ -73,6 +73,7 @@ function normalize(raw: FxsEvent): NormalizedEvent | null {
     seriesId: raw.eventId ?? null,
     name: raw.name,
     currency: raw.currencyCode,
+    countryCode: raw.countryCode ?? null,
     dateUtc: date.toISOString(),
     impact: toImpact(raw.volatility),
 
@@ -158,4 +159,45 @@ export async function fetchFxStreetCalendar(now = new Date()): Promise<Result<No
   }
 
   return parsePayload(res.data, FXSTREET.name);
+}
+
+/**
+ * Pulls a long history window for the scorecard.
+ *
+ * Separate from `fetchFxStreetCalendar` on purpose. That one uses a 48-hour
+ * lookback, which is correct for "what just came out" but leaves nearly every
+ * fundamental column on the Top Setups matrix empty — most indicators publish
+ * monthly and GDP quarterly, so a two-day window sees almost none of them.
+ *
+ * Cached hard (an hour) because released figures do not change; only the leading
+ * edge moves, and the short ingest window already covers that.
+ */
+export async function fetchFxStreetHistory(
+  now = new Date(),
+  days = FXSTREET.historyLookbackDays,
+): Promise<Result<NormalizedEvent[]>> {
+  if (useFixtures()) {
+    const fixture = (await import('@/fixtures/sample-fxstreet.json')).default;
+    return parsePayload(fixture, 'fxstreet:fixture');
+  }
+
+  const from = new Date(now.getTime() - days * 86_400_000);
+  // A week ahead, so the same payload can also fill the upcoming-events panel.
+  const to = new Date(now.getTime() + 7 * 86_400_000);
+
+  const url = `${FXSTREET.base}/${from.toISOString()}/${to.toISOString()}`;
+
+  const res = await fetchJson<unknown>(FXSTREET.name, url, {
+    headers: { ...FXSTREET.headers },
+    cacheTtlSeconds: FXSTREET.historyCacheTtlSeconds,
+    // Bucketed by day: the window only needs to move once per day, and a
+    // per-millisecond key would make the cache useless on a multi-MB payload.
+    cacheKey: `fxstreet:history:${days}:${from.toISOString().slice(0, 10)}`,
+    // Several megabytes over a slow link needs more than the default.
+    timeoutMs: 60_000,
+    retries: 1,
+  });
+
+  if (!res.ok) return res as Result<NormalizedEvent[]>;
+  return parsePayload(res.data, `${FXSTREET.name} (history)`);
 }

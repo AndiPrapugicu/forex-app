@@ -235,6 +235,16 @@ export const SLOTS: SlotDefinition[] = [
       NZD: [/^Business NZ PMI$/i],
       // Australia has only the S&P Global print in this feed.
       AUD: [/^S&P Global Manufacturing PMI$/i, /Manufacturing PMI$/i],
+      /**
+       * Switzerland's manufacturing PMI is the SVME/procure.ch survey, and its
+       * feed name contains neither "Manufacturing" nor "PMI" — so the generic
+       * pattern above never matched and the CHF leg was silently absent.
+       *
+       * That blank is what made every franc cross read a single-leg number: on
+       * GBPCHF the cell was GBP alone at -1 where A1 shows +2, because they have
+       * the Swiss side at -1 and difference it.
+       */
+      CHF: [/^SVME - Purchasing Managers' Index$/i, /^procure\.ch PMI$/i],
     },
   },
   {
@@ -285,9 +295,17 @@ export const SLOTS: SlotDefinition[] = [
       // The UK's series is GfK's, and nothing else here matches "Consumer
       // Confidence" for GBP — without this the leg silently scored 0.
       GBP: [/^GfK Consumer Confidence$/i],
-      // Switzerland publishes no consumer confidence here; KOF is the standard
-      // forward-looking sentiment proxy.
-      CHF: [/^KOF Leading Indicator$/i],
+      /**
+       * SECO's Consumer Climate IS Switzerland's consumer confidence survey, and
+       * it is in the feed — the previous note here claimed otherwise and fell
+       * back to KOF, which is a composite leading indicator measuring something
+       * else. KOF stays as the fallback, since it is the better proxy of the two
+       * if SECO ever drops out.
+       */
+      CHF: [/^SECO Consumer Climate \(3m\)$/i, /^KOF Leading Indicator$/i],
+      // New Zealand's is ANZ/Roy Morgan; nothing here says "Consumer Confidence"
+      // on its own, so the leg was resolving to nothing.
+      NZD: [/^ANZ – Roy Morgan Consumer Confidence$/i, /^ANZ - Roy Morgan Consumer Confidence$/i],
     },
   },
 
@@ -323,7 +341,22 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
-    maxAgeDays: 60,
+    /**
+     * 90 DAYS, because the SCOREABLE print lags further than the series does.
+     *
+     * `resolveSeries` deliberately reaches past a release that carries no
+     * consensus, since a print with no forecast cannot produce a beat or a miss.
+     * UK core PPI's recent entries are exactly that, so the newest usable print
+     * sits two publication cycles back — measured at 61 days against a 60-day
+     * window, which dropped the GBP leg on every sterling pair and left GBPUSD
+     * reading +1 where A1 reads +2.
+     *
+     * The two rules were each right and were cancelling each other out. Widening
+     * here is the narrow fix; the real one is a consensus source for UK PPI, at
+     * which point the newest print scores directly and this window stops
+     * mattering.
+     */
+    maxAgeDays: 90,
     match: [/^Producer Price Index \(YoY\)$/i, /^Producer Price Index \(MoM\)$/i],
     matchByCurrency: {
       /**
@@ -336,6 +369,19 @@ export const SLOTS: SlotDefinition[] = [
        * since input prices are a raw-materials series that swings far harder.
        */
       GBP: [/^PPI Core Output \(MoM\) n\.s\.a$/i, /^Producer Price Index - Output \(MoM\) n\.s\.a$/i],
+      /**
+       * Each country names its producer-price series differently, and none of
+       * the three below contains the words "Producer Price Index" in the order
+       * the generic patterns expect. All three were resolving to nothing while
+       * sitting in the feed:
+       *
+       *   CHF  Producer and Import Prices        released 4 days ago
+       *   CAD  Industrial Product Price          released 24 days ago
+       *   NZD  Producer Price Index - Output     quarterly, so often stale
+       */
+      CHF: [/^Producer and Import Prices \(YoY\)$/i, /^Producer and Import Prices \(MoM\)$/i],
+      CAD: [/^Industrial Product Price \(MoM\)$/i],
+      NZD: [/^Producer Price Index - Output \(QoQ\)$/i],
     },
   },
   {
@@ -463,6 +509,18 @@ export const SCORING_SLOTS = SLOTS.filter((s) => s.scoring);
 export const DEFAULT_MAX_AGE_DAYS = 60;
 
 /**
+ * How close two prints of one series must be for the newer to count as a
+ * REVISION of the older rather than the next period's release.
+ *
+ * Used by `resolveSeries` to decide whether it may reach past a confirming
+ * revision to the flash that carried the actual surprise. A euro-area GDP
+ * revision follows its flash by about a fortnight; consecutive months of any
+ * monthly series are at least four weeks apart, so three weeks separates the two
+ * cases without needing a per-slot cadence.
+ */
+export const REVISION_WINDOW_DAYS = 21;
+
+/**
  * Where the standing policy rate is read from, per currency.
  *
  * No longer a scored column — `rates` scores expectations instead — but the
@@ -535,13 +593,26 @@ export const PAIR_CELL_MAX = 2;
 /**
  * Long-share bands for COT net positioning.
  *
- * Applies to indices, commodities and crypto only. A1 scores FX COT purely on
- * the weekly change (a1trading.com/edgefinder/cot-data/); net positioning is the
- * second component only for non-forex assets.
+ * Applies to standalone symbols — indices, commodities, crypto and the currency
+ * indices. A1 scores the LEGS OF A PAIR purely on the weekly change
+ * (a1trading.com/edgefinder/cot-data/); net positioning is the second component
+ * only where a symbol reads one contract directly.
+ *
+ * 60/40, NOT the 55/45 we had. Two of their published cards pin this, and only
+ * this band satisfies both at once:
+ *
+ *   USD INDEX  74.4% long, +0.95% change -> +1 +1 = +2, and their Sentiment+COT
+ *              subtotal of +1 reconciles only as (+1 +1 -1).
+ *   EURO FX    43.7% long, +1.22% change -> their cell reads +1. At 55/45 the
+ *              long share scores -1 and the cell collapses to 0; at 60/40 it
+ *              lands inside the neutral band and the change carries it alone.
+ *
+ * It is also the band they publish verbatim for retail sentiment below, which is
+ * a reason to think one number governs both rather than a coincidence.
  */
 export const COT_LONG_PCT_BUCKETS = {
-  bullish: 55,
-  bearish: 45,
+  bullish: 60,
+  bearish: 40,
 } as const;
 
 /**

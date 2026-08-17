@@ -107,6 +107,24 @@ interface Period {
 const DAY = 86_400;
 
 /**
+ * The id `toPeriods` would give the period `now` falls in.
+ *
+ * Exists so the in-progress period can be dropped. A part-finished August is
+ * not an observation of "what August does" — it is seventeen days of August
+ * wearing a full month's clothes, and averaging it in is how a month whose
+ * completed history is flat ends up with a confident sign on it.
+ *
+ * The id formulas MUST match `toPeriods` exactly; they are duplicated here
+ * rather than shared because inverting that function for a bare Date would cost
+ * more clarity than the six lines it saves.
+ */
+function currentPeriodId(kind: SeasonalBucketKind, now: Date): number {
+  if (kind === 'month') return now.getUTCFullYear() * 12 + now.getUTCMonth() + 1;
+  if (kind === 'week') return isoWeekYear(now) * 53 + isoWeek(now);
+  return Math.floor(now.getTime() / 1000 / DAY);
+}
+
+/**
  * Whether two consecutive observations really are consecutive periods, or
  * whether the feed lost one in between.
  *
@@ -209,6 +227,7 @@ export function buildProfile(
   now: Date = new Date(),
 ): SeasonalProfile {
   const cutoff = Date.UTC(now.getUTCFullYear() - lookbackYears, now.getUTCMonth(), now.getUTCDate()) / 1000;
+  const inProgress = currentPeriodId(kind, now);
 
   const periods = toPeriods(bars, kind);
   const returns = new Map<number, number[]>();
@@ -228,6 +247,13 @@ export function buildProfile(
     if (prev.close === 0) continue;
 
     if (cur.endSeconds < cutoff) continue;
+    /**
+     * The period we are standing in has not finished, so its return is not yet
+     * a return. It stays out of the average and out of the win rate; the strip
+     * still draws its bucket from the completed years, which is what the
+     * outline on the current bar is pointing at.
+     */
+    if (cur.id === inProgress) continue;
 
     const list = returns.get(cur.key) ?? [];
     list.push((cur.close / prev.close - 1) * 100);

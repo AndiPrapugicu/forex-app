@@ -142,23 +142,39 @@ export function scoreSeasonality(
 // ---------------------------------------------------------------------------
 
 export interface YieldScore {
+  /** Signed for a RISK asset. The dollar takes the negation — see below. */
   cell: number;
   yield: number;
   sma: number;
   explanation: string;
+  /**
+   * The same reading told from the DOLLAR's side.
+   *
+   * Kept here rather than composed at the call site so the sentence and the sign
+   * can never drift apart: whoever negates `cell` reaches for this in the same
+   * expression. A falling short yield is a tailwind for gold and a headwind for
+   * the dollar, and one string cannot honestly say both.
+   */
+  dollarExplanation: string;
 }
 
 /**
- * The interest-rate reading for NON-FX assets: the US 2-year against its 7-day
- * average.
+ * The interest-rate reading off the US 2-year against its 21-day average.
  *
  * A1's rule, verbatim: "If price is above the moving average, -1. If price is
- * below the moving average, +1". The sign is already expressed FROM THE ASSET'S
+ * below the moving average, +1". That sign is expressed FROM A RISK ASSET'S
  * POINT OF VIEW — a rising short yield tightens financial conditions, which is
- * bearish for indices, gold and crypto alike. So unlike our old version there is
- * no inversion left for the caller to apply.
+ * bearish for indices, gold and crypto alike.
  *
- * The window was 21 days here; their rule says 7.
+ * THE DOLLAR IS THE OTHER SIDE OF THAT TRADE and must negate `cell`. Their own
+ * US-DOLLAR card reads a falling 2-year as Bearish ("the 2yr yield is falling
+ * (dovish)") on the same day a falling 2-year is bullish for gold. One number,
+ * two signs, depending on who is holding it — so `dollarExplanation` ships
+ * alongside and the caller takes both together.
+ *
+ * 21 days, not the 7 their interest-rates page implies: their scorecard row is
+ * labelled "2 Yr Yield (21 day SMA)", and a product label naming its own window
+ * beats a prose page describing it.
  */
 export function scoreYield2y(
   current: number | null,
@@ -169,14 +185,22 @@ export function scoreYield2y(
   const flat = Math.abs(current - sma) / sma < YIELD_FLAT_BAND;
   const rising = current > sma;
 
+  const where =
+    `2-year yield ${current.toFixed(2)}% is ${rising ? 'above' : 'below'} its ${YIELD_SMA_DAYS}-day ` +
+    `average (${sma.toFixed(2)}%)`;
+  const flatNote =
+    `2-year yield ${current.toFixed(2)}% is flat against its ${YIELD_SMA_DAYS}-day average (${sma.toFixed(2)}%).`;
+
   return {
     // Above the average is a headwind for risk assets, hence the negative.
     cell: flat ? 0 : rising ? -1 : 1,
     yield: Math.round(current * 1000) / 1000,
     sma: Math.round(sma * 1000) / 1000,
     explanation: flat
-      ? `2-year yield ${current.toFixed(2)}% is flat against its ${YIELD_SMA_DAYS}-day average (${sma.toFixed(2)}%).`
-      : `2-year yield ${current.toFixed(2)}% is ${rising ? 'above' : 'below'} its ${YIELD_SMA_DAYS}-day average ` +
-        `(${sma.toFixed(2)}%) — ${rising ? 'tightening, a headwind' : 'easing, a tailwind'}.`,
+      ? flatNote
+      : `${where} — ${rising ? 'tightening, a headwind' : 'easing, a tailwind'}.`,
+    dollarExplanation: flat
+      ? flatNote
+      : `${where} — ${rising ? 'hawkish, bullish USD' : 'dovish, bearish USD'}.`,
   };
 }

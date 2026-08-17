@@ -21,8 +21,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CROWD_LONG_PCT_BUCKETS,
   SCORING_SLOTS,
+  SEASONALITY_YEARS,
   TREND_SMA,
   biasFromScore,
+  maxCellFor,
   maxScoreForKind,
 } from '@/config/setups.config';
 import {
@@ -33,9 +35,15 @@ import {
 } from '@/config/symbols.config';
 import { normalizeZero, resolveSeries, ternarySign } from '@/lib/scoring/discrete';
 import { scoreCot, scoreCrowd } from '@/lib/scoring/cot';
+import { buildSetupsMatrix } from '@/lib/scoring/setups';
+import { buildProfile } from '@/lib/scoring/seasonality';
 import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/technical';
+import { computeSeasonality } from '@/lib/connectors/technicals';
 import type { CotReport, CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
+
+/** Mid-August, so "the month in progress" is a case every seasonality test hits. */
+const NOW = new Date('2026-08-17T12:00:00Z');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -366,25 +374,53 @@ describe('inflation change: a cooler US print, read per asset class', () => {
     expect(RISK_ASSET_POLARITY.growth).toBe(1);
   });
 
-  it('treats SILVER and PLATINUM as havens, not as industrial metals', () => {
+  it('treats SILVER as a haven, not as an industrial metal', () => {
     /**
      * Their inflation page groups silver with oil and copper as "industrial
      * commodities", and we followed that. Their PRODUCT does not: the SILVER row
      * on Top Setups is identical to GOLD in every macro column — GDP +1,
      * mPMI -1, sPMI +1, NFP +1, unemployment -1, claims -1, ADP +1, JOLTS +1 —
-     * differing only on COT.
+     * differing only on COT, and the two total 10 against 11.
      *
      * Scoring silver as industrial flipped the sign on eight of its cells.
      */
-    for (const sym of ['XAGUSD', 'XPTUSD']) {
-      const def = ALL_SYMBOLS.find((s) => s.symbol === sym)!;
-      expect(def.macroPolarity?.growth, `${sym} growth`).toBe(-1);
-      expect(def.macroPolarity?.jobs, `${sym} jobs`).toBe(-1);
-    }
+    const silver = ALL_SYMBOLS.find((s) => s.symbol === 'XAGUSD')!;
+    expect(silver.macroPolarity?.growth).toBe(-1);
+    expect(silver.macroPolarity?.jobs).toBe(-1);
 
     // Oil stays industrial — demand-driven, and A1's reasoning there holds.
     const wti = ALL_SYMBOLS.find((s) => s.symbol === 'WTIUSD')!;
     expect(wti.macroPolarity?.growth).toBe(1);
+  });
+
+  it('treats PLATINUM as industrial, which their own table forces', () => {
+    /**
+     * PLATINUM was grouped with silver by assumption, and that is the assumption
+     * their table breaks: it shows GOLD +11 and PLATINUM -4 in one snapshot.
+     *
+     * Both read the US economy. Under a shared polarity every macro cell would be
+     * identical and the totals could only diverge across the four per-symbol
+     * slots, whose combined spread is bounded below. The observed spread is 15,
+     * so the fundamentals cannot be shared.
+     */
+    const platinum = ALL_SYMBOLS.find((s) => s.symbol === 'XPTUSD')!;
+    expect(platinum.macroPolarity?.growth).toBe(1);
+    expect(platinum.macroPolarity?.jobs).toBe(1);
+
+    const spread =
+      maxCellFor('trend', 'commodity') * 2 +
+      maxCellFor('seasonality', 'commodity') * 2 +
+      maxCellFor('cot', 'commodity') * 2 +
+      maxCellFor('crowd', 'commodity') * 2;
+
+    expect(spread).toBeLessThan(11 - -4);
+  });
+
+  it('keeps platinum inverted against gold on the same print', () => {
+    // One US growth miss, read by both metals. They must disagree.
+    const miss = ternarySign(1.5, 2.1); // -1
+    expect(normalizeZero(miss * GOLD_POLARITY.growth!)).toBe(1); // haven bid
+    expect(normalizeZero(miss * INDUSTRIAL_POLARITY.growth!)).toBe(-1); // demand
   });
 });
 
@@ -438,6 +474,45 @@ describe('resolution picks the most recent SCOREABLE print', () => {
 
     expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-08-01T00:00:00Z');
   });
+
+  it('reaches past a confirming REVISION to the flash that carried the surprise', () => {
+    /**
+     * The live euro-area case. Both prints describe the same quarter:
+     *
+     *   30 Jul  flash      actual 0.4 against a 0.2 forecast — a beat
+     *   14 Aug  revision   actual 0.4 against a 0.4 forecast — says nothing
+     *
+     * A consensus equal to the previous print is a survey that was never taken,
+     * so scoring the revision reported "no news" about a quarter that had in
+     * fact beaten forecast. 31% of EUR releases carry consensus === actual
+     * against 7% for CAD, and all of it landed on the euro leg of every pair.
+     */
+    const events = [
+      { ...base, name: 'Test Series', dateUtc: '2026-08-14T00:00:00Z', actual: 0.4, consensus: 0.4, previous: 0.4 },
+      { ...base, name: 'Test Series', dateUtc: '2026-07-30T00:00:00Z', actual: 0.4, consensus: 0.2, previous: -0.2 },
+    ] as never[];
+
+    const picked = resolveSeries(matcher, 'GBP', events)!;
+    expect(picked.dateUtc).toBe('2026-07-30T00:00:00Z');
+    expect(ternarySign(picked.actual!, picked.consensus!)).toBe(1); // the beat survives
+  });
+
+  it('does NOT reach into an older month for a series the feed never forecasts', () => {
+    /**
+     * The guard that makes the rule above safe, and it is not hypothetical:
+     * Japan's PMIs carry a forecast equal to the prior reading every single
+     * month. Without the revision window every one of them looked uninformative
+     * and the fallback scored a stale month as though it were current — CHFJPY
+     * lost eight points that way, which is worse than the problem being fixed.
+     */
+    const events = [
+      { ...base, name: 'Test Series', dateUtc: '2026-08-03T00:00:00Z', actual: 54.5, consensus: 54.7, previous: 54.7 },
+      { ...base, name: 'Test Series', dateUtc: '2026-07-01T00:00:00Z', actual: 52.0, consensus: 50.0, previous: 49.0 },
+    ] as never[];
+
+    // 33 days apart: a different month, not a revision. Keep the current print.
+    expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-08-03T00:00:00Z');
+  });
 });
 
 describe('inflation has NO level component, despite their docs', () => {
@@ -463,10 +538,10 @@ describe('inflation has NO level component, despite their docs', () => {
 // Interest rates, non-FX arm — a1trading.com/edgefinder/interest-rates/
 // ---------------------------------------------------------------------------
 
-describe('interest rates: US 2-year vs its 7-day average, for non-FX assets', () => {
+describe('interest rates: US 2-year vs its 21-day average, for non-FX assets', () => {
   it('reads a yield above its average as a headwind', () => {
-    // "If price is above the moving average, -1." Already expressed from the
-    // asset's point of view, so callers must NOT invert it again.
+    // "If price is above the moving average, -1." Expressed from a RISK asset's
+    // point of view, so gold and the indices take it as-is.
     expect(scoreYield2y(4.25, 4.0)!.cell).toBe(-1);
   });
 
@@ -481,6 +556,73 @@ describe('interest rates: US 2-year vs its 7-day average, for non-FX assets', ()
   it('returns null without data rather than guessing', () => {
     expect(scoreYield2y(null, 4.0)).toBeNull();
     expect(scoreYield2y(4.0, null)).toBeNull();
+  });
+
+  it('carries a second sentence told from the dollar’s side', () => {
+    /**
+     * One reading, two signs. A falling 2-year is a tailwind for gold and a
+     * headwind for the dollar, and a single string cannot honestly say both —
+     * the live card said "easing, a tailwind" beside a bullish dollar cell.
+     */
+    const falling = scoreYield2y(3.96, 4.12)!;
+    expect(falling.explanation).toMatch(/easing, a tailwind/);
+    expect(falling.dollarExplanation).toMatch(/dovish, bearish USD/);
+
+    const rising = scoreYield2y(4.25, 4.0)!;
+    expect(rising.explanation).toMatch(/tightening, a headwind/);
+    expect(rising.dollarExplanation).toMatch(/hawkish, bullish USD/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Which symbols read which rate rule
+// ---------------------------------------------------------------------------
+
+describe('the rate column routes by asset class', () => {
+  /** The live figures behind A1's card: 3.96% against a 21-day average of 4.12%. */
+  const fallingYield = { current: 3.96, sma: 4.12 };
+
+  const matrix = () =>
+    buildSetupsMatrix({
+      events: [],
+      cot: new Map(),
+      technicals: new Map(),
+      yield2y: fallingYield,
+      now: NOW,
+    });
+
+  const row = (symbol: string) => matrix().rows.find((r) => r.symbol === symbol)!;
+
+  it('gives the DOLLAR the opposite sign to gold on the same yield', () => {
+    /**
+     * The bug this pins. DXY fell through to the risk-asset branch and read +1
+     * on a falling 2-year, against A1's -1 — worth two points on every run, and
+     * with it their US-DOLLAR card reconciles at -8 instead of our -9.
+     */
+    expect(row('DXY').cells.rates.cell).toBe(-1);
+    expect(row('XAUUSD').cells.rates.cell).toBe(1);
+  });
+
+  it('explains the dollar cell in dollar terms', () => {
+    expect(row('DXY').cells.rates.explanation).toMatch(/dovish, bearish USD/);
+  });
+
+  it('does not read the US 2-year for a non-dollar currency index', () => {
+    /**
+     * A pound index scoring off US financial conditions is not a rule A1 has.
+     * GBP's own rate expectation is 0 today — the BoE publishes no numeric
+     * projection — and an honest 0 beats a US number wearing a GBP label.
+     */
+    const gbpx = row('GBPX').cells.rates;
+    expect(gbpx.cell).toBe(0);
+    expect(gbpx.explanation).toMatch(/no numeric rate projection/);
+    expect(gbpx.explanation).not.toMatch(/tailwind|headwind/);
+  });
+
+  it('still reads the US 2-year for indices and crypto', () => {
+    // These genuinely are risk assets, and the rule is theirs.
+    expect(row('NAS100').cells.rates.cell).toBe(1);
+    expect(row('BTCUSD').cells.rates.cell).toBe(1);
   });
 });
 
@@ -690,5 +832,307 @@ describe('consumer confidence uses the Conference Board consensus', () => {
     const gbp = ternarySign(-17, -21);
     const usd = ternarySign(ACTUAL, 92.3);
     expect(gbp - usd).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The long-share band — a1trading.com/edgefinder/cot-data/
+// ---------------------------------------------------------------------------
+
+describe('COT net positioning uses a 60/40 band', () => {
+  /**
+   * Two published cards pin this, and only 60/40 satisfies both at once. At the
+   * 55/45 we had, the euro cell collapsed to 0 against their +1.
+   */
+  it('reproduces the US-DOLLAR card: 74.4% long and buying scores +2', () => {
+    const usd = scoreCot(cotSeries({ specLongPct: 74.39, specLongPctChange: 0.95 }), 'asset')!;
+    expect(usd.netPositioning).toBe(1);
+    expect(usd.latestBuysSells).toBe(1);
+    expect(usd.cell).toBe(2);
+  });
+
+  it('reproduces the EURO row: 43.7% long and buying scores +1', () => {
+    /**
+     * This row is why the currency indices were on the change-only rule. The
+     * long share is not scoring 0 because it is ignored — it is scoring 0
+     * because 43.7% sits INSIDE the neutral band. Same cell, different reason,
+     * and the difference shows the moment a currency runs to 74%.
+     */
+    const eur = scoreCot(cotSeries({ specLongPct: 43.7, specLongPctChange: 1.22 }), 'asset')!;
+    expect(eur.netPositioning).toBe(0);
+    expect(eur.latestBuysSells).toBe(1);
+    expect(eur.cell).toBe(1);
+  });
+
+  it('leaves the 40-60 band saying nothing about positioning', () => {
+    for (const pct of [40.1, 50, 59.9]) {
+      expect(scoreCot(cotSeries({ specLongPct: pct }), 'asset')!.netPositioning, `${pct}%`).toBe(0);
+    }
+    expect(scoreCot(cotSeries({ specLongPct: 60 }), 'asset')!.netPositioning).toBe(1);
+    expect(scoreCot(cotSeries({ specLongPct: 40 }), 'asset')!.netPositioning).toBe(-1);
+  });
+
+  it('scores a standalone currency index on both components, not just the change', () => {
+    const matrix = buildSetupsMatrix({
+      events: [],
+      cot: new Map([['USD INDEX', cotSeries({ specLongPct: 74.39, specLongPctChange: 0.95 })]]),
+      technicals: new Map(),
+      now: NOW,
+    });
+    expect(matrix.rows.find((r) => r.symbol === 'DXY')!.cells.cot.cell).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seasonality and the month in progress
+// ---------------------------------------------------------------------------
+
+describe('seasonality ignores the month it is standing in', () => {
+  /**
+   * Yahoo's monthly series carries the in-progress bar, so a seventeen-day-old
+   * August was being averaged in as a complete historical August. The cell is
+   * nothing but the SIGN of that average, so on a symbol whose real August is
+   * near flat — the dollar index runs -0.06% — one partial observation decided
+   * the cell outright.
+   */
+
+  /** Julys and Augusts alternating, ending on a part-finished August 2026. */
+  function monthlySeries(augustCloses: number[], partialAugust: number) {
+    const timestamps: number[] = [];
+    const closes: number[] = [];
+
+    augustCloses.forEach((close, i) => {
+      const year = 2016 + i;
+      timestamps.push(Date.UTC(year, 6, 31) / 1000); // 31 July
+      closes.push(100);
+      timestamps.push(Date.UTC(year, 7, 31) / 1000); // 31 August
+      closes.push(close);
+    });
+
+    timestamps.push(Date.UTC(2026, 6, 31) / 1000);
+    closes.push(100);
+    timestamps.push(Date.UTC(2026, 7, 17) / 1000); // 17 August, still running
+    closes.push(partialAugust);
+
+    return { timestamps, closes };
+  }
+
+  /**
+   * Ten completed Augusts at +1%, and a partial August down 20%.
+   *
+   * The partial month is deliberately large enough to drag the mean NEGATIVE
+   * (10 - 20 over eleven observations). A milder one still corrupts the average
+   * but leaves the sign alone, and since the sign is the whole cell, that would
+   * make these tests pass against the very bug they exist to catch.
+   */
+  const COMPLETED = Array(10).fill(101);
+  const PARTIAL = 80;
+
+  it('excludes the partial month from the average', () => {
+    const { timestamps, closes } = monthlySeries(COMPLETED, PARTIAL);
+    const august = computeSeasonality(timestamps, closes, NOW)[8];
+
+    expect(august.years).toBe(10); // not 11
+    expect(august.meanPct).toBeCloseTo(1, 5);
+    expect(august.winRatePct).toBe(100);
+  });
+
+  it('keeps the sign the completed history actually supports', () => {
+    // Without the exclusion this mean is -0.91 and the cell reads -1, on a month
+    // whose finished history is uniformly positive.
+    const { timestamps, closes } = monthlySeries(COMPLETED, PARTIAL);
+    const tech = technicals({ seasonality: computeSeasonality(timestamps, closes, NOW) });
+
+    expect(scoreSeasonality(tech, NOW, 'currency')!.cell).toBe(1);
+  });
+
+  it('still counts the month once it has finished', () => {
+    /**
+     * The same series read from September, when August 2026 is complete and
+     * belongs. Asserted through its EFFECT on the mean rather than through the
+     * observation count, because the count is capped at SEASONALITY_YEARS and
+     * would look identical whether the month was included or dropped.
+     */
+    const { timestamps, closes } = monthlySeries(COMPLETED, PARTIAL);
+    const september = new Date('2026-09-10T12:00:00Z');
+
+    expect(computeSeasonality(timestamps, closes, NOW)[8].meanPct).toBeCloseTo(1, 5);
+    expect(computeSeasonality(timestamps, closes, september)[8].meanPct).toBeLessThan(0);
+  });
+
+  it('holds the sample to exactly the stated ten years', () => {
+    /**
+     * A1's rule names a ten-year average, so nine is as wrong as eleven. Both
+     * were happening: a bare 10-year request leaves nine completed Augusts once
+     * the in-progress one is dropped, which is why the caller now asks for
+     * eleven.
+     */
+    const fifteen = Array.from({ length: 15 }, () => 101);
+    const { timestamps, closes } = monthlySeries(fifteen, PARTIAL);
+
+    expect(computeSeasonality(timestamps, closes, NOW)[8].years).toBe(SEASONALITY_YEARS);
+  });
+
+  it('applies the same exclusion to the profile behind the strip', () => {
+    /**
+     * The cell and the panel beside it are two implementations of one idea, and
+     * both carried this bug — on screen the DXY row said August closed higher
+     * 50% of the time while the panel next to it said 55%.
+     */
+    const bars = { timestamps: [] as number[], opens: [] as number[], highs: [] as number[], lows: [] as number[], closes: [] as number[] };
+    const push = (t: number, close: number) => {
+      bars.timestamps.push(t);
+      bars.opens.push(close);
+      bars.highs.push(close);
+      bars.lows.push(close);
+      bars.closes.push(close);
+    };
+
+    for (let i = 0; i < 8; i++) {
+      const year = 2018 + i;
+      push(Date.UTC(year, 6, 31) / 1000, 100);
+      push(Date.UTC(year, 7, 31) / 1000, 101);
+    }
+    push(Date.UTC(2026, 6, 31) / 1000, 100);
+    push(Date.UTC(2026, 7, 17) / 1000, 80); // in progress, and heavily down
+
+    const august = buildProfile(bars, 'month', 10, NOW).buckets.get(8)!;
+    expect(august.meanPct).toBeCloseTo(1, 5);
+    expect(august.winRatePct).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The published US-DOLLAR Asset Scorecard, end to end
+// ---------------------------------------------------------------------------
+
+/**
+ * A1's US-DOLLAR card, 2026-08-17. It states four numbers — Technical -1,
+ * Sentiment+COT +1, Fundamentals -8, total -8 — and lists every input behind
+ * them, which makes it the strongest single acceptance test available.
+ *
+ * We read -9 on the same day. Three cells were wrong and this block is what
+ * would have caught all three: seasonality (the partial month), COT (the
+ * change-only rule) and the 2-year yield (the risk-asset sign).
+ */
+describe('parity: the US-DOLLAR card', () => {
+  /** Every fundamental as printed on the card. Polarity is ours. */
+  const FUNDAMENTALS: {
+    name: string;
+    actual: number;
+    forecast: number;
+    polarity: 1 | -1;
+    expected: number;
+  }[] = [
+    // Economic growth — the card calls this block Very Bearish; it sums to -3.
+    { name: 'GDP Growth QoQ', actual: 1.5, forecast: 2.1, polarity: 1, expected: -1 },
+    { name: 'Manufacturing PMI', actual: 55.6, forecast: 54, polarity: 1, expected: 1 },
+    { name: 'Services PMI', actual: 54.1, forecast: 54.5, polarity: 1, expected: -1 },
+    { name: 'Retail Sales MoM', actual: -0.6, forecast: 0.1, polarity: 1, expected: -1 },
+    { name: 'Consumer Confidence', actual: 90.8, forecast: 92.4, polarity: 1, expected: -1 },
+
+    // Inflation — the card's fourth row is the 2-year yield, scored separately.
+    { name: 'CPI YoY', actual: 3.4, forecast: 3.4, polarity: 1, expected: 0 },
+    { name: 'PPI YoY', actual: 4.7, forecast: 4.9, polarity: 1, expected: -1 },
+    { name: 'PCE YoY', actual: 3.3, forecast: 3.3, polarity: 1, expected: 0 },
+
+    // Jobs market — Very Bearish, summing to -3.
+    { name: 'Non-Farm Payroll', actual: -23, forecast: 85, polarity: 1, expected: -1 },
+    { name: 'Unemployment Rate', actual: 4.1, forecast: 4.2, polarity: -1, expected: 1 },
+    { name: 'Weekly Jobless Claims', actual: 209, forecast: 202, polarity: -1, expected: -1 },
+    { name: 'ADP Employment Change', actual: 44, forecast: 68, polarity: 1, expected: -1 },
+    { name: 'JOLTS Job Openings', actual: 7.36, forecast: 7.44, polarity: 1, expected: -1 },
+  ];
+
+  /** DXY sets no macroPolarity: the dollar's own strong data is bullish for it. */
+  const cellFor = (f: (typeof FUNDAMENTALS)[number]) =>
+    normalizeZero(ternarySign(f.actual, f.forecast) * f.polarity);
+
+  it.each(FUNDAMENTALS)('$name: $actual vs $forecast -> $expected', (f) => {
+    expect(cellFor(f)).toBe(f.expected);
+  });
+
+  /** 3.96% against a 21-day average of 4.12% — falling, which the card calls dovish. */
+  const yield2y = () => normalizeZero(-scoreYield2y(3.96, 4.12)!.cell);
+
+  it('reads the 2-year yield as -1 for the dollar', () => {
+    expect(yield2y()).toBe(-1);
+  });
+
+  it('reproduces the three fundamental blocks', () => {
+    const sum = (names: string[]) =>
+      FUNDAMENTALS.filter((f) => names.includes(f.name)).reduce((t, f) => t + cellFor(f), 0);
+
+    const growth = sum([
+      'GDP Growth QoQ', 'Manufacturing PMI', 'Services PMI', 'Retail Sales MoM',
+      'Consumer Confidence',
+    ]);
+    const inflation = sum(['CPI YoY', 'PPI YoY', 'PCE YoY']) + yield2y();
+    const jobs = sum([
+      'Non-Farm Payroll', 'Unemployment Rate', 'Weekly Jobless Claims',
+      'ADP Employment Change', 'JOLTS Job Openings',
+    ]);
+
+    expect(growth).toBe(-3);
+    expect(inflation).toBe(-2);
+    expect(jobs).toBe(-3);
+    expect(growth + inflation + jobs).toBe(-8); // card: Fundamentals -8
+  });
+
+  it('reproduces the stated Technical subtotal of -1', () => {
+    /**
+     * Card: "4H / Daily Chart Trend — Bearish", "Seasonality Trend — Bullish".
+     * The 3-day sits below the 14-day and the 14-day is falling, so the two
+     * agree and nothing is docked: -2. August is positive, so seasonality is +1.
+     */
+    const tech = technicals({
+      smaFast: 99.2,
+      smaSlow: 100.0,
+      smaSlowPrior: 100.4,
+      seasonality: { 8: { meanPct: 0.31, winRatePct: 60, years: 10 } },
+    });
+
+    const trend = scoreTrend(tech)!;
+    const seasonality = scoreSeasonality(tech, NOW, 'currency')!;
+
+    expect(trend.cell).toBe(-2);
+    expect(seasonality.cell).toBe(1);
+    expect(trend.cell + seasonality.cell).toBe(-1);
+  });
+
+  it('reproduces the stated Sentiment + COT subtotal of +1', () => {
+    /**
+     * Card: "COT - Net Positioning — Bullish", "COT - Latest Buys/Sells —
+     * Bullish", "Crowd sentiment signal — Bearish", against Long 74.39% and a
+     * Change of +0.95%. Only (+1 +1 -1) reaches their +1.
+     *
+     * The card publishes no retail percentage, so the crowded-long book below is
+     * ours; what this pins is that a Bearish crowd row is worth exactly -1.
+     */
+    const series = cotSeries({
+      specLongPct: 74.39,
+      specLongPctChange: 0.95,
+      retailLong: 7_400,
+      retailShort: 2_600,
+      retailNet: 4_800,
+      retailLongPct: 74,
+    });
+
+    const cot = scoreCot(series, 'asset')!;
+    const crowd = scoreCrowd(series)!;
+
+    expect(cot.cell).toBe(2);
+    expect(crowd.cell).toBe(-1);
+    expect(cot.cell + crowd.cell).toBe(1);
+  });
+
+  it('totals -8 and labels it Very Bearish', () => {
+    const technical = -1;
+    const sentiment = 1;
+    const fundamentals = -8;
+    const total = technical + sentiment + fundamentals;
+
+    expect(total).toBe(-8);
+    expect(biasFromScore(total)).toBe('Very Bearish');
   });
 });

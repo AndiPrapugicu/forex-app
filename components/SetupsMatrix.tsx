@@ -38,21 +38,15 @@ const BIAS_STYLE: Record<string, string> = {
  * unified there is only one scale in the app.
  */
 /**
- * A cell whose number came from one leg because the other failed.
+ * A cell reads as its number or it reads as blank. There is no third state.
  *
- * It keeps its colour and its digit — it still votes, and blanking it would
- * overstate the failure. The amber inset ring is the whole message: this number
- * is built on half the usual information, and if it moved since the last run
- * that is probably why.
+ * `partial` — one leg expected and missing — used to draw an amber ring here.
+ * It is real information, but a grid this dense can only carry so many states
+ * before none of them are read, and a cell that VOTES like a normal cell should
+ * LOOK like one. The distinction survives where it costs nothing: in the
+ * per-cell tooltip, and in the `+N◐` marker beside each row's coverage count.
  */
-const PARTIAL_RING = 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)';
-
 function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProperties; text: string } {
-  if (cell.status === 'partial') {
-    const base = cellStyle({ ...cell, status: 'scored' });
-    return { ...base, style: { ...base.style, boxShadow: PARTIAL_RING } };
-  }
-
   if (cell.status === 'stale') {
     return {
       className: 'bg-[var(--color-surface-2)]/40 text-[var(--color-faint)] italic',
@@ -439,13 +433,6 @@ export function SetupsMatrix({
         <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/40" />
           stale — outside its freshness window, not scored
-        </span>
-        <span className="flex items-center gap-1">
-          <span
-            className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/70"
-            style={{ boxShadow: PARTIAL_RING }}
-          />
-          partial — one leg missing, scored from the other
         </span>
         <span>blank = not published for that currency</span>
         {/* Only meaningful while some column is carried but not scored. */}

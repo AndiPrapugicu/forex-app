@@ -278,14 +278,22 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
 
       if (slot.kind === 'rates') {
         /**
-         * Two different rules under one column, which is A1's design rather than
-         * a shortcut of ours:
+         * Three rules under one column, which is A1's design rather than a
+         * shortcut of ours:
          *
-         *   FX      each leg's 2-year yield against its own policy rate, then
-         *           base minus quote — a rate DIFFERENTIAL expectation.
-         *   non-FX  the US 2-year against its 7-day average, because what moves
-         *           gold and indices is the level of US financial conditions,
-         *           not a differential they have no second leg for.
+         *   FX        each leg's rate expectation, then base minus quote — a
+         *             rate DIFFERENTIAL.
+         *   DXY       the US 2-year against its 21-day average, INVERTED. Their
+         *             card labels this row "2 Yr Yield (21 day SMA)" verbatim.
+         *   other     that currency's own rate expectation, the same single-leg
+         *   currency   read a pair uses for its base.
+         *   indices
+         *   non-FX    the US 2-year against its 21-day average, because what
+         *             moves gold and indices is the level of US financial
+         *             conditions, not a differential they have no second leg for.
+         *
+         * The middle two used to fall through to the last one, which was wrong
+         * twice over — see the DXY and currency-index branches below.
          */
         if (isFx) {
           const baseRate = def.base ? (ratesByCurrency.get(def.base)?.cell ?? null) : null;
@@ -316,6 +324,48 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
               .filter(Boolean)
               .join('  |  '),
           };
+        } else if (def.symbol === 'DXY') {
+          /**
+           * THE DOLLAR SITS ON THE OPPOSITE SIDE OF THIS YIELD.
+           *
+           * `scoreYield2y` returns A1's rule already signed for a RISK asset —
+           * a falling 2-year eases financial conditions, which lifts gold,
+           * indices and crypto. The dollar is the other side of that trade: a
+           * falling short yield is dovish and therefore bearish USD, which is
+           * exactly what their own card says ("The 2yr yield is falling
+           * (dovish)" -> Bearish). So the same reading enters here negated.
+           *
+           * DXY previously fell through to the branch below and read +1 on a
+           * falling yield, against their -1 — a 2-point error on every run.
+           */
+          const score = input.yield2y ? scoreYield2y(input.yield2y.current, input.yield2y.sma) : null;
+          cell = score
+            ? {
+                slotKey: slot.key,
+                cell: normalizeZero(-score.cell),
+                status: 'scored',
+                explanation: score.dollarExplanation,
+              }
+            : { slotKey: slot.key, cell: null, status: 'no-data', explanation: '2-year yield unavailable' };
+        } else if (def.kind === 'currency' && def.macroEconomy) {
+          /**
+           * A pound or yen index scoring off US financial conditions is not a
+           * rule A1 has, and it is what the old fall-through did. Each currency's
+           * own rate expectation is already computed above and was going unused.
+           *
+           * Scores 0 for every non-USD major today, because only the Fed
+           * publishes a numeric projection — the same honest 0 the FX path
+           * gives those legs, rather than a US number wearing their label.
+           */
+          const rate = ratesByCurrency.get(def.macroEconomy);
+          cell = rate
+            ? { slotKey: slot.key, cell: rate.cell, status: 'scored', explanation: rate.explanation }
+            : {
+                slotKey: slot.key,
+                cell: null,
+                status: 'no-data',
+                explanation: `No rate expectation for ${def.macroEconomy}`,
+              };
         } else {
           const score = input.yield2y ? scoreYield2y(input.yield2y.current, input.yield2y.sma) : null;
           cell = score
@@ -334,15 +384,21 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
         // is scored directly, under the non-FX COT rule.
         if (def.cotContract && !def.base) {
           /**
-           * A currency index is still a CURRENCY: it takes the FX rule of
-           * weekly change only, not the asset rule that adds net positioning.
-           * A1's EURO row settles it — EUR speculators are 43.7% long
-           * (positioning -1) against a +1.22% weekly change, and their cell
-           * reads +1, which is the change alone.
+           * The split is STANDALONE SYMBOL vs LEG OF A PAIR, not currency vs
+           * asset. Anything reading one contract directly scores both
+           * components; only the legs differenced inside a pair are held to the
+           * weekly change, so a signal A1 counts once is not counted twice.
+           *
+           * A currency index used to take the FX rule here, on the reading that
+           * A1's EURO row (43.7% long, +1.22% change, cell +1) was the change
+           * alone. Their US-DOLLAR card rules that out: it shows BOTH COT rows
+           * scoring, and its Sentiment+COT subtotal of +1 reconciles only as
+           * (+1 +1 -1). Both cards hold once the long-share band is 60/40 — 43.7%
+           * then sits in the neutral band and contributes nothing, which is what
+           * made the euro cell look like a change-only read.
            */
           const series = input.cot.get(def.cotContract);
-          const cotRule = def.kind === 'currency' ? 'fx' : 'asset';
-          const score = slot.key === 'cot' ? scoreCot(series, cotRule) : scoreCrowd(series);
+          const score = slot.key === 'cot' ? scoreCot(series, 'asset') : scoreCrowd(series);
           cell = score
             ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
             : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'No COT data' };

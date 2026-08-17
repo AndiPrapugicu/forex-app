@@ -624,7 +624,19 @@ async function fetchChart(
 export function computeSeasonality(
   timestamps: number[],
   closes: number[],
+  now: Date = new Date(),
 ): Record<number, { meanPct: number; winRatePct: number; years: number }> {
+  /**
+   * THE MONTH WE ARE STANDING IN DOES NOT COUNT.
+   *
+   * Yahoo's monthly series includes the in-progress bar, so without this a
+   * seventeen-day-old August was being averaged in as though it were a complete
+   * historical August. The scorecard cell is nothing but the SIGN of this mean,
+   * so on a symbol whose real August average is near zero — the dollar index
+   * runs -0.06% — that one partial observation decides the cell outright.
+   */
+  const inProgress = now.getUTCFullYear() * 12 + now.getUTCMonth() + 1;
+
   // Keep the last observation for each calendar month.
   const byYearMonth = new Map<string, { month: number; close: number; order: number }>();
   for (let i = 0; i < closes.length; i++) {
@@ -649,6 +661,8 @@ export function computeSeasonality(
     // (October missing) must not be bridged into a two-month return.
     if (cur.order - prev.order !== 1) continue;
     if (prev.close === 0) continue;
+    // The unfinished month contributes no return yet. See `inProgress` above.
+    if (cur.order === inProgress) continue;
 
     const ret = (cur.close / prev.close - 1) * 100;
     const list = buckets.get(cur.month) ?? [];
@@ -657,8 +671,24 @@ export function computeSeasonality(
   }
 
   const out: Record<number, { meanPct: number; winRatePct: number; years: number }> = {};
-  for (const [month, rets] of buckets) {
-    if (rets.length === 0) continue;
+  for (const [month, all] of buckets) {
+    if (all.length === 0) continue;
+
+    /**
+     * EXACTLY the last SEASONALITY_YEARS observations, newest-last.
+     *
+     * A1's rule names a ten-year average, so the sample has to BE ten — not
+     * nine, not eleven. Both were happening: the raw 10y request yields nine
+     * completed Augusts once the in-progress one is dropped, and the caller now
+     * asks for eleven years so that ten survive the trim.
+     *
+     * The count is not cosmetic. The cell is the SIGN of this mean, and on the
+     * symbols that matter it is decided by a single observation — the dollar
+     * index averages -0.03% across nine Augusts, so which nine is the whole
+     * answer.
+     */
+    const rets = all.slice(-SEASONALITY_YEARS);
+
     const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
     const wins = rets.filter((r) => r > 0).length;
     out[month] = {
@@ -685,7 +715,12 @@ interface TickerResult {
   seasonalityMissing: boolean;
 }
 
-async function computeForTicker(symbol: string, ticker: string): Promise<TickerResult | null> {
+async function computeForTicker(
+  symbol: string,
+  ticker: string,
+  // Injected so a test can pin which month counts as in progress.
+  now: Date = new Date(),
+): Promise<TickerResult | null> {
   const daily = await fetchSeries(ticker, '2y', '1d', 3600);
   if (!daily || daily.closes.length < 20) return null;
 
@@ -715,7 +750,13 @@ async function computeForTicker(symbol: string, ticker: string): Promise<TickerR
     arr.length ? (arr.reduce((a, b) => a + Math.abs(b), 0) / arr.length) * 100 : null;
 
   // Monthly series is much slower-moving, so it gets a 7-day cache.
-  const monthly = await fetchSeries(ticker, `${SEASONALITY_YEARS}y`, '1mo', 7 * 86400);
+  /**
+   * ONE YEAR MORE THAN THE WINDOW, for the reason the daily path already fetches
+   * `SEASONAL_HISTORY_YEARS`: the newest bar is the month in progress and gets
+   * dropped, and the oldest month-over-month return needs a predecessor to be
+   * measured against. Requesting exactly ten years left nine usable Augusts.
+   */
+  const monthly = await fetchSeries(ticker, `${SEASONAL_HISTORY_YEARS}y`, '1mo', 7 * 86400);
 
   const technicals: Technicals = {
     symbol,
@@ -734,7 +775,7 @@ async function computeForTicker(symbol: string, ticker: string): Promise<TickerR
     avgDailyMove7Pct: returns.length >= 7 ? Math.round((meanAbs(returns.slice(-7)) ?? 0) * 100) / 100 : null,
     avgDailyMove90Pct:
       returns.length >= 90 ? Math.round((meanAbs(returns.slice(-90)) ?? 0) * 100) / 100 : null,
-    seasonality: monthly ? computeSeasonality(monthly.timestamps, monthly.closes) : {},
+    seasonality: monthly ? computeSeasonality(monthly.timestamps, monthly.closes, now) : {},
   };
 
   return { technicals, seasonalityMissing: monthly === null };

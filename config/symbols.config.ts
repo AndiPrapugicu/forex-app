@@ -226,8 +226,26 @@ export const COMMODITY_SYMBOLS: SymbolDefinition[] = [
     cotContract: 'SILVER', macroEconomy: 'USD', macroPolarity: GOLD_POLARITY,
   },
   {
+    /**
+     * INDUSTRIAL, unlike gold and silver — forced by arithmetic on A1's own table.
+     *
+     * Their Top Setups shows GOLD +11 and PLATINUM -4 in the same snapshot. Both
+     * read the US economy, so if they shared a polarity every macro cell would be
+     * identical and the two totals could only differ across the four per-symbol
+     * slots: trend (+/-2), seasonality (+/-1), COT (+/-2) and crowd (+/-1) — a
+     * maximum spread of 12. The observed spread is 15. Shared polarity is
+     * therefore impossible, whatever date that table was captured on.
+     *
+     * Silver stays a haven: their SILVER row still matches GOLD column for
+     * column, and the two score 10 against 11. Platinum was only ever grouped
+     * with silver by assumption, and it is the one precious metal whose demand is
+     * genuinely industrial — autocatalysts, not vaults.
+     *
+     * Flipping it here reproduces their -4 exactly, once its seasonality reads
+     * the -1 their row shows.
+     */
     symbol: 'XPTUSD', label: 'Platinum', kind: 'commodity', yahoo: 'PL=F', asset: 'XPT',
-    cotContract: 'PLATINUM', macroEconomy: 'USD', macroPolarity: GOLD_POLARITY,
+    cotContract: 'PLATINUM', macroEconomy: 'USD', macroPolarity: INDUSTRIAL_POLARITY,
   },
   {
     symbol: 'WTIUSD', label: 'WTI Crude', kind: 'commodity', yahoo: 'CL=F', asset: 'WTI',

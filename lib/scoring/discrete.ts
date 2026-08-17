@@ -15,6 +15,7 @@
 import {
   CELL_MAX,
   DEFAULT_MAX_AGE_DAYS,
+  REVISION_WINDOW_DAYS,
   PAIR_CELL_MAX,
   PAIR_CELL_MIN,
   PRIMARY_COUNTRY,
@@ -123,28 +124,84 @@ export function resolveSeries(
   const newest = (list: NormalizedEvent[]) =>
     list.reduce((best, e) => (e.dateUtc > best.dateUtc ? e : best));
 
-  const hasReference = (e: NormalizedEvent) =>
-    (compare === 'previous' ? e.previous : e.consensus) !== null;
+  const referenceOf = (e: NormalizedEvent) => (compare === 'previous' ? e.previous : e.consensus);
+
+  const hasReference = (e: NormalizedEvent) => referenceOf(e) !== null;
+
+  /**
+   * A forecast that says something the previous print did not.
+   *
+   * `consensus === previous` is a survey that was never taken: the feed carried
+   * the prior reading forward into the forecast column, so "beat the forecast"
+   * degenerates into "differed from last time" and a confirming revision scores
+   * a confident 0. It is the same emptiness as a null consensus, wearing a
+   * number — which is why it belongs next to `hasReference` rather than in a
+   * caller.
+   *
+   * The euro area is where this bites hardest, because it publishes a flash and
+   * then one or more revisions of the same reference period. Measured live:
+   *
+   *   30 Jul  GDP s.a. (QoQ)  actual 0.4  consensus 0.2  <- the real surprise
+   *   14 Aug  GDP s.a. (QoQ)  actual 0.4  consensus 0.4  <- a confirmation
+   *
+   * Taking the newest scoreable print meant scoring the confirmation and
+   * reporting "no news" about a quarter that had, in fact, beaten forecast.
+   * Across the feed 31% of EUR releases carry consensus === actual against 15%
+   * for USD and 7% for CAD, and that asymmetry was landing entirely on the euro
+   * legs of every pair.
+   */
+  const isInformative = (e: NormalizedEvent) => {
+    const ref = referenceOf(e);
+    return ref !== null && e.previous !== null && ref !== e.previous;
+  };
 
   for (const pattern of patterns) {
     const matches = pool.filter((e) => pattern.test(e.name));
     if (matches.length === 0) continue;
 
     /**
-     * The most recent SCOREABLE print, not simply the most recent.
+     * The most recent INFORMATIVE print, then the most recent scoreable one,
+     * then simply the most recent.
      *
-     * A release with an actual but no forecast cannot produce a beat or a miss,
-     * and taking it anyway discarded an older print that could. Measured on the
-     * live feed: UK core PPI's latest entry carries no consensus, so GBPUSD's
-     * PPI cell fell to a USD-only reading, and Australia's Westpac confidence
-     * did the same — both silently scoring half of what they should.
+     * Each tier drops a release that cannot say what the next one can:
      *
-     * Falls back to the newest print regardless, so a series that has genuinely
-     * never carried a forecast still surfaces as "awaiting" rather than
-     * vanishing from the card.
+     *  1. a real forecast that differs from the prior print — a genuine surprise
+     *     is measurable against it;
+     *  2. any non-null forecast — measurable, though a consensus echoing the
+     *     previous reading makes the comparison weak;
+     *  3. anything released — unscoreable, but the card still shows the series
+     *     and says why it is blank rather than omitting the row.
+     *
+     * Tier 2 already earned its place: UK core PPI's latest entry carries no
+     * consensus, and taking it dropped GBPUSD's PPI to a USD-only reading.
+     * Tier 1 is the same argument one step further, and is what stops a euro-area
+     * revision overwriting the flash that carried the actual surprise.
      */
     const scoreable = matches.filter(hasReference);
-    return newest(scoreable.length > 0 ? scoreable : matches);
+    const latest = newest(scoreable.length > 0 ? scoreable : matches);
+
+    /**
+     * Reach back for the informative print ONLY if it describes the same
+     * reference period — that is, only if the newest print is a revision of it.
+     *
+     * Without the window this rule reaches into a previous MONTH, which is the
+     * opposite of an improvement: Japan's PMIs carry a forecast equal to the
+     * prior reading every month, so every one of them looked uninformative and
+     * the fallback scored a stale month as though it were current. CHFJPY lost
+     * eight points that way.
+     *
+     * Three weeks separates the two cases cleanly. A euro-area GDP revision
+     * follows its flash by about a fortnight; consecutive months of any monthly
+     * series are at least four weeks apart.
+     */
+    const informative = matches.filter(isInformative);
+    if (informative.length > 0) {
+      const best = newest(informative);
+      const daysApart = ageInDays(best.dateUtc, new Date(latest.dateUtc));
+      if (daysApart <= REVISION_WINDOW_DAYS) return best;
+    }
+
+    return latest;
   }
 
   return null;

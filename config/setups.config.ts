@@ -379,7 +379,17 @@ export const SLOTS: SlotDefinition[] = [
        *   CAD  Industrial Product Price          released 24 days ago
        *   NZD  Producer Price Index - Output     quarterly, so often stale
        */
-      CHF: [/^Producer and Import Prices \(YoY\)$/i, /^Producer and Import Prices \(MoM\)$/i],
+      /**
+       * MoM FIRST for Switzerland, against the YoY-first order everywhere else.
+       *
+       * `resolveSeries` commits to the first pattern that has any released data,
+       * so a leading YoY pattern wins the slot and then cannot be scored:
+       * neither calendar forecasts the Swiss YoY series. The MoM variant is
+       * forecast by both. Mixing MoM against another leg's YoY is fine here
+       * because the cell is ternary — it reads the direction of the surprise,
+       * not the level.
+       */
+      CHF: [/^Producer and Import Prices \(MoM\)$/i, /^Producer and Import Prices \(YoY\)$/i],
       CAD: [/^Industrial Product Price \(MoM\)$/i],
       NZD: [/^Producer Price Index - Output \(QoQ\)$/i],
     },

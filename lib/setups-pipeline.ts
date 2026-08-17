@@ -26,6 +26,7 @@ import {
 import { fetchCotData, type CotSeries } from '@/lib/connectors/cftc';
 import { fetchConferenceBoard } from '@/lib/connectors/conference-board';
 import { fetchFxStreetHistory } from '@/lib/connectors/fxstreet';
+import { backfillConsensus, fetchTradingViewForecasts } from '@/lib/connectors/tradingview';
 import { fetchPrices } from '@/lib/connectors/prices';
 import {
   fetchDailyBars,
@@ -77,19 +78,22 @@ function toHealth(res: Result<unknown>): SourceHealth {
 }
 
 export async function runSetupsPipeline(now = new Date()): Promise<SetupsPayload> {
-  const [history, cot, technicals, prices, yield2y, yields, curve, conferenceBoard] = await Promise.all([
-    fetchFxStreetHistory(now),
-    fetchCotData(),
-    // Scored symbols plus the aux instruments the risk gauge needs.
-    fetchTechnicals(TECHNICALS_TARGETS),
-    fetchPrices(),
-    // Never throws; a failure just leaves the non-FX rate column blank — and now
-    // says so in the health table, which it did not before.
-    fetchYield2y(),
-    fetchSovereignYields(),
-    fetchYieldCurve(),
-    fetchConferenceBoard(),
-  ]);
+  const [history, cot, technicals, prices, yield2y, yields, curve, conferenceBoard, tvForecasts] =
+    await Promise.all([
+      fetchFxStreetHistory(now),
+      fetchCotData(),
+      // Scored symbols plus the aux instruments the risk gauge needs.
+      fetchTechnicals(TECHNICALS_TARGETS),
+      fetchPrices(),
+      // Never throws; a failure just leaves the non-FX rate column blank — and now
+      // says so in the health table, which it did not before.
+      fetchYield2y(),
+      fetchSovereignYields(),
+      fetchYieldCurve(),
+      fetchConferenceBoard(),
+      // Forecast backfill only. Never contributes a release, an actual or a date.
+      fetchTradingViewForecasts(now),
+    ]);
 
   /**
    * Every source that can move a cell has a row here.
@@ -108,6 +112,7 @@ export async function runSetupsPipeline(now = new Date()): Promise<SetupsPayload
     toHealth(yields),
     toHealth(curve),
     toHealth(conferenceBoard),
+    toHealth(tvForecasts),
   ];
 
   /**
@@ -117,10 +122,21 @@ export async function runSetupsPipeline(now = new Date()): Promise<SetupsPayload
    * special-casing. If the source is down the list is empty and the column
    * quietly falls back, which is the whole point of appending.
    */
-  const events = [
+  /**
+   * Then the forecast column is topped up from TradingView.
+   *
+   * Applied AFTER the merge above so a Conference Board row can be filled too,
+   * and applied to the whole pool rather than per slot because the same release
+   * feeds the heatmap and the indicator history as well — a cell that scores
+   * against a borrowed forecast and a chart that says "no forecast" for the same
+   * print would be the app disagreeing with itself.
+   */
+  const merged = [
     ...(history.ok ? history.data : []),
     ...(conferenceBoard.ok ? conferenceBoard.data : []),
   ];
+  const backfill = backfillConsensus(merged, tvForecasts.ok ? tvForecasts.data : []);
+  const events = backfill.events;
   const cotData = cot.ok ? cot.data : new Map<string, CotSeries>();
   const techData = technicals.ok ? technicals.data : new Map<string, Technicals>();
   // Losing this costs the market-implied rate read, not the column — every

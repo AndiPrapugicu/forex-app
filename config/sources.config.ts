@@ -68,6 +68,42 @@ export const FAIRECONOMY = {
   cacheTtlSeconds: 3600,
 } as const;
 
+/**
+ * TradingView's economic calendar — a CONSENSUS BACKFILL, never a replacement.
+ *
+ * FXStreet remains the source of record for what was released and when. This
+ * exists for one narrow failure it has: a release arriving with an actual but
+ * no forecast, which a ternary beat/miss rule cannot score at all. Measured on
+ * the live feed, Switzerland is the worst hit — producer prices and the SECO
+ * consumer survey both publish an actual against a null consensus, so every
+ * franc cross lost those cells outright.
+ *
+ * Coverage is PARTIAL and that is expected: of the releases carrying an actual,
+ * a forecast comes with 69% for the UK, 56% for Switzerland and 18% for New
+ * Zealand. It fills what it can and leaves the rest honestly blank.
+ *
+ * Undocumented, like FXStreet's, and it wants browser-ish headers. Historical
+ * forecasts do not change once published, so this is cached hard.
+ */
+export const TRADINGVIEW = {
+  name: 'TradingView calendar',
+  base: 'https://economic-calendar.tradingview.com/events',
+  headers: {
+    Origin: 'https://www.tradingview.com',
+    Referer: 'https://www.tradingview.com/',
+    'User-Agent': 'Mozilla/5.0',
+    Accept: 'application/json',
+  },
+  /**
+   * Their country codes against ours. Only two differ, but both matter: every
+   * euro-area aggregate and every UK release would otherwise fail to match.
+   */
+  countryToOurs: { EU: 'EMU', GB: 'UK' } as Record<string, string>,
+  /** Matches FXSTREET.historyLookbackDays, so the two pools cover one window. */
+  lookbackDays: 150,
+  cacheTtlSeconds: 3600,
+} as const;
+
 // ---------------------------------------------------------------------------
 // News — the corroboration set
 // ---------------------------------------------------------------------------

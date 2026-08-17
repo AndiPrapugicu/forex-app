@@ -129,6 +129,15 @@ export interface NormalizedEvent {
   source: SourceKind;
   /** Where `actual` specifically came from — may differ from `source`. */
   actualSource: SourceKind | null;
+  /**
+   * Set only when `consensus` was borrowed from a different calendar than the
+   * one that published the release.
+   *
+   * Provenance has to travel with the number. A cell scored against a forecast
+   * FXStreet never carried should be able to say so, and a wrong backfill is
+   * otherwise indistinguishable from a genuine surprise.
+   */
+  consensusSource?: string | null;
   sourceUrl?: string | null;
   /** Feed-provided modification time; used to detect a fresh print. */
   lastUpdated?: number | null;

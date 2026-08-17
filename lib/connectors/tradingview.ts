@@ -84,6 +84,9 @@ export const SERIES_ALIASES: Record<string, string> = {
   // The SVME/procure.ch manufacturing survey, named after the publisher on one
   // side and the thing measured on the other.
   'svme purchasing managers index': 'procure ch manufacturing pmi',
+  // TradingView abbreviates the two most common series names everywhere.
+  'gross domestic product mom': 'gdp mom',
+  'producer price index qoq': 'ppi qoq',
 };
 
 function aliasFor(normalized: string): string {
@@ -133,46 +136,77 @@ export async function fetchTradingViewForecasts(
 
   const to = new Date(now.getTime() + 86_400_000);
   const from = new Date(now.getTime() - TRADINGVIEW.lookbackDays * 86_400_000);
-  const countries = Object.keys(TRADINGVIEW.countryToOurs).concat(['US', 'JP', 'AU', 'NZ', 'CA', 'CH']);
 
-  const url =
-    `${TRADINGVIEW.base}?from=${encodeURIComponent(from.toISOString())}` +
-    `&to=${encodeURIComponent(to.toISOString())}&countries=${countries.join(',')}`;
+  /** One country's slice of the window. See TRADINGVIEW.countries for why. */
+  async function pull(country: string): Promise<{ rows: TvForecast[]; capped: boolean } | null> {
+    const url =
+      `${TRADINGVIEW.base}?from=${encodeURIComponent(from.toISOString())}` +
+      `&to=${encodeURIComponent(to.toISOString())}&countries=${country}`;
 
-  const res = await fetchJson<unknown>(TRADINGVIEW.name, url, {
-    headers: { ...TRADINGVIEW.headers },
-    cacheTtlSeconds: TRADINGVIEW.cacheTtlSeconds,
-    cacheKey: `tradingview:${from.toISOString().slice(0, 10)}`,
-    timeoutMs: 20_000,
-    retries: 1,
-  });
+    const res = await fetchJson<unknown>(TRADINGVIEW.name, url, {
+      headers: { ...TRADINGVIEW.headers },
+      cacheTtlSeconds: TRADINGVIEW.cacheTtlSeconds,
+      cacheKey: `tradingview:${country}:${from.toISOString().slice(0, 10)}`,
+      timeoutMs: 20_000,
+      retries: 1,
+    });
+    if (!res.ok) return null;
 
-  if (!res.ok) return ok(TRADINGVIEW.name, [], `forecast backfill unavailable: ${res.error}`);
+    const parsed = TvResponse.safeParse(res.data);
+    if (!parsed.success) return null;
 
-  const parsed = TvResponse.safeParse(res.data);
-  if (!parsed.success) return ok(TRADINGVIEW.name, [], 'forecast backfill returned an unreadable shape');
+    const result = parsed.data.result ?? [];
+    const rows: TvForecast[] = [];
+    for (const raw of result) {
+      const row = TvEvent.safeParse(raw);
+      // One malformed row must not discard the rest, as in the FXStreet connector.
+      if (!row.success) continue;
+
+      const { title, country: rowCountry, currency, date, forecast } = row.data;
+      if (forecast === null || forecast === undefined) continue;
+      if (!rowCountry || !currency) continue;
+
+      rows.push({
+        countryCode: toOurCountry(rowCountry),
+        currency,
+        day: date.slice(0, 10),
+        normalizedName: aliasFor(normalizeSeriesName(title)),
+        forecast,
+      });
+    }
+
+    return { rows, capped: result.length >= TRADINGVIEW.rowCap };
+  }
 
   const out: TvForecast[] = [];
-  for (const raw of parsed.data.result ?? []) {
-    const row = TvEvent.safeParse(raw);
-    // One malformed row must not discard the rest, exactly as in the FXStreet
-    // connector.
-    if (!row.success) continue;
+  const failed: string[] = [];
+  const capped: string[] = [];
 
-    const { title, country, currency, date, forecast } = row.data;
-    if (forecast === null || forecast === undefined) continue;
-    if (!country || !currency) continue;
-
-    out.push({
-      countryCode: toOurCountry(country),
-      currency,
-      day: date.slice(0, 10),
-      normalizedName: aliasFor(normalizeSeriesName(title)),
-      forecast,
+  const countries = [...TRADINGVIEW.countries];
+  for (let i = 0; i < countries.length; i += TRADINGVIEW.batchSize) {
+    const batch = countries.slice(i, i + TRADINGVIEW.batchSize);
+    const results = await Promise.all(batch.map(pull));
+    results.forEach((r, j) => {
+      if (!r) failed.push(batch[j]);
+      else {
+        out.push(...r.rows);
+        if (r.capped) capped.push(batch[j]);
+      }
     });
   }
 
-  return ok(TRADINGVIEW.name, out);
+  /**
+   * Losing this entirely costs a few cells, never the calendar — so a total
+   * failure still returns ok with an empty list and says so in the health table.
+   */
+  const notes = [
+    failed.length > 0 ? `no forecasts for ${failed.join(', ')}` : null,
+    // Silent truncation is the failure that cost a fortnight of data once
+    // already; if it ever recurs it has to be visible rather than inferred.
+    capped.length > 0 ? `response capped for ${capped.join(', ')} — newest rows may be missing` : null,
+  ].filter(Boolean);
+
+  return ok(TRADINGVIEW.name, out, notes.length > 0 ? notes.join('; ') : undefined);
 }
 
 /**

@@ -205,6 +205,20 @@ export const SLOTS: SlotDefinition[] = [
       /^Gross Domestic Product Annualized/i,
       /^Gross Domestic Product \(YoY\)$/i,
     ],
+    matchByCurrency: {
+      /**
+       * Canada is the one major that publishes GDP MONTHLY, and that release is
+       * its headline growth read — the quarterly lands eleven weeks later.
+       * Taking the quarterly gave every CAD pair an 80-day-old print carrying no
+       * forecast, so the column could not be scored at all; the monthly is 17
+       * days old and forecast by both calendars.
+       */
+      CAD: [
+        /^Gross Domestic Product \(MoM\)$/i,
+        /^Gross Domestic Product \(QoQ\)$/i,
+        /^Gross Domestic Product Annualized$/i,
+      ],
+    },
   },
   {
     /**
@@ -392,6 +406,12 @@ export const SLOTS: SlotDefinition[] = [
       CHF: [/^Producer and Import Prices \(MoM\)$/i, /^Producer and Import Prices \(YoY\)$/i],
       CAD: [/^Industrial Product Price \(MoM\)$/i],
       NZD: [/^Producer Price Index - Output \(QoQ\)$/i],
+      /**
+       * Australia publishes producer prices QUARTERLY, and only the QoQ variant
+       * is forecast — the YoY carries an actual and nothing to score it against,
+       * which is what the generic YoY-first order kept selecting.
+       */
+      AUD: [/^Producer Price Index \(QoQ\)$/i, /^Producer Price Index \(YoY\)$/i],
     },
   },
   {

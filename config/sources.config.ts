@@ -102,6 +102,25 @@ export const TRADINGVIEW = {
   /** Matches FXSTREET.historyLookbackDays, so the two pools cover one window. */
   lookbackDays: 150,
   cacheTtlSeconds: 3600,
+
+  /**
+   * ONE REQUEST PER COUNTRY. This is not politeness, it is correctness.
+   *
+   * The endpoint caps a response at 2,000 rows and truncates from the NEWEST
+   * end without saying so. Asking for all eight countries across 150 days
+   * returned exactly 2,000 rows spanning 21 Mar to 5 Jun — silently discarding
+   * the most recent ten weeks, which is the only part the scorecard reads. The
+   * bug presented as an alias that would not match: Switzerland's consumer
+   * survey had a forecast on 7 Aug and our copy stopped at 8 May.
+   *
+   * Per country the same window returns 91 rows for Switzerland and reaches
+   * 14 Aug. The United States is the largest and still lands far short.
+   */
+  countries: ['US', 'EU', 'GB', 'JP', 'AU', 'NZ', 'CA', 'CH'] as const,
+  /** Observed response cap. A country hitting it is reported as degraded. */
+  rowCap: 2000,
+  /** Concurrency, matching the discipline the other batched connectors use. */
+  batchSize: 4,
 } as const;
 
 // ---------------------------------------------------------------------------

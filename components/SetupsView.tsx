@@ -9,10 +9,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChangeLog } from '@/components/ChangeLog';
 import { SetupsMatrix } from '@/components/SetupsMatrix';
 import { SourceHealthBar } from '@/components/AlertPanel';
 import { Skeleton } from '@/components/ui';
-import { SLOTS } from '@/config/setups.config';
+import { SCORING_SLOTS, SLOTS } from '@/config/setups.config';
+import type { ScoreChange } from '@/lib/scoring/history';
 import type { SetupsMatrix as Matrix } from '@/lib/scoring/setups';
 import type { SourceHealth } from '@/lib/types';
 
@@ -21,14 +23,17 @@ const POLL_INTERVAL_MS = 5 * 60_000;
 export function SetupsView({
   initial,
   initialHealth,
+  initialChangeLog,
   initialError,
 }: {
   initial: Matrix | null;
   initialHealth: SourceHealth[];
+  initialChangeLog: ScoreChange[];
   initialError: string | null;
 }) {
   const [matrix, setMatrix] = useState<Matrix | null>(initial);
   const [health, setHealth] = useState<SourceHealth[]>(initialHealth);
+  const [changeLog, setChangeLog] = useState<ScoreChange[]>(initialChangeLog);
   const [error, setError] = useState<string | null>(initialError);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
@@ -43,6 +48,7 @@ export function SetupsView({
       const data = await res.json();
       setMatrix(data);
       setHealth(data.health ?? []);
+      setChangeLog(data.changeLog ?? []);
       setError(null);
     } catch (err) {
       // Keep the last good matrix on screen; a failed refresh is no reason to
@@ -76,7 +82,9 @@ export function SetupsView({
         <div>
           <h1 className="text-lg font-bold">Top Setups</h1>
           <p className="text-xs text-[var(--color-faint)]">
-            {rows.length} symbols scored across {SLOTS.length} indicators
+            {rows.length} symbols scored across {SCORING_SLOTS.length} indicators
+            {SLOTS.length > SCORING_SLOTS.length &&
+              ` (+${SLOTS.length - SCORING_SLOTS.length} shown as context)`}
             {matrix?.cotReportDate && ` · COT as of ${matrix.cotReportDate}`}
           </p>
         </div>
@@ -122,7 +130,10 @@ export function SetupsView({
           <Skeleton className="h-[36rem]" />
         )
       ) : (
-        <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} />
+        <>
+          <ChangeLog changes={changeLog} />
+          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} />
+        </>
       )}
     </div>
   );

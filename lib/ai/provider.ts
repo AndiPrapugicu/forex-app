@@ -46,11 +46,20 @@ class OpenAiProvider implements AiProvider {
         body: JSON.stringify({
           model: this.model,
           messages,
-          // Low temperature: this is summarization of given facts, not writing.
-          temperature: 0.2,
+          /**
+           * Temperature is sent ONLY to the gpt-4 family.
+           *
+           * The reasoning models reject any explicit value with a 400 — they
+           * accept the default and nothing else. Sending 0.2 unconditionally
+           * meant every gpt-5 model failed, and because `complete()` swallows
+           * errors and returns null by contract, it failed as a blank panel
+           * rather than as anything a user could diagnose.
+           */
+          ...(this.model.startsWith('gpt-4') ? { temperature: 0.2 } : {}),
           max_completion_tokens: opts.maxTokens ?? 400,
         }),
-        signal: AbortSignal.timeout(30_000),
+        // Reasoning models think before they answer; 30s was tuned for 4o-mini.
+        signal: AbortSignal.timeout(90_000),
       });
 
       if (!res.ok) {
@@ -116,6 +125,18 @@ class OllamaProvider implements AiProvider {
  * Returns null when no provider is configured, which is a fully supported state:
  * the app runs with rule-based scores and no prose.
  */
+/**
+ * Default when OPENAI_MODEL is unset.
+ *
+ * Was `gpt-4o-mini`, which is a summariser. The job on the Chart page is to read
+ * a bundle of computed evidence and say where it contradicts itself — that is
+ * reasoning, and it is exactly what the cheap model was worst at, producing
+ * confident filler instead of naming the conflict. Both AI features are
+ * button-triggered and cached in `ai_cache`, so the volume is a handful of calls
+ * a day and the better model costs pennies.
+ */
+export const DEFAULT_OPENAI_MODEL = 'gpt-5.5';
+
 export function getAiProvider(): AiProvider | null {
   const preference = (process.env.AI_PROVIDER ?? '').toLowerCase();
 
@@ -131,7 +152,7 @@ export function getAiProvider(): AiProvider | null {
   if (preference === 'none') return null;
 
   if (hasOpenAi) {
-    return new OpenAiProvider(openAiKey!, process.env.OPENAI_MODEL ?? 'gpt-4o-mini');
+    return new OpenAiProvider(openAiKey!, process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL);
   }
 
   // No explicit preference and no usable key: fall back to local if it is there.

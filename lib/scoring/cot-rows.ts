@@ -9,6 +9,7 @@
 
 import type { CotReport, CotSeries } from '@/lib/connectors/cftc';
 import { scoreCot, scoreCrowd } from '@/lib/scoring/cot';
+import { readCotFlow, type CotFlow } from '@/lib/scoring/cot-flow';
 
 export interface CotRowView {
   contract: string;
@@ -18,6 +19,8 @@ export interface CotRowView {
   crowdCell: number | null;
   retailLongPct: number | null;
   divergence: boolean;
+  /** What the week's change actually says. Null when there is no prior week. */
+  flow: CotFlow | null;
 }
 
 /** Derives the view rows from raw series, so the page stays a thin wrapper. */
@@ -35,6 +38,7 @@ export function toCotRows(data: Record<string, CotSeries>): CotRowView[] {
         crowdCell: crowd?.cell ?? null,
         retailLongPct: crowd?.retailLongPct ?? null,
         divergence: crowd?.divergence ?? false,
+        flow: readCotFlow(series),
       };
     });
 }

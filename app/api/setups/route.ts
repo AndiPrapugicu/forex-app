@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { loadChangeLog } from '@/lib/change-log';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,11 @@ export const maxDuration = 60;
 export async function GET() {
   try {
     const { matrix, health } = await runSetupsPipeline();
-    return NextResponse.json({ ...matrix, health }, { headers: { 'Cache-Control': 'no-store' } });
+    const changeLog = await loadChangeLog(matrix);
+    return NextResponse.json(
+      { ...matrix, health, changeLog },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'setups pipeline failed' },

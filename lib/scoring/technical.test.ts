@@ -22,6 +22,9 @@ function makeTech(overrides: Partial<Technicals> = {}): Technicals {
   return {
     symbol: 'EURUSD',
     price: 1.16,
+    smaFast: 1.16,
+    smaSlow: 1.15,
+    smaSlowPrior: 1.14,
     sma20: 1.15,
     sma50: 1.14,
     sma100: 1.17,
@@ -86,29 +89,48 @@ describe('computeSeasonality', () => {
   });
 });
 
+/**
+ * The +/-3 crossover-and-slope rule itself is pinned in edgefinder-parity.test.ts
+ * against A1's published page. What is tested here is the wiring: that the score
+ * reads the 3/14 pair and nothing else.
+ */
 describe('scoreTrend', () => {
-  it('scores price above both short-term averages as +2', () => {
-    expect(scoreTrend(makeTech({ price: 1.2, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(2);
+  it('reads only the fast/slow pair, ignoring price and the long averages', () => {
+    // Price and the 20/50/100/200 averages are deliberately contradictory. If
+    // any of them still fed the score this would not be +3.
+    const contradictory = makeTech({
+      price: 0.5,
+      smaFast: 1.2,
+      smaSlow: 1.1,
+      smaSlowPrior: 1.05,
+      sma20: 9,
+      sma50: 9,
+      sma100: 9,
+      sma200: 9,
+    });
+    expect(scoreTrend(contradictory)!.cell).toBe(2);
   });
 
-  it('scores price below both as -2', () => {
-    expect(scoreTrend(makeTech({ price: 1.0, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(-2);
+  it('keeps the long averages available as context', () => {
+    // They were dropped from the score, not from the data — the scorecard still
+    // renders them.
+    const tech = makeTech({ sma100: 1.17, sma200: 1.18 });
+    expect(tech.sma100).toBe(1.17);
+    expect(tech.sma200).toBe(1.18);
   });
 
-  it('scores a split as 0', () => {
-    expect(scoreTrend(makeTech({ price: 1.12, sma20: 1.1, sma50: 1.15 }))!.cell).toBe(0);
-  });
-
-  it('IGNORES the 100- and 200-day averages', () => {
-    // The gold case: above the short pair, below the long pair. Counting all
-    // four gave 0 where the reference product reads +2.
-    const gold = makeTech({ price: 4399.7, sma20: 4084.76, sma50: 4169.27, sma100: 4408.08, sma200: 4478.67 });
-    expect(scoreTrend(gold)!.cell).toBe(2);
-  });
-
-  it('returns null when the short averages are unavailable', () => {
-    expect(scoreTrend(makeTech({ sma20: null }))).toBeNull();
+  it('returns null when the trend averages are unavailable', () => {
+    expect(scoreTrend(makeTech({ smaFast: null }))).toBeNull();
+    expect(scoreTrend(makeTech({ smaSlow: null }))).toBeNull();
+    // Without a prior slow average there is no slope to read.
+    expect(scoreTrend(makeTech({ smaSlowPrior: null }))).toBeNull();
     expect(scoreTrend(undefined)).toBeNull();
+  });
+
+  it('does not fall back to the 20/50 averages when the 3/14 pair is missing', () => {
+    // Regression guard: the old rule read these, and silently reviving it would
+    // change every trend cell without failing anything else.
+    expect(scoreTrend(makeTech({ smaFast: null, sma20: 1.1, sma50: 1.05 }))).toBeNull();
   });
 });
 
@@ -118,9 +140,7 @@ describe('scoreSeasonality', () => {
   const withMonth = (stats: { meanPct: number; winRatePct: number; years: number }) =>
     scoreSeasonality(makeTech({ seasonality: { 8: stats } }), august);
 
-  it('caps at +1 even for a strong, consistent month', () => {
-    // Seasonality is the weaker half of the technical pair; a 10-year average
-    // must not carry the same weight as the live trend.
+  it('caps at +1 for FX even on a strong, consistent month', () => {
     expect(withMonth({ meanPct: 1.2, winRatePct: 70, years: 10 })!.cell).toBe(1);
   });
 
@@ -128,8 +148,14 @@ describe('scoreSeasonality', () => {
     expect(withMonth({ meanPct: -1.2, winRatePct: 30, years: 10 })!.cell).toBe(-1);
   });
 
-  it('scores a flat month as 0', () => {
-    expect(withMonth({ meanPct: 0.05, winRatePct: 50, years: 10 })!.cell).toBe(0);
+  it('scores a barely-positive month +1, because only the sign matters', () => {
+    // Our old rule needed 0.15% and a 60% win rate and scored this 0. A1's rule
+    // is the sign of the average, full stop.
+    expect(withMonth({ meanPct: 0.05, winRatePct: 50, years: 10 })!.cell).toBe(1);
+  });
+
+  it('scores an exactly flat month as 0', () => {
+    expect(withMonth({ meanPct: 0, winRatePct: 50, years: 10 })!.cell).toBe(0);
   });
 
   it('refuses to score with too few years of history', () => {

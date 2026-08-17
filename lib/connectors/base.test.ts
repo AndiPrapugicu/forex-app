@@ -158,6 +158,66 @@ describe('fetchJson resilience', () => {
     vi.useRealTimers();
   });
 
+  /**
+   * The stampede that trips the 429 in the first place.
+   *
+   * One pipeline run writes ~51 daily Yahoo entries within a couple of seconds.
+   * Without spread they all expire together and the next poll fires ~100
+   * concurrent requests at one undocumented host, which is precisely the moment
+   * the rate limit lands — and a rate limit on that host silences every Yahoo
+   * call for up to 900s, which is what the board flicker was made of.
+   */
+  it('spreads cache expiry across keys so a whole batch does not expire at once', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse({ v: 1 }));
+    globalThis.fetch = fetchMock;
+
+    const keys = Array.from({ length: 50 }, (_, i) => `https://jitter.example/${i}`);
+    for (const key of keys) await fetchJson('test', key, { cacheTtlSeconds: 3600 });
+    expect(fetchMock).toHaveBeenCalledTimes(50);
+
+    // Halfway into the jitter window: some keys have expired, some have not.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 3600_000 + 150_000));
+    for (const key of keys) await fetchJson('test', key, { cacheTtlSeconds: 3600, retries: 0 });
+
+    const refetched = fetchMock.mock.calls.length - 50;
+    expect(refetched).toBeGreaterThan(0);
+    expect(refetched).toBeLessThan(50);
+
+    vi.useRealTimers();
+  });
+
+  it('serves stale cache while a host cooldown is active rather than nothing', async () => {
+    let call = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      call++;
+      if (call === 1) return mockResponse({ v: 'good' });
+      return mockResponse({}, { status: 429, headers: { 'retry-after': '600' } });
+    });
+
+    await fetchJson<{ v: string }>('test', 'https://cool-stale.example/a', { cacheTtlSeconds: 1 });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 5000));
+
+    // A sibling path trips the cooldown; the cooldown is keyed by HOST, so this
+    // silences /a too.
+    await fetchJson('test', 'https://cool-stale.example/b', { retries: 0 });
+
+    const during = await fetchJson<{ v: string }>('test', 'https://cool-stale.example/a', {
+      cacheTtlSeconds: 1,
+      retries: 0,
+    });
+
+    expect(during.ok).toBe(true);
+    if (during.ok) {
+      expect(during.data.v).toBe('good');
+      expect(during.degraded).toMatch(/rate limited/);
+    }
+
+    vi.useRealTimers();
+  });
+
   it('reports a hard failure only when there is nothing cached to fall back to', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse({}, { status: 500 }));
 

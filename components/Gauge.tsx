@@ -14,7 +14,7 @@ import type { Direction } from '@/lib/types';
 import { DIRECTION_STYLE, formatScore } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
-// Score gauge — a -10..+10 semicircular dial
+// Score gauge — a semicircular dial over a caller-supplied ±range
 // ---------------------------------------------------------------------------
 
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
@@ -35,24 +35,25 @@ export function ScoreGauge({
   confidence,
   size = 180,
   label,
-  displayScore,
+  range = 10,
   displaySuffix,
 }: {
-  /** Drives the needle. Always on the -10..+10 scale. */
+  /** Drives the needle, on whatever scale `range` declares. */
   score: number;
   direction: Direction;
   confidence: number;
   size?: number;
   label?: string;
   /**
-   * Number to print under the gauge, when it differs from the needle value.
+   * Half-width of the scale, so the needle can position itself on the caller's
+   * own units instead of everything being forced through ±10.
    *
-   * The scorecard needs this: its total is a sum of 18 cells on a roughly
-   * ±15 scale, rescaled to ±10 to position the needle. Printing the rescaled
-   * value showed "+0.7" directly above "Total score +1" — two numbers for the
-   * same thing, which reads as a bug.
+   * That forcing is what made the app look like it capped at 10: the scorecard
+   * total runs to ±25 and was being divided down to fit this dial, so a genuine
+   * 14 arrived here as 5.6 and the printed number had to be patched back in
+   * separately.
    */
-  displayScore?: number;
+  range?: number;
   displaySuffix?: string;
 }) {
   const cx = size / 2;
@@ -60,9 +61,9 @@ export function ScoreGauge({
   const r = size / 2 - 16;
   const stroke = 12;
 
-  // Map -10..+10 onto a 180-degree sweep.
-  const clamped = Math.max(-10, Math.min(10, score));
-  const fraction = (clamped + 10) / 20;
+  // Map -range..+range onto a 180-degree sweep.
+  const clamped = Math.max(-range, Math.min(range, score));
+  const fraction = (clamped + range) / (2 * range);
   const needleAngle = fraction * 180;
 
   const style = DIRECTION_STYLE[direction];
@@ -86,7 +87,7 @@ export function ScoreGauge({
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size / 2 + 26} viewBox={`0 0 ${size} ${size / 2 + 26}`} role="img"
-        aria-label={`Score ${formatScore(score)} out of 10, ${style.label.toLowerCase()}, confidence ${confidence} percent`}>
+        aria-label={`Score ${formatScore(score)} out of ${range}, ${style.label.toLowerCase()}, confidence ${confidence} percent`}>
         {/* Track */}
         <path
           d={arcPath(cx, cy, r, 0, 180)}
@@ -123,15 +124,14 @@ export function ScoreGauge({
         />
         <circle cx={cx} cy={cy} r={5} fill={arcColor} />
 
-        <text x={16} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">-10</text>
-        <text x={size - 26} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">+10</text>
+        <text x={16} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">-{range}</text>
+        <text x={size - 26} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">+{range}</text>
       </svg>
 
       <div className="-mt-1 text-center">
+        {/* One number, the caller's own. No rescale to patch back around. */}
         <div className={`tnum text-3xl font-bold ${style.color}`}>
-          {displayScore === undefined
-            ? formatScore(score)
-            : `${displayScore > 0 ? '+' : ''}${displayScore}`}
+          {formatScore(score)}
           {displaySuffix && (
             <span className="ml-0.5 text-base font-normal text-[var(--color-faint)]">
               {displaySuffix}

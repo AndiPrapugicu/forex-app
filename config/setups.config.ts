@@ -21,6 +21,7 @@
  *     deterministically rather than by whichever printed most recently.
  */
 
+import type { SymbolKind } from '@/config/symbols.config';
 import type { Currency } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -30,7 +31,8 @@ import type { Currency } from '@/lib/types';
 /**
  * The country whose releases represent each currency.
  * Verified against the feed: USD->US, GBP->UK, JPY->JP, AUD->AU, NZD->NZ,
- * CAD->CA, CHF->CH are all one-to-one; EUR is the only many-to-one case.
+ * CAD->CA, CHF->CH, ZAR->ZA are all one-to-one; EUR is the only many-to-one
+ * case.
  */
 export const PRIMARY_COUNTRY: Record<Currency, string> = {
   USD: 'US',
@@ -41,6 +43,7 @@ export const PRIMARY_COUNTRY: Record<Currency, string> = {
   NZD: 'NZ',
   CAD: 'CA',
   CHF: 'CH',
+  ZAR: 'ZA',
 };
 
 // ---------------------------------------------------------------------------
@@ -57,7 +60,21 @@ export const SLOT_CATEGORIES: { key: SlotCategory; label: string }[] = [
   { key: 'jobs', label: 'Jobs Market' },
 ];
 
-export interface SlotDefinition {
+/**
+ * A resolvable calendar series: an ordered preference list of name patterns,
+ * with per-currency overrides for country-specific naming.
+ *
+ * Split out from SlotDefinition because composite slots (PMI) need several of
+ * these under one column.
+ */
+export interface SeriesMatcher {
+  /** Ordered preference list of event-name patterns. First with data wins. */
+  match?: RegExp[];
+  /** Per-currency overrides, for series with country-specific names. */
+  matchByCurrency?: Partial<Record<Currency, RegExp[]>>;
+}
+
+export interface SlotDefinition extends SeriesMatcher {
   key: string;
   /** Column header. Kept short — the matrix is dense. */
   label: string;
@@ -68,10 +85,41 @@ export interface SlotDefinition {
    * `economic` slots resolve to a calendar release and score off its surprise.
    * `technical` and `sentiment` slots are computed elsewhere and injected.
    */
-  kind: 'economic' | 'technical' | 'sentiment' | 'yield';
+  kind: 'economic' | 'technical' | 'sentiment' | 'rates';
+
+  /**
+   * Whether this slot's cell is added to the symbol's total.
+   *
+   * A1 publishes a specific column set, and their bias bands (+/-4, +/-7) are
+   * ABSOLUTE rather than a fraction of some maximum. Adding a column therefore
+   * silently shifts what "Bullish" means. Columns we carry that they do not are
+   * marked `scoring: false`: still resolved, still rendered, never summed. That
+   * keeps the extra information without breaking comparability with their
+   * numbers.
+   */
+  scoring: boolean;
+
+  /**
+   * What the actual is measured against.
+   *
+   * `forecast` — actual vs consensus. Every column A1 scores uses this; their
+   *              PMI page's talk of a previous-print change describes the number
+   *              they DISPLAY, not the comparison they score (see the mPMI slot).
+   * `previous` — actual vs the prior print. Unused today; kept because the
+   *              distinction is real and a future column may need it.
+   */
+  compare?: 'forecast' | 'previous';
 
   /** +1 = a higher reading is bullish for the currency. Economic slots only. */
   polarity?: 1 | -1;
+
+  /**
+   * Largest absolute value this slot may contribute, per leg.
+   *
+   * Defaults to 1: every economic category scores +/-1 per currency and reaches
+   * +/-2 only once base and quote are differenced. Trend and COT override it.
+   */
+  maxCell?: number;
 
   /**
    * How old the latest print may be before the cell is treated as stale.
@@ -80,37 +128,54 @@ export interface SlotDefinition {
    */
   maxAgeDays?: number;
 
-  /** Ordered preference list of event-name patterns. First with data wins. */
-  match?: RegExp[];
-
-  /** Per-currency overrides, for series with country-specific names. */
-  matchByCurrency?: Partial<Record<Currency, RegExp[]>>;
+  /**
+   * Sub-series making up a composite column.
+   *
+   * Nothing uses this today — mPMI and sPMI are separate columns, matching A1's
+   * table. Retained because the heatmap and the leg builder both handle it, and
+   * it is the mechanism any future genuinely-composite column would need.
+   */
+  components?: (SeriesMatcher & { key: string; label: string })[];
 }
 
 export const SLOTS: SlotDefinition[] = [
   // --- Technical ----------------------------------------------------------
   {
+    /**
+     * A1's rule from a1trading.com/edgefinder/trend/: a 3-day and a 14-day SMA,
+     * where the CROSSOVER is the score (+/-2) and the 14-day slope only docks a
+     * point when it disagrees. Range +/-2, values {-2, -1, +1, +2}.
+     *
+     * Reading their "+1 / -1" slope line as an addend gave +/-3 and produced a
+     * Trend of +3, which their model cannot output. See scoreTrend.
+     */
     key: 'trend',
     label: 'Trend',
-    title: 'Price vs 20/50/100/200-day moving averages',
+    title: '3-day vs 14-day moving average, with the 14-day slope',
     category: 'technical',
     kind: 'technical',
+    scoring: true,
+    maxCell: 2,
   },
   {
     key: 'seasonality',
     label: 'Seasonality',
-    title: "This calendar month's 10-year average return and win rate",
+    title: "This calendar month's 10-year average return",
     category: 'technical',
     kind: 'technical',
+    scoring: true,
+    maxCell: 1,
   },
 
   // --- Sentiment ----------------------------------------------------------
   {
     key: 'cot',
     label: 'COT',
-    title: 'Large speculator net positioning vs its own 3-year range',
+    title: 'Large speculator positioning from the weekly CFTC report',
     category: 'sentiment',
     kind: 'sentiment',
+    scoring: true,
+    maxCell: 2,
   },
   {
     key: 'crowd',
@@ -118,6 +183,9 @@ export const SLOTS: SlotDefinition[] = [
     title: 'Small-trader positioning, read contrarian',
     category: 'sentiment',
     kind: 'sentiment',
+    scoring: true,
+    // A1 scores retail +/-1 for the whole symbol, not per leg.
+    maxCell: 1,
   },
 
   // --- Growth & consumer --------------------------------------------------
@@ -127,6 +195,7 @@ export const SLOTS: SlotDefinition[] = [
     title: 'Gross Domestic Product',
     category: 'growth',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     // Quarterly, and often revised weeks later, so a long window is correct.
     maxAgeDays: 120,
@@ -138,24 +207,43 @@ export const SLOTS: SlotDefinition[] = [
     ],
   },
   {
+    /**
+     * TWO INDEPENDENT COLUMNS, scored against FORECAST.
+     *
+     * Their table carries mPMI and sPMI side by side, each reaching +/-2 for a
+     * pair — their EURUSD reads mPMI -2 and sPMI +2 on the same day. Merging
+     * them into one composite collapsed that to a single -1 and halved the
+     * growth block.
+     *
+     * Their PMI page says "change from previous data to latest data", which
+     * reads like a previous-print comparison. It is not what the product does.
+     * On the same day's live figures, scoring against FORECAST reproduces all
+     * four of their published PMI cells (EURUSD -2/+2, GOLD -1/+1); scoring
+     * against PREVIOUS reproduces only two. The sentence describes the change
+     * they DISPLAY, not the comparison they SCORE.
+     */
     key: 'mpmi',
     label: 'mPMI',
-    title: 'Manufacturing PMI',
+    title: 'Manufacturing PMI, change from the previous print',
     category: 'growth',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^ISM Manufacturing PMI$/i, /Manufacturing PMI$/i],
     matchByCurrency: {
       NZD: [/^Business NZ PMI$/i],
+      // Australia has only the S&P Global print in this feed.
+      AUD: [/^S&P Global Manufacturing PMI$/i, /Manufacturing PMI$/i],
     },
   },
   {
     key: 'spmi',
     label: 'sPMI',
-    title: 'Services PMI',
+    title: 'Services PMI, change from the previous print',
     category: 'growth',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^ISM Services PMI$/i, /Services PMI$/i],
@@ -171,6 +259,7 @@ export const SLOTS: SlotDefinition[] = [
     title: 'Retail sales',
     category: 'growth',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 75,
     match: [/^Retail Sales \(MoM\)$/i, /^Retail Sales s\.a\. \(MoM\)$/i, /^Retail Sales \(YoY\)$/i],
@@ -181,16 +270,21 @@ export const SLOTS: SlotDefinition[] = [
     },
   },
   {
+    // Context only — A1 carries no consumer confidence column.
     key: 'consumer-confidence',
     label: 'Cnsmr Conf',
     title: 'Consumer confidence / sentiment',
     category: 'growth',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^Consumer Confidence$/i, /^Consumer Confidence Index$/i, /^Michigan Consumer Sentiment Index$/i],
     matchByCurrency: {
       AUD: [/^Westpac Consumer Confidence$/i, /^Consumer Confidence$/i],
+      // The UK's series is GfK's, and nothing else here matches "Consumer
+      // Confidence" for GBP — without this the leg silently scored 0.
+      GBP: [/^GfK Consumer Confidence$/i],
       // Switzerland publishes no consumer confidence here; KOF is the standard
       // forward-looking sentiment proxy.
       CHF: [/^KOF Leading Indicator$/i],
@@ -204,6 +298,7 @@ export const SLOTS: SlotDefinition[] = [
     title: 'Consumer price inflation, year on year',
     category: 'inflation',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^Consumer Price Index \(YoY\)$/i],
@@ -215,60 +310,98 @@ export const SLOTS: SlotDefinition[] = [
     },
   },
   {
+    /**
+     * A1 lists PPI and PCE as columns but publishes no rule for either, unlike
+     * every other category. Treated as ordinary actual-vs-forecast reads, which
+     * is what the rest of their macro block does — but it is an inference, not a
+     * documented rule.
+     */
     key: 'ppi',
     label: 'PPI YoY',
     title: 'Producer price inflation, year on year',
     category: 'inflation',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^Producer Price Index \(YoY\)$/i, /^Producer Price Index \(MoM\)$/i],
+    matchByCurrency: {
+      /**
+       * CORE output prices, not headline output or input.
+       *
+       * Only the core series reproduces their GBPUSD cell: on the same day
+       * headline output (0.0 vs 0.4) and input (-2.0 vs 0.2) both missed, which
+       * would give GBPUSD 0, while core output (0.8 vs 0.4) beat and gives the
+       * +2 they show. Core also matches what the other currencies use here,
+       * since input prices are a raw-materials series that swings far harder.
+       */
+      GBP: [/^PPI Core Output \(MoM\) n\.s\.a$/i, /^Producer Price Index - Output \(MoM\) n\.s\.a$/i],
+    },
   },
   {
+    // Rule inferred, same as PPI above.
     key: 'pce',
     label: 'PCE YoY',
     title: "Core PCE price index — the Fed's preferred inflation gauge",
     category: 'inflation',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     // US-only by construction. Other currencies leave this blank.
     match: [/^Core Personal Consumption Expenditures - Price Index \(YoY\)$/i],
   },
   {
+    /**
+     * Rate EXPECTATIONS, not the last decision.
+     *
+     * A1 compares each currency's current policy rate against their own house
+     * forecast for next quarter (a1trading.com/edgefinder/interest-rates/).
+     *
+     * The bank's OWN published projection is the only thing that scores here.
+     * The Fed publishes one — the dot plot's Summary of Economic Projections —
+     * and nobody else does, so seven of the eight majors score a permanent 0 on
+     * this column and say so in the tooltip.
+     *
+     * A 2-year-yield proxy was tried and rejected: it is the MARKET's forecast
+     * rather than the bank's, and the two disagreed outright — the US 2-year sat
+     * above the policy rate implying hikes while the dots projected cuts. The
+     * spread is still computed and shown for contrast; it does not vote.
+     *
+     * Scored in lib/scoring/rates.ts, not from the calendar.
+     */
     key: 'rates',
     label: 'Interest Rates',
-    title: 'Policy rate decision',
+    title:
+      "The central bank's own projected rate path. Only the Fed publishes numbers, " +
+      'so every other currency scores 0 here rather than a guess.',
     category: 'inflation',
-    kind: 'economic',
-    polarity: 1,
-    // Decisions are 6-8 weeks apart, and the standing rate stays relevant between
-    // them, so this window is deliberately generous.
-    maxAgeDays: 120,
-    match: [/Interest Rate Decision$/i, /^Official Cash Rate/i, /^Bank Rate$/i],
-    matchByCurrency: {
-      // The deposit facility is the effective policy rate, not the MRO.
-      EUR: [/^ECB Rate On Deposit Facility$/i, /^ECB Main Refinancing Operations Rate$/i],
-    },
+    kind: 'rates',
+    scoring: true,
   },
 
   // --- Jobs ---------------------------------------------------------------
   {
-    key: 'nfp',
+    /**
+     * US NON-FARM PAYROLLS ONLY.
+     *
+     * Their column is headed "NFP", and it only ever contributes +/-1 to a pair
+     * — the US leg, inverted when USD is the quote. We also matched other
+     * currencies' employment series, which gave AUDUSD a 2 where they read 1.
+     *
+     * PCE, claims, ADP and JOLTS are US-only for the same reason: they are US
+     * series, and A1's columns name them as such.
+     */
+    key: 'employment',
     label: 'NFP',
-    title: 'Headline employment change',
+    title: 'US non-farm payrolls',
     category: 'jobs',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     // Anchored so "Nonfarm Payrolls (QoQ)" and the benchmark revision are excluded.
-    match: [/^Nonfarm Payrolls$/i, /^Net Change in Employment$/i, /^Employment Change/i],
-    matchByCurrency: {
-      // Japan reports no monthly payrolls; the jobs-to-applicants ratio is the
-      // standard labour-tightness read.
-      JPY: [/^Jobs \/ Applicants Ratio$/i],
-      CHF: [/^Employment Level \(QoQ\)$/i],
-    },
+    match: [/^Nonfarm Payrolls$/i],
   },
   {
     key: 'unemployment',
@@ -276,6 +409,7 @@ export const SLOTS: SlotDefinition[] = [
     title: 'Unemployment rate',
     category: 'jobs',
     kind: 'economic',
+    scoring: true,
     polarity: -1, // higher unemployment is bearish for the currency
     maxAgeDays: 60,
     match: [/^Unemployment Rate$/i, /^Unemployment Rate s\.a\.$/i],
@@ -286,11 +420,14 @@ export const SLOTS: SlotDefinition[] = [
     },
   },
   {
+    // Context from here down: real jobs-market information, but not columns A1
+    // scores, so they must not move the total.
     key: 'claims',
     label: 'Unemploy. Claims',
     title: 'Initial jobless claims',
     category: 'jobs',
     kind: 'economic',
+    scoring: true,
     polarity: -1,
     maxAgeDays: 21, // weekly series
     match: [/^Initial Jobless Claims$/i],
@@ -301,6 +438,7 @@ export const SLOTS: SlotDefinition[] = [
     title: 'ADP private payrolls',
     category: 'jobs',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^ADP Employment Change$/i],
@@ -311,103 +449,95 @@ export const SLOTS: SlotDefinition[] = [
     title: 'JOLTS job openings',
     category: 'jobs',
     kind: 'economic',
+    scoring: true,
     polarity: 1,
     maxAgeDays: 75, // published with a long lag
     match: [/^JOLTS Job Openings$/i],
   },
-  {
-    /**
-     * Wages. Every major except Switzerland publishes something here, which is
-     * what makes crosses like AUDCAD scoreable in the jobs block at all — PCE,
-     * claims, ADP and JOLTS are genuinely US-only, so without wages and
-     * participation a non-USD cross had almost nothing in this category.
-     */
-    key: 'wages',
-    label: 'Wages',
-    title: 'Wage growth',
-    category: 'jobs',
-    kind: 'economic',
-    polarity: 1,
-    maxAgeDays: 120, // several are quarterly (AUD, NZD, EUR)
-    match: [/^Average Hourly Earnings \(YoY\)$/i, /^Average Hourly Earnings \(MoM\)$/i],
-    matchByCurrency: {
-      AUD: [/^Wage Price Index \(YoY\)$/i, /^Wage Price Index \(QoQ\)$/i],
-      CAD: [/^Average Hourly Wages \(YoY\)$/i],
-      GBP: [/^Average Earnings Excluding Bonus \(3Mo\/Yr\)$/i, /^Average Earnings Including Bonus \(3Mo\/Yr\)$/i],
-      JPY: [/^Labor Cash Earnings \(YoY\)$/i],
-      NZD: [/^Labour Cost Index \(QoQ\)$/i, /^Labour Cost Index \(YoY\)$/i],
-      EUR: [/^Negotiated Wage Rates \(QoQ\)$/i, /^Labor Cost Index$/i],
-    },
-  },
-  {
-    key: 'participation',
-    label: 'Particip.',
-    title: 'Labour force participation rate',
-    category: 'jobs',
-    kind: 'economic',
-    polarity: 1,
-    maxAgeDays: 60,
-    // USD, AUD, NZD and CAD only; others leave the cell blank.
-    match: [/^Participation Rate$/i, /^Labor Force Participation Rate$/i],
-  },
-  {
-    /**
-     * 2-year yield direction. EdgeFinder carries this and we did not.
-     *
-     * Not a calendar release — it is scored from the price series in
-     * lib/connectors/technicals.ts against its own 21-day average. A rising
-     * short yield is hawkish: bullish for the dollar, bearish for gold.
-     */
-    key: 'yield2y',
-    label: '2Y Yield',
-    title: '2-year Treasury yield vs its 21-day average',
-    category: 'inflation',
-    kind: 'yield',
-  },
 ];
+
+/** The columns that move the total. Everything else is displayed context. */
+export const SCORING_SLOTS = SLOTS.filter((s) => s.scoring);
 
 /** Default staleness window when a slot does not set one. */
 export const DEFAULT_MAX_AGE_DAYS = 60;
+
+/**
+ * Where the standing policy rate is read from, per currency.
+ *
+ * No longer a scored column — `rates` scores expectations instead — but the
+ * level itself is still needed for the carry scanner, for real yields, and as
+ * the baseline the 2-year yield is compared against.
+ */
+export const POLICY_RATE_MATCH: SeriesMatcher = {
+  match: [/Interest Rate Decision$/i, /^Official Cash Rate/i, /^Bank Rate$/i],
+  matchByCurrency: {
+    // The deposit facility is the effective policy rate, not the MRO.
+    EUR: [/^ECB Rate On Deposit Facility$/i, /^ECB Main Refinancing Operations Rate$/i],
+  },
+};
+
+/** How stale a policy rate may be before we stop trusting it. */
+export const POLICY_RATE_MAX_AGE_DAYS = 120;
+
+/**
+ * The central bank's OWN forecast of its policy rate — the Fed's dot plot.
+ *
+ * This is what A1's interest-rate column actually compares: "current and next
+ * quarter's forecasted interest rate ... Data from the Central Bank Forecast
+ * Page". The FOMC publishes exactly that, and FXStreet carries it.
+ *
+ * ONLY THE FED PUBLISHES ONE. The ECB, BoE, RBA and the rest give guidance in
+ * prose, not numbers, so every other currency scores 0 on this column — see
+ * scoreRateExpectation for why 0 beats a guess here.
+ *
+ * Released quarterly with the FOMC's Summary of Economic Projections, so the
+ * staleness window spans a full quarter with margin.
+ */
+export const RATE_PROJECTION_MATCH: { current: SeriesMatcher; nextYear: SeriesMatcher } = {
+  current: { match: [/^Interest Rate Projections - Current$/i] },
+  nextYear: { match: [/^Interest Rate Projections - 1st year$/i] },
+};
+
+export const RATE_PROJECTION_MAX_AGE_DAYS = 200;
 
 // ---------------------------------------------------------------------------
 // Bucketing
 // ---------------------------------------------------------------------------
 
 /**
- * Fundamentals are TERNARY: a release either beat, missed, or landed on forecast.
+ * Fundamentals are TERNARY: a release either beat, missed, or landed on
+ * forecast. Magnitude is discarded, and that is A1's model rather than an
+ * approximation of it — every macro category on their card contributes exactly
+ * +/-1 per currency however large the surprise.
  *
- * This deliberately discards magnitude, and that is EdgeFinder's model rather
- * than an approximation of it — reconstructing their published GOLD scorecard
- * only reproduces their four stated sub-totals (3 / 1 / 4 / 8) if every
- * fundamental contributes exactly +/-1.
- *
- * The previous approach bucketed by sigma with a +/-0.25 deadband, which quietly
- * swallowed real misses: JOLTS at 7.359 against a 7.4 forecast is -0.15 sigma
- * and scored 0, when it is plainly a miss.
- *
- * The trade-off is real and accepted: a 0.15 sigma miss and a 3 sigma miss now
- * score the same. Sigma is still computed, kept on the SlotResult, and rendered
- * in the detail column, so magnitude is one hover away.
+ * The trade-off is real and accepted: a 0.15 sigma miss and a 3 sigma miss score
+ * the same. Sigma is still computed, kept on the SlotResult, and rendered in the
+ * detail column, so magnitude is one hover away.
  *
  * EPSILON absorbs float noise between values that are equal at the feed's own
- * precision (3.3 vs 3.3 must be 0). It is NOT a deadband.
+ * precision (3.3 vs 3.3 must be 0). It is NOT a deadband — an earlier +/-0.25
+ * sigma deadband quietly swallowed genuine misses.
  */
 export const TERNARY_EPSILON = 1e-9;
 
-export const CELL_MIN = -2;
-export const CELL_MAX = 2;
+/**
+ * Default per-leg cell bounds. Individual slots widen this via `maxCell`
+ * (trend +/-3) or narrow it (crowd +/-1).
+ */
+export const CELL_MIN = -1;
+export const CELL_MAX = 1;
+
+/** Bounds for a combined pair cell, before any slot-specific override. */
+export const PAIR_CELL_MIN = -2;
+export const PAIR_CELL_MAX = 2;
 
 /**
- * COT scores from the LONG SHARE, in two parts that sum to +/-2 — mirroring the
- * two rows EdgeFinder shows ("COT - Net Positioning" and "COT - Latest
- * Buys/Sells"). Gold at 85.4% long with a +0.78% weekly change gives +1 and +1,
- * which is what reproduces their stated Sentiment+COT subtotal of 1 once the
- * contrarian crowd reading of -1 is added.
+ * Long-share bands for COT net positioning.
  *
- * We previously scored this from the 3-year percentile instead. That is arguably
- * the better analytical measure — it is what reveals gold's large net long as
- * actually BELOW its own median — so it is still computed and displayed. It just
- * no longer drives the cell.
+ * Applies to indices, commodities and crypto only. A1 scores FX COT purely on
+ * the weekly change (a1trading.com/edgefinder/cot-data/); net positioning is the
+ * second component only for non-forex assets.
  */
 export const COT_LONG_PCT_BUCKETS = {
   bullish: 55,
@@ -415,8 +545,11 @@ export const COT_LONG_PCT_BUCKETS = {
 } as const;
 
 /**
- * Percentile bands, retained for DISPLAY only. See COT_LONG_PCT_BUCKETS above
- * for why this no longer feeds the score.
+ * Percentile bands, retained for DISPLAY only.
+ *
+ * Ranking a position against its own 3-year range is the more revealing measure
+ * — it is what shows a huge gold net long sitting below its own median — but it
+ * is not what A1 scores, so it informs the reader without moving the number.
  */
 export const COT_PERCENTILE_BUCKETS = {
   veryBullish: 80,
@@ -431,46 +564,209 @@ export const COT_LOOKBACK_WEEKS = 156; // ~3 years
 /**
  * Crowd sentiment, read CONTRARIAN — a crowded long is a bearish signal, which
  * is why these map to negative cells.
+ *
+ * A1's published thresholds, verbatim: ">= 60% long -> -1 score", "<= 40% long
+ * -> +1". The 40-60% band is deliberately wide; most of the time the crowd is
+ * not saying anything.
  */
 export const CROWD_LONG_PCT_BUCKETS = {
-  bearish: 55, // crowd leaning long -> -1 (contrarian)
-  bullish: 45, // crowd leaning short -> +1
+  bearish: 60, // crowd leaning long -> -1 (contrarian)
+  bullish: 40, // crowd leaning short -> +1
 } as const;
 
 /**
- * Trend is read SHORT-TERM, from the 20- and 50-day averages only.
+ * Trend: a fast and a slow SMA, per a1trading.com/edgefinder/trend/.
  *
- * Counting all four put gold at 0 (above 20/50, below 100/200) where EdgeFinder
- * reads +2 — their "4H / Daily Chart Trend" is a near-term measure. The 100- and
- * 200-day averages stay on the scorecard as context; they just do not vote.
+ * "3-day SMA: Captures short-term price trends. 14-day SMA: Captures longer-term
+ * price trends." Crossover scores +/-2, the 14-day slope +/-1, and a
+ * disagreement between them costs 1 — see scoreTrend for the composition.
  */
-export const TREND_BUCKETS: Record<number, number> = {
-  2: 2, // above both short averages
-  1: 0, // mixed
-  0: -2, // below both
-};
+export const TREND_SMA = { fast: 3, slow: 14 } as const;
+
+/** How far back the slow SMA's slope is measured. */
+export const TREND_SLOPE_LOOKBACK_DAYS = 1;
 
 /**
- * Seasonality needs BOTH a meaningful average move and a consistent win rate.
- * A +2% average driven by one outlier year is not a seasonal tendency.
+ * Seasonality is the SIGN of the 10-year average for the current calendar month,
+ * nothing more: "If the current month's 10 year historical average performance
+ * is positive, the EdgeFinder assigns a +2 [or +1]".
+ *
+ * We previously gated it behind a mean-return and win-rate threshold. That is
+ * defensible analysis — a +2% average driven by one outlier year is not a
+ * tendency — but it is not their rule, so both figures are still returned and
+ * displayed while only the sign votes.
  */
-export const SEASONALITY_BUCKETS = {
-  strongPct: 0.5, // mean monthly return, %
-  strongWinRate: 60, // %
-  mildPct: 0.15,
+export const SEASONALITY_MIN_YEARS = 5;
+
+/**
+ * +/-1 for EVERY asset class.
+ *
+ * Their seasonality page says indices and commodities get +/-2 "because seasonal
+ * tendencies are very pronounced" there. Their live product does not do that:
+ * GOLD and SILVER both show seasonality 1, and GOLD's published total of 8 only
+ * reconciles with seasonality at 1 — at 2 it would be 9. No row anywhere in
+ * their table shows +/-2 in this column.
+ *
+ * Where the documentation and the running product disagree, the product wins.
+ * Kept as a per-kind map rather than a constant so the split is one edit away if
+ * they ever ship what the page describes.
+ */
+export const SEASONALITY_CELL_MAX_BY_KIND = {
+  fx: 1,
+  currency: 1,
+  index: 1,
+  commodity: 1,
+  crypto: 1,
 } as const;
 
-/** Seasonality contributes at most +/-1, matching EdgeFinder's technical split. */
-export const SEASONALITY_CELL_MAX = 1;
-
 /**
- * A rising 2-year yield is hawkish. Compared against its own 21-day average so
- * the reading is direction, not level.
+ * Non-FX assets read interest rates off the US 2-year against its own average:
+ * "If price is above the moving average, -1. If price is below the moving
+ * average, +1" — a rising short yield tightens financial conditions, which is
+ * bearish for indices, gold and crypto alike.
+ *
+ * 21 DAYS, not the 7 their interest-rates page implies. Their Asset Scorecard
+ * labels this row verbatim "2 Yr Yield (21 day SMA)", and a product label naming
+ * its own window beats a prose page describing it.
  */
 export const YIELD_SMA_DAYS = 21;
 
+/** Below this the 2-year is treated as flat against its average. */
+export const YIELD_FLAT_BAND = 0.005;
+
 /** Years of monthly history used for the seasonal average. */
 export const SEASONALITY_YEARS = 10;
+
+
+// ---------------------------------------------------------------------------
+// Price structure
+// ---------------------------------------------------------------------------
+
+/**
+ * Tunables for `lib/scoring/structure.ts`.
+ *
+ * These feed levels the user will place orders against, so every value below is
+ * a stated judgement rather than a fitted parameter. None of them affect a
+ * score: structure is display-only, because A1's bias bands are absolute and
+ * adding an input would silently redefine "Bullish".
+ *
+ * Distances are expressed in ATR throughout, never in percent. A 0.3% band is
+ * unreachable in a market whose daily range is 0.1% and trivially satisfied in
+ * one that ranges 2%, so a percentage tolerance means something different for
+ * every symbol on the board. ATR is the only unit under which "close together"
+ * means the same thing for gold and for the franc.
+ */
+
+/** Bars either side of a candidate pivot. 3 gives the standard 7-bar fractal. */
+export const SWING_LOOKBACK = 3;
+
+/** Periods in the average true range. Wilder's original, and still the default. */
+export const ATR_PERIOD = 14;
+
+/**
+ * Minimum distance from the previous kept swing, in ATR, for a pivot to count.
+ *
+ * Raw fractals fire constantly — on any real series most of them are noise. At
+ * 1.5 the retained swings are the ones a person would mark by hand, which is the
+ * bar this has to clear: the level has to be findable on the user's own chart.
+ */
+export const MIN_SWING_ATR = 1.5;
+
+/** How close price must come, in ATR, to count as having retested a level. */
+export const RETEST_ATR = 0.5;
+
+/**
+ * How far past a level a close must sit to count as a break.
+ *
+ * A close one tick beyond a swing high is not a break in any sense a trader
+ * would recognise, and at five decimal places it is often just rounding. Small
+ * on purpose: a large buffer turns break-of-structure into a momentum filter and
+ * pushes the signal past the retest, which is where the entry is.
+ */
+export const BREAK_BUFFER_ATR = 0.1;
+
+/**
+ * Bars after which a break stops describing the current market.
+ *
+ * ~6 months of daily bars. Past that the market has usually re-ranged and the
+ * level the break defined is one price has since traded through in both
+ * directions. Reporting it as "where price broke structure" hands the user a
+ * level the market has visibly stopped respecting.
+ */
+export const STALE_BREAK_BARS = 120;
+
+/** Window used to state range edges when there is no live break. */
+export const RANGE_LOOKBACK_BARS = 60;
+
+/**
+ * Round-number grid spacing, in ATR.
+ *
+ * Sized to enforce one invariant: `step / 2 > CONFLUENCE_ATR`, so a round number
+ * can never be automatically within tolerance of the current price. With a fixed
+ * grid this breaks — a 0.005 grid on EURUSD puts a round number within 25 pips
+ * of any price, which on a 60-pip ATR is inside the tolerance always, so the
+ * round-number vote becomes free and every confluence score inflates by one.
+ */
+export const ROUND_STEP_ATR = 2;
+
+/** One source is not confluence. */
+export const MIN_CONFLUENCE_SOURCES = 2;
+
+/**
+ * Furthest a zone can sit from price and still be worth listing, in ATR.
+ *
+ * Observed on EURUSD: a two-year-old untested low showed up 24 ATR below spot —
+ * arithmetically a level, operationally irrelevant, and it crowded out the ones
+ * price could actually reach this month. Ten ATR is roughly two weeks of range.
+ */
+export const MAX_ZONE_ATR = 10;
+
+/** Zones listed at most. Sorted nearest-first, so the cut drops the furthest. */
+export const MAX_ZONES = 8;
+
+/**
+ * Merge distance for confluence, in ATR.
+ *
+ * 0.35 is about a third of a day's range: near enough that price cannot
+ * meaningfully distinguish the two levels within a session, which is the only
+ * defensible meaning of "these line up".
+ */
+export const CONFLUENCE_ATR = 0.35;
+
+/** Retracement ratios drawn. 0.618 is the one the UI emphasises. */
+export const FIB_RATIOS = [0.382, 0.5, 0.618, 0.786] as const;
+
+/** How near 0.618 price must sit to be called "in the golden zone". */
+export const FIB_ZONE_TOLERANCE = 0.05;
+
+/**
+ * Shortest impulse leg worth retracing, in ATR.
+ *
+ * Derived, not guessed. The closest pair of ratios drawn is 0.5 and 0.618, which
+ * sit `0.118 x leg` apart. For those two to be distinguishable — at least one
+ * confluence tolerance apart — the leg must satisfy `0.118 x leg >= 0.35`, i.e.
+ * `leg >= 2.97` ATR. Below that the grid renders four lines a trader could not
+ * place separate orders at, which is noise wearing the costume of precision.
+ */
+export const MIN_LEG_ATR = 3;
+
+/** Fewest bars before any structure is computed at all. */
+export const STRUCTURE_MIN_BARS = 60;
+
+
+/**
+ * Percentile bands for how big a week's COT flow was.
+ *
+ * Measured against the contract's OWN 156 weekly changes, never an absolute
+ * contract count — 5,000 contracts is a huge week in NZD and noise in gold, so
+ * a fixed threshold would rank the largest markets top every single week.
+ */
+export const COT_FLOW_BANDS = {
+  extreme: 95,
+  heavy: 80,
+  notable: 50,
+} as const;
+
 
 // ---------------------------------------------------------------------------
 // Bias labels
@@ -479,17 +775,18 @@ export const SEASONALITY_YEARS = 10;
 export type Bias = 'Very Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Very Bearish';
 
 /**
- * Total score -> label.
+ * Total score -> label. Published verbatim at
+ * a1trading.com/edgefinder/top-setups/: "'Bullish' if the total score is greater
+ * or equal to +4, and 'Very Bullish' if the total score is greater or equal
+ * to +7", mirrored for the downside.
  *
- * Calibrated against the labels EdgeFinder publishes beside its own scores
- * rather than guessed from the theoretical range:
+ * THESE CUTS ARE ABSOLUTE, NOT A FRACTION OF THE MAXIMUM. A1 never moved them as
+ * they added columns, which is why a EURUSD can print 14 and still just be "Very
+ * Bullish" — 14 is twice the threshold, not near a cap.
  *
- *   8 Very Bullish · 7 Very Bullish · 6 Bullish · 5 Bullish · 4 Bullish
- *  -4 Bearish      · -5 Bearish
- *
- * which puts the cuts at +/-7 and +/-4. The theoretical range is +/-20 for a
- * single-leg symbol and +/-34 for a pair, but real totals cluster inside +/-15
- * because no symbol populates every slot and the cells rarely all agree.
+ * The direct consequence: adding a scoring column silently redefines what
+ * "Bullish" means. That is the entire reason SlotDefinition carries a `scoring`
+ * flag, and why MAX_PAIR_SCORE below is asserted in the test suite.
  */
 export const BIAS_THRESHOLDS: { min: number; bias: Bias }[] = [
   { min: 7, bias: 'Very Bullish' },
@@ -501,4 +798,52 @@ export const BIAS_THRESHOLDS: { min: number; bias: Bias }[] = [
 
 export function biasFromScore(score: number): Bias {
   return BIAS_THRESHOLDS.find((t) => score >= t.min)?.bias ?? 'Neutral';
+}
+
+/**
+ * Largest total a symbol of this kind can reach.
+ *
+ * THIS DIFFERS BY ASSET CLASS. An FX pair DIFFERENCES two economies, so each
+ * macro cell spans +/-2; gold, an index or a crypto reads ONE economy, so the
+ * same cell spans only +/-1. A single-economy asset can never reach an FX pair's
+ * total, and drawing it on an FX dial permanently understates it — that is what
+ * made Gold read "+5 out of 25".
+ *
+ * Both numbers are large relative to the +/-7 "Very Bullish" cut, and that is
+ * A1's design rather than a flaw in ours: their bands are absolute and never
+ * moved as they added columns, so their own EURUSD prints 9 and their GBPUSD 11
+ * on the same 18-column table.
+ *
+ * Computed from the slot list rather than written down, so it tracks changes,
+ * and asserted in the test suite so adding a column has to be deliberate.
+ */
+export function maxScoreForKind(kind: SymbolKind): number {
+  return SCORING_SLOTS.reduce((total, slot) => total + maxCellFor(slot.key, kind), 0);
+}
+
+/**
+ * Largest value ONE cell of this slot can reach, for this asset class.
+ *
+ * Extracted from `maxScoreForKind` rather than duplicated, because the UI needs
+ * exactly this number to say whether "+2" is a strong reading or a maximal one,
+ * and the total is defined as the sum of these. Two copies of the rule would
+ * eventually let a cell be labelled "Very Bullish" on a scale the total does not
+ * agree exists.
+ */
+export function maxCellFor(slotKey: string, kind: SymbolKind): number {
+  const slot = SLOTS.find((s) => s.key === slotKey);
+
+  if (slotKey === 'seasonality') return SEASONALITY_CELL_MAX_BY_KIND[kind];
+  if (slotKey === 'trend') return slot?.maxCell ?? CELL_MAX;
+  if (slotKey === 'cot') return slot?.maxCell ?? PAIR_CELL_MAX;
+  if (slotKey === 'crowd') return slot?.maxCell ?? CELL_MAX;
+
+  // Everything else is an economic cell: only a pair differences two legs, so
+  // it spans +/-2 where a single-economy asset spans +/-1.
+  return kind === 'fx' ? PAIR_CELL_MAX : CELL_MAX;
+}
+
+/** Convenience for the FX case, which is what most callers mean. */
+export function maxPairScore(): number {
+  return maxScoreForKind('fx');
 }

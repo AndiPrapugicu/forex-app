@@ -22,7 +22,7 @@
 import { z } from 'zod';
 import { COT_LOOKBACK_WEEKS } from '@/config/setups.config';
 import { REQUIRED_COT_CONTRACTS } from '@/config/symbols.config';
-import { fetchJson, useFixtures } from '@/lib/connectors/base';
+import { fetchJson, fixturesEnabled } from '@/lib/connectors/base';
 import { ok, type Result } from '@/lib/types';
 
 const CFTC = {
@@ -86,8 +86,29 @@ export interface CotReport {
 
   openInterest: number | null;
   openInterestChange: number | null;
-  /** Week-on-week change in speculator net position. */
+  /** Week-on-week change in speculator net position, in CONTRACTS. */
   specNetChange: number | null;
+  /**
+   * Week-on-week change in speculator LONG and SHORT books separately.
+   *
+   * The net change hides which side moved, and the two tell different stories:
+   * net rising because longs piled in is a different market from net rising
+   * because shorts covered. A1 shows both columns for exactly this reason.
+   */
+  specLongChange: number | null;
+  specShortChange: number | null;
+  /**
+   * Week-on-week change in the speculator LONG SHARE, in percentage points.
+   *
+   * This is A1's "Net % Change" column and what actually drives their
+   * "COT - Latest Buys/Sells" reading — their rule says "weekly % change in
+   * non-commercial long positioning", and their JPY row reconciles exactly:
+   * 43.31% this week against 27.67% last week is the 15.64% they display.
+   *
+   * NOT the same thing as `specNetChange`. Net contracts can move sharply while
+   * the long share barely shifts, whenever longs and shorts grow together.
+   */
+  specLongPctChange: number | null;
 }
 
 export interface CotSeries {
@@ -138,7 +159,38 @@ function toReport(raw: z.infer<typeof CotRow>): CotReport | null {
     openInterestChange: raw.change_in_open_interest_all,
     specNetChange:
       longChange !== null && shortChange !== null ? longChange - shortChange : null,
+    specLongChange: longChange,
+    specShortChange: shortChange,
+    specLongPctChange: longPctChange(specLong, specShort, longChange, shortChange),
   };
+}
+
+/**
+ * Change in the speculator long share, in percentage points.
+ *
+ * Reconstructs last week's book by backing the reported changes out of this
+ * week's, then differences the two long shares. The CFTC publishes the position
+ * changes but not the previous shares, so this is the only way to get it from a
+ * single row — and doing it from one row means it works on the first report we
+ * ever see, with no history required.
+ */
+function longPctChange(
+  long: number,
+  short: number,
+  longChange: number | null,
+  shortChange: number | null,
+): number | null {
+  if (longChange === null || shortChange === null) return null;
+
+  const total = long + short;
+  const prevLong = long - longChange;
+  const prevShort = short - shortChange;
+  const prevTotal = prevLong + prevShort;
+
+  // A contract that did not exist last week has no change to report.
+  if (total <= 0 || prevTotal <= 0) return null;
+
+  return (long / total) * 100 - (prevLong / prevTotal) * 100;
 }
 
 /**
@@ -199,24 +251,44 @@ async function fetchContractSeries(contract: string): Promise<CotSeries | null> 
  * how a free source stops being available.
  */
 export async function fetchCotData(): Promise<Result<Map<string, CotSeries>>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     const fixture = (await import('@/fixtures/sample-cot.json')).default as CotSeries[];
     return ok('cftc:fixture', new Map(fixture.map((s) => [s.contract, s])));
   }
 
   const out = new Map<string, CotSeries>();
-  const failed: string[] = [];
 
-  const BATCH = 4;
-  for (let i = 0; i < REQUIRED_COT_CONTRACTS.length; i += BATCH) {
-    const batch = REQUIRED_COT_CONTRACTS.slice(i, i + BATCH);
-    const results = await Promise.all(batch.map((c) => fetchContractSeries(c)));
+  const pass = async (contracts: string[]) => {
+    const missed: string[] = [];
+    const BATCH = 4;
 
-    results.forEach((series, idx) => {
-      if (series) out.set(series.contract, series);
-      else failed.push(batch[idx]);
-    });
-  }
+    for (let i = 0; i < contracts.length; i += BATCH) {
+      const batch = contracts.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map((c) => fetchContractSeries(c)));
+
+      results.forEach((series, idx) => {
+        if (series) out.set(series.contract, series);
+        else missed.push(batch[idx]);
+      });
+    }
+
+    return missed;
+  };
+
+  /**
+   * A second attempt at whatever the first pass dropped.
+   *
+   * A dropped contract is expensive out of all proportion to how it looks. Every
+   * pair whose base or quote uses it loses a leg, and `USD INDEX` alone feeds
+   * seven rows — so one transient failure here used to shift seven scores at
+   * once with nothing on screen to say why. The retry recovers the transient
+   * case; `combinePairCells` marks whatever it cannot recover as partial.
+   */
+  let failed = await pass(REQUIRED_COT_CONTRACTS);
+
+  const dropped = await pass(failed);
+  const recovered = failed.length - dropped.length;
+  failed = dropped;
 
   if (out.size === 0) {
     return {
@@ -227,11 +299,12 @@ export async function fetchCotData(): Promise<Result<Map<string, CotSeries>>> {
     };
   }
 
-  return ok(
-    CFTC.name,
-    out,
-    failed.length > 0 ? `${failed.length} contract(s) unavailable: ${failed.join(', ')}` : undefined,
-  );
+  const notes = [
+    failed.length > 0 ? `${failed.length} contract(s) unavailable: ${failed.join(', ')}` : null,
+    recovered > 0 ? `${recovered} recovered on retry` : null,
+  ].filter(Boolean);
+
+  return ok(CFTC.name, out, notes.length > 0 ? notes.join('; ') : undefined);
 }
 
 /** Most recent report date across all contracts — what the UI must display. */

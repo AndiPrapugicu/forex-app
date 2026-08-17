@@ -2,17 +2,17 @@
   {
     "symbol": "GC=F",
     "label": "Gold",
-    "price": 4399.7,
+    "price": 4413.1,
     "previousClose": 4340.7001953125,
-    "changePct": 1.359223213600732,
+    "changePct": 1.6679291687936555,
     "currency": "USD"
   },
   {
     "symbol": "SI=F",
     "label": "Silver",
-    "price": 63.499,
+    "price": 64.475,
     "previousClose": 63.332000732421875,
-    "changePct": 0.2636886023602828,
+    "changePct": 1.804773660013204,
     "currency": "USD"
   },
   {
@@ -26,25 +26,25 @@
   {
     "symbol": "CL=F",
     "label": "WTI Crude",
-    "price": 78.18,
-    "previousClose": 77.29000091552734,
-    "changePct": 1.1515061119553756,
+    "price": 78.09,
+    "previousClose": 78.18000030517578,
+    "changePct": -0.11511934615561713,
     "currency": "USD"
   },
   {
     "symbol": "DX-Y.NYB",
     "label": "Dollar Index",
-    "price": 99.604,
+    "price": 99.678,
     "previousClose": 99.5999984741211,
-    "changePct": 0.004017596325511154,
+    "changePct": 0.07831478621876739,
     "currency": "USD"
   },
   {
     "symbol": "EURUSD=X",
     "label": "EUR/USD",
-    "price": 1.1562,
-    "previousClose": 1.156203031539917,
-    "changePct": -0.0002621978869109237,
+    "price": 1.1563,
+    "previousClose": 1.156336784362793,
+    "changePct": -0.0031811115317181143,
     "currency": "USD"
   }
 ]

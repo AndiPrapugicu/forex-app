@@ -21,10 +21,46 @@ import {
 import { ALL_SYMBOLS, CURRENCY_COT_CONTRACT, type SymbolDefinition } from '@/config/symbols.config';
 import type { CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
+import type { SovereignYield } from '@/lib/connectors/yields';
 import { scoreCot, scoreCrowd, type CotScore, type CrowdScore } from '@/lib/scoring/cot';
-import { combinePairCells, scoreSlot, type CellStatus, type SlotResult } from '@/lib/scoring/discrete';
+import {
+  PAIR_CELL_MAX,
+  combinePairCells,
+  normalizeZero,
+  scoreSlot,
+  type CellStatus,
+  type SlotResult,
+} from '@/lib/scoring/discrete';
+import { scoreRateExpectation, type RateExpectation } from '@/lib/scoring/rates';
 import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/technical';
 import { MAJORS, type Currency, type NormalizedEvent } from '@/lib/types';
+
+/**
+ * One economy's contribution to a cell, kept in structured form.
+ *
+ * The scorecard needs actual / forecast / previous as COLUMNS, not prose. All of
+ * this was already computed and then thrown away in favour of a concatenated
+ * string, which is how the detail column ended up reading
+ * "EUR: Consumer Confidence: -15.9 vs -15.9 forecast (0.00σ) | USD: Michigan…".
+ */
+export interface CellLeg {
+  /** The currency whose release this is. */
+  currency: Currency;
+  /** The resolved series name — "Harmonized Index of Consumer Prices (YoY)". */
+  seriesName: string | null;
+  actual: number | null;
+  /** What the score compared against: forecast normally, previous for PMI. */
+  reference: number | null;
+  referenceLabel: 'forecast' | 'previous';
+  consensus: number | null;
+  previous: number | null;
+  unit: string | null;
+  sigma: number | null;
+  dateUtc: string | null;
+  /** This leg's own ±1 before it is differenced or inverted. */
+  cell: number | null;
+  status: CellStatus;
+}
 
 export interface MatrixCell {
   slotKey: string;
@@ -35,6 +71,19 @@ export interface MatrixCell {
   /** Per-leg detail, so the scorecard can show where a pair cell came from. */
   baseCell?: number | null;
   quoteCell?: number | null;
+  /**
+   * Set when `status` is 'partial': the leg that was expected and did not
+   * arrive. The number above is built from the other leg alone.
+   */
+  missingLeg?: string | null;
+  /**
+   * Structured legs — one for a single-economy asset, two for a pair, several
+   * for a composite like PMI. Empty for technical and sentiment slots, which
+   * have no calendar release behind them.
+   */
+  legs?: CellLeg[];
+  /** Extra note the cell carries beyond its legs, e.g. the CPI level band. */
+  note?: string;
 }
 
 export interface SymbolRow {
@@ -43,14 +92,25 @@ export interface SymbolRow {
   kind: SymbolDefinition['kind'];
   base?: Currency;
   quote?: Currency;
-  /** Sum of every populated cell. */
+  /**
+   * Sum of the populated SCORING cells. Context columns are rendered but never
+   * counted — A1's bias bands are absolute, so an extra column would quietly
+   * redefine "Bullish". See SlotDefinition.scoring.
+   */
   totalScore: number;
   bias: Bias;
   /** Subtotals by category, for the scorecard breakdown. */
   categoryScores: Record<SlotCategory, number>;
   cells: Record<string, MatrixCell>;
-  /** How many slots actually produced a score — thin rows deserve less trust. */
+  /**
+   * How many scoring slots produced a COMPLETE score — thin rows deserve less
+   * trust. A partial cell is excluded: it still contributes its known leg to
+   * `totalScore`, but counting it here would let an upstream failure masquerade
+   * as coverage.
+   */
   populated: number;
+  /** Scoring cells built from one leg because the other failed. */
+  partial: number;
   price: number | null;
   changePct: number | null;
 }
@@ -83,14 +143,21 @@ export function scoreAllCurrencies(
   return out;
 }
 
-/** COT and crowd scores per currency, from each currency's own contract. */
+/**
+ * COT and crowd scores per currency, from each currency's own contract.
+ *
+ * Scored with the 'fx' rule, which reads only the weekly change. Net positioning
+ * is deliberately excluded here and included for commodities, indices and crypto
+ * — that asymmetry is A1's, and it stops a pair double-counting a signal they
+ * count once.
+ */
 function scoreCurrencySentiment(cot: Map<string, CotSeries>) {
   const cotByCurrency = new Map<Currency, CotScore | null>();
   const crowdByCurrency = new Map<Currency, CrowdScore | null>();
 
   for (const currency of MAJORS) {
     const series = cot.get(CURRENCY_COT_CONTRACT[currency]);
-    cotByCurrency.set(currency, scoreCot(series));
+    cotByCurrency.set(currency, scoreCot(series, 'fx'));
     crowdByCurrency.set(currency, scoreCrowd(series));
   }
 
@@ -101,13 +168,81 @@ function emptyCategoryScores(): Record<SlotCategory, number> {
   return { technical: 0, sentiment: 0, growth: 0, inflation: 0, jobs: 0 };
 }
 
+/**
+ * Flattens a scored slot into the structured legs the scorecard renders.
+ *
+ * A composite slot (PMI) expands into one leg per sub-series, because
+ * "Manufacturing 55.6 vs 53.3, Services 54.1 vs 54.0" is the readable form and
+ * a single merged row would have to pick one set of numbers.
+ */
+function toLegs(currency: Currency, result: SlotResult | undefined, compare?: 'forecast' | 'previous'): CellLeg[] {
+  if (!result) return [];
+
+  const referenceLabel = compare === 'previous' ? 'previous' : 'forecast';
+
+  const build = (event: NormalizedEvent | null, cell: number | null, sigma: number | null): CellLeg => ({
+    currency,
+    seriesName: event?.name ?? null,
+    actual: event?.actual ?? null,
+    reference: (referenceLabel === 'previous' ? event?.previous : event?.consensus) ?? null,
+    referenceLabel,
+    consensus: event?.consensus ?? null,
+    previous: event?.previous ?? null,
+    unit: event?.unit ?? null,
+    sigma,
+    dateUtc: event?.dateUtc ?? null,
+    cell,
+    status: result.status,
+  });
+
+  if (result.components?.length) {
+    return result.components.map((c) => build(c.event, c.cell, null));
+  }
+
+  // A slot with no resolved release still produces a leg, so the table can show
+  // WHY it is blank rather than omitting the row entirely.
+  return [build(result.event, result.cell, result.sigma)];
+}
+
+/**
+ * Why a single-economy asset reads a print upside down.
+ *
+ * Category-specific because the REASON differs, and one generic sentence gets it
+ * wrong: gold inverts growth because it is a haven, but every non-FX asset
+ * inverts inflation for a completely different reason — the rates channel.
+ * "A stronger economy weighs on this asset" is simply false next to a CPI row.
+ */
+/**
+ * The sentence a partial cell owes the reader.
+ *
+ * Without it the number looks like every other number. With it, the tooltip
+ * says which half of the comparison is missing, which is exactly what someone
+ * asking "why did this move overnight?" needs to know.
+ */
+function missingLegNote(missingLeg: string | null): string | null {
+  if (!missingLeg) return null;
+  return `Partial: the ${missingLeg} leg is missing, so this reads from the other leg alone.`;
+}
+
+function invertedNote(category: SlotCategory): string {
+  if (category === 'inflation') {
+    return 'Inverted: a hotter print prices in tighter policy, which weighs on this asset.';
+  }
+  return 'Inverted: a stronger economy weighs on this asset.';
+}
+
 export interface BuildMatrixInput {
   events: NormalizedEvent[];
   cot: Map<string, CotSeries>;
   technicals: Map<string, Technicals>;
   prices?: Map<string, { price: number; changePct: number | null }>;
-  /** 2-year Treasury yield and its 21-day average. Scored for the dollar. */
+  /**
+   * US 2-year yield and its 7-day average. Drives the rate cell for NON-FX
+   * assets only; currency pairs use `sovereignYields` below.
+   */
   yield2y?: { current: number; sma: number } | null;
+  /** 2-year government yields per currency, for the FX rate-expectation cell. */
+  sovereignYields?: Map<Currency, SovereignYield>;
   now?: Date;
 }
 
@@ -117,6 +252,13 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
   const currencyScores = scoreAllCurrencies(input.events, now);
   const { cotByCurrency, crowdByCurrency } = scoreCurrencySentiment(input.cot);
 
+  // Rate expectations per currency, computed once and reused across all 28 pairs.
+  const yields = input.sovereignYields ?? new Map<Currency, SovereignYield>();
+  const ratesByCurrency = new Map<Currency, RateExpectation>();
+  for (const currency of MAJORS) {
+    ratesByCurrency.set(currency, scoreRateExpectation(currency, yields, input.events, now));
+  }
+
   const rows: SymbolRow[] = [];
 
   for (const def of ALL_SYMBOLS) {
@@ -124,47 +266,83 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
     const categoryScores = emptyCategoryScores();
     let total = 0;
     let populated = 0;
+    let partialCount = 0;
 
     const tech = input.technicals.get(def.symbol);
+    // A pair has two currency legs; gold, indices and crypto have none, and that
+    // distinction is what selects the COT, seasonality and rate rules below.
+    const isFx = def.kind === 'fx';
 
     for (const slot of SLOTS) {
       let cell: MatrixCell;
 
-      if (slot.kind === 'yield') {
+      if (slot.kind === 'rates') {
         /**
-         * The 2-year yield is a USD reading, so it enters a pair the same way any
-         * other dollar indicator does: straight through when USD is the base,
-         * inverted when USD is the quote (which is what makes it bearish for gold).
+         * Two different rules under one column, which is A1's design rather than
+         * a shortcut of ours:
+         *
+         *   FX      each leg's 2-year yield against its own policy rate, then
+         *           base minus quote — a rate DIFFERENTIAL expectation.
+         *   non-FX  the US 2-year against its 7-day average, because what moves
+         *           gold and indices is the level of US financial conditions,
+         *           not a differential they have no second leg for.
          */
-        const score = input.yield2y
-          ? scoreYield2y(input.yield2y.current, input.yield2y.sma)
-          : null;
+        if (isFx) {
+          const baseRate = def.base ? (ratesByCurrency.get(def.base)?.cell ?? null) : null;
+          const quoteRate = def.quote ? (ratesByCurrency.get(def.quote)?.cell ?? null) : null;
+          // Expected iff the currency was scored at all. A currency outside
+          // MAJORS (ZAR) has no rate read by design and must not read partial.
+          const combined = combinePairCells(baseRate, quoteRate, PAIR_CELL_MAX, {
+            base: { label: def.base, expected: !!def.base && ratesByCurrency.has(def.base) },
+            quote: { label: def.quote, expected: !!def.quote && ratesByCurrency.has(def.quote) },
+          });
 
-        if (!score) {
-          cell = { slotKey: slot.key, cell: null, status: 'no-data', explanation: '2-year yield unavailable' };
-        } else {
-          const usdSide = def.base === 'USD' ? 1 : def.quote === 'USD' ? -1 : 0;
+          const detail = [
+            def.base ? ratesByCurrency.get(def.base)?.explanation : null,
+            def.quote ? ratesByCurrency.get(def.quote)?.explanation : null,
+          ].filter(Boolean);
+
           cell = {
             slotKey: slot.key,
-            cell: usdSide === 0 ? null : score.cell * usdSide,
-            status: usdSide === 0 ? 'no-data' : 'scored',
-            explanation:
-              usdSide === 0
-                ? 'No USD leg — the 2-year yield does not apply'
-                : score.explanation + (usdSide === -1 ? ' Inverted: USD is the quote leg.' : ''),
+            cell: combined.cell,
+            status: combined.status,
+            missingLeg: combined.missingLeg,
+            baseCell: baseRate,
+            quoteCell: quoteRate,
+            explanation: [
+              detail.length > 0 ? detail.join('  |  ') : 'No rate data for either leg',
+              missingLegNote(combined.missingLeg),
+            ]
+              .filter(Boolean)
+              .join('  |  '),
           };
+        } else {
+          const score = input.yield2y ? scoreYield2y(input.yield2y.current, input.yield2y.sma) : null;
+          cell = score
+            ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
+            : { slotKey: slot.key, cell: null, status: 'no-data', explanation: '2-year yield unavailable' };
         }
       } else if (slot.kind === 'technical') {
         // Per-symbol, never derived from legs.
-        const score = slot.key === 'trend' ? scoreTrend(tech) : scoreSeasonality(tech, now);
+        const score =
+          slot.key === 'trend' ? scoreTrend(tech) : scoreSeasonality(tech, now, def.kind);
         cell = score
           ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
           : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'Insufficient price history' };
       } else if (slot.kind === 'sentiment') {
-        // Commodities have their own contract; pairs combine two legs.
+        // A symbol with its own contract and no base leg (gold, indices, crypto)
+        // is scored directly, under the non-FX COT rule.
         if (def.cotContract && !def.base) {
+          /**
+           * A currency index is still a CURRENCY: it takes the FX rule of
+           * weekly change only, not the asset rule that adds net positioning.
+           * A1's EURO row settles it — EUR speculators are 43.7% long
+           * (positioning -1) against a +1.22% weekly change, and their cell
+           * reads +1, which is the change alone.
+           */
           const series = input.cot.get(def.cotContract);
-          const score = slot.key === 'cot' ? scoreCot(series) : scoreCrowd(series);
+          const cotRule = def.kind === 'currency' ? 'fx' : 'asset';
+          const score = slot.key === 'cot' ? scoreCot(series, cotRule) : scoreCrowd(series);
           cell = score
             ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
             : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'No COT data' };
@@ -172,20 +350,74 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
           const lookup = slot.key === 'cot' ? cotByCurrency : crowdByCurrency;
           const baseScore = def.base ? (lookup.get(def.base)?.cell ?? null) : null;
           const quoteScore = def.quote ? (lookup.get(def.quote)?.cell ?? null) : null;
-          const combined = combinePairCells(baseScore, quoteScore);
+          /**
+           * Every major has its own contract, so a currency in the lookup with
+           * no score means that contract failed THIS RUN — the one case the
+           * matrix used to render as a confident number.
+           */
+          // Crowd is +/-1 for the whole symbol, not per leg.
+          const combined = combinePairCells(baseScore, quoteScore, slot.maxCell, {
+            base: { label: def.base, expected: !!def.base && lookup.has(def.base) },
+            quote: { label: def.quote, expected: !!def.quote && lookup.has(def.quote) },
+          });
 
           cell = {
             slotKey: slot.key,
             cell: combined.cell,
             status: combined.status,
+            missingLeg: combined.missingLeg,
             baseCell: baseScore,
             quoteCell: quoteScore,
             explanation:
               combined.cell === null
                 ? 'No COT data for either leg'
-                : `${def.base ?? '—'} ${baseScore ?? 0} vs ${def.quote ?? '—'} ${quoteScore ?? 0}`,
+                : [
+                    `${def.base ?? '—'} ${baseScore ?? 0} vs ${def.quote ?? '—'} ${quoteScore ?? 0}`,
+                    missingLegNote(combined.missingLeg),
+                  ]
+                    .filter(Boolean)
+                    .join('  |  '),
           };
         }
+      } else if (def.macroEconomy) {
+        /**
+         * A single-economy symbol: gold, an index, a crypto. There is nothing to
+         * difference, so the home economy's reading passes through with a sign
+         * that depends on the asset class — strong US growth lifts the S&P and
+         * weighs on gold, and both of those are the same underlying print.
+         */
+        const result = currencyScores.get(def.macroEconomy)?.get(slot.key);
+        const raw = result?.cell ?? null;
+        const polarity = def.macroPolarity?.[slot.category as 'growth' | 'inflation' | 'jobs'] ?? 1;
+        /**
+         * ONE component, not two.
+         *
+         * Their inflation page describes a second, level-based component for
+         * non-FX assets (indices want CPI <=3%, gold gains at both extremes).
+         * Their product does not apply it: the GOLD Asset Scorecard shows CPI
+         * contributing +1, and its Inflation subtotal of +1 only reconciles
+         * without a level term — with one it would read +2.
+         *
+         * Documented but not shipped, so we do not ship it either.
+         */
+        const combined = raw === null ? null : normalizeZero(raw * polarity);
+
+        cell = {
+          slotKey: slot.key,
+          cell: combined,
+          status: combined === null ? (result?.status ?? 'no-data') : 'scored',
+          legs: toLegs(def.macroEconomy, result, slot.compare),
+          note: polarity === -1 ? invertedNote(slot.category) : undefined,
+          explanation:
+            combined === null
+              ? (result?.explanation ?? `No ${slot.label} data for ${def.macroEconomy}`)
+              : [
+                  raw === null ? null : `${def.macroEconomy}: ${result?.explanation}`,
+                  polarity === -1 ? invertedNote(slot.category) : null,
+                ]
+                  .filter(Boolean)
+                  .join('  |  '),
+        };
       } else {
         // Economic: base minus quote.
         const baseResult = def.base ? currencyScores.get(def.base)?.get(slot.key) : undefined;
@@ -193,14 +425,29 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
 
         const baseCell = baseResult?.cell ?? null;
         const quoteCell = quoteResult?.cell ?? null;
-        const combined = combinePairCells(baseCell, quoteCell);
+
+        /**
+         * A leg the economy simply never publishes ('no-data') is not a
+         * failure — that is what lets NZDUSD read the NFP column at all. A leg
+         * that resolved to a real series and then aged out or arrived without a
+         * reference IS one: the series exists, it just is not usable today, and
+         * the cell on screen is a single-economy reading wearing a pair's
+         * clothes.
+         */
+        const expected = (result: SlotResult | undefined) =>
+          result?.status === 'stale' || result?.status === 'not-released';
+
+        const combined = combinePairCells(baseCell, quoteCell, PAIR_CELL_MAX, {
+          base: { label: def.base, expected: expected(baseResult) },
+          quote: { label: def.quote, expected: expected(quoteResult) },
+        });
 
         // A cell is only stale if EVERY contributing leg is stale — one fresh
         // leg is still information.
         const statuses = [baseResult?.status, quoteResult?.status].filter(Boolean) as CellStatus[];
         const status: CellStatus =
           combined.cell !== null
-            ? 'scored'
+            ? combined.status
             : statuses.length > 0 && statuses.every((s) => s === 'stale')
               ? 'stale'
               : 'no-data';
@@ -208,14 +455,20 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
         const parts = [
           baseResult?.status === 'scored' ? `${def.base}: ${baseResult.explanation}` : null,
           quoteResult?.status === 'scored' ? `${def.quote}: ${quoteResult.explanation}` : null,
+          missingLegNote(combined.missingLeg),
         ].filter(Boolean);
 
         cell = {
           slotKey: slot.key,
           cell: combined.cell,
           status,
+          missingLeg: combined.missingLeg,
           baseCell,
           quoteCell,
+          legs: [
+            ...(def.base ? toLegs(def.base, baseResult, slot.compare) : []),
+            ...(def.quote ? toLegs(def.quote, quoteResult, slot.compare) : []),
+          ],
           explanation:
             parts.length > 0
               ? parts.join('  |  ')
@@ -225,10 +478,19 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
 
       cells[slot.key] = cell;
 
-      if (cell.cell !== null) {
+      // Context columns are resolved and rendered but never counted. Summing
+      // them would shift what A1's absolute +/-4 and +/-7 bands mean.
+      if (cell.cell !== null && slot.scoring) {
         total += cell.cell;
         categoryScores[slot.category] += cell.cell;
-        populated++;
+        /**
+         * A partial cell still votes — dropping it would swing the score
+         * further than the failure did — but it does not count as coverage.
+         * That split is the whole fix: the score stays defensible while
+         * `populated` stops overstating what the row is built on.
+         */
+        if (cell.status === 'partial') partialCount++;
+        else populated++;
       }
     }
 
@@ -245,6 +507,7 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
       categoryScores,
       cells,
       populated,
+      partial: partialCount,
       price: price?.price ?? null,
       changePct: price?.changePct ?? null,
     });

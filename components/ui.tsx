@@ -31,9 +31,127 @@ export function scoreColor(score: number, direction: Direction): string {
   return 'text-[var(--color-neutral)]';
 }
 
+// ---------------------------------------------------------------------------
+// Cell bias — the EdgeFinder vocabulary
+// ---------------------------------------------------------------------------
+
+export type CellBias =
+  | 'Very Bullish'
+  | 'Bullish'
+  | 'Neutral'
+  | 'Bearish'
+  | 'Very Bearish'
+  | 'No data';
+
+/**
+ * Turns a cell integer into the words EdgeFinder puts on it.
+ *
+ * A bare "+2" asks the reader to remember what that column's maximum is before
+ * they can tell a strong reading from a weak one — and the maxima are not
+ * uniform: trend and COT span +/-2, seasonality and crowd only +/-1. So the
+ * label is relative to the slot's own range, which is the only reading that
+ * means the same thing in every column.
+ *
+ * Deliberately NOT derived from BIAS_THRESHOLDS. Those are absolute cuts on a
+ * symbol TOTAL (>= +7 Very Bullish, >= +4 Bullish); a cell is a single vote on a
+ * two- or four-point scale and shares nothing with them but the words.
+ *
+ * `stale` is not routed through here. A cell that aged out is not neutral — it
+ * is unknown, and call sites render it as such.
+ */
+export function cellBias(cell: number | null, maxCell: number): { label: CellBias; tone: string } {
+  if (cell === null || !Number.isFinite(cell)) {
+    return { label: 'No data', tone: 'text-[var(--color-faint)]' };
+  }
+  if (cell === 0) return { label: 'Neutral', tone: 'text-[var(--color-muted)]' };
+
+  // "Very" only exists where the column has room for it. On a +/-1 column,
+  // +1 IS the maximum, and calling it Very Bullish would rank a one-point
+  // seasonality read alongside a two-point trend crossover.
+  const extreme = maxCell > 1 && Math.abs(cell) >= maxCell;
+
+  return cell > 0
+    ? {
+        label: extreme ? 'Very Bullish' : 'Bullish',
+        tone: 'text-[var(--color-bull)]',
+      }
+    : {
+        label: extreme ? 'Very Bearish' : 'Bearish',
+        tone: 'text-[var(--color-bear)]',
+      };
+}
+
+/** The same reading as a filled pill, for tables that need it to carry weight. */
+export function BiasPill({
+  cell,
+  maxCell,
+  stale = false,
+  partial = null,
+}: {
+  cell: number | null;
+  maxCell: number;
+  stale?: boolean;
+  /**
+   * The name of the leg that failed, when this cell was scored from the other
+   * one alone. The pill keeps its verdict — the reading is still the best
+   * available — and marks it, because a number built on half the usual inputs
+   * has no business looking identical to one built on all of them.
+   */
+  partial?: string | null;
+}) {
+  if (stale) {
+    return (
+      <span className="rounded px-1.5 py-0.5 text-[9px] text-[var(--color-faint)] italic">
+        stale
+      </span>
+    );
+  }
+
+  const { label, tone } = cellBias(cell, maxCell);
+
+  if (partial) {
+    return (
+      <span
+        className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap bg-[var(--color-surface-2)] ${tone}`}
+        style={{ boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' }}
+        title={`${cell === null ? 'no value' : formatScore(cell)} on a ±${maxCell} column — the ${partial} leg is missing, so this is scored from the other leg alone`}
+      >
+        {cell !== null && <span className="tnum">{formatScore(cell)}</span>}
+        <span className="font-medium">{label}</span>
+        <span className="text-[var(--color-uncertain)]">◐</span>
+      </span>
+    );
+  }
+  const bg =
+    cell === null || cell === 0
+      ? 'bg-[var(--color-surface-2)]'
+      : cell > 0
+        ? 'bg-[var(--color-bull)]/12'
+        : 'bg-[var(--color-bear)]/12';
+
+  return (
+    <span
+      className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${bg} ${tone}`}
+      title={`${cell === null ? 'no value' : formatScore(cell)} on a ±${maxCell} column`}
+    >
+      {cell !== null && <span className="tnum">{formatScore(cell)}</span>}
+      <span className="font-medium">{label}</span>
+    </span>
+  );
+}
+
 /** Always signed, so a positive score is unambiguous at a glance. */
+/**
+ * Signed score for display.
+ *
+ * A whole number prints without a decimal: the scorecard total is a sum of
+ * integer cells, and rendering it as "+6.0" implies a precision the model does
+ * not have. The continuous news engine still produces genuine fractions, and
+ * those keep their tenth.
+ */
 export function formatScore(score: number): string {
-  return `${score > 0 ? '+' : ''}${score.toFixed(1)}`;
+  const sign = score > 0 ? '+' : '';
+  return `${sign}${Number.isInteger(score) ? score : score.toFixed(1)}`;
 }
 
 export function formatValue(value: number | null, unit?: string | null): string {
@@ -48,6 +166,41 @@ export function formatValue(value: number | null, unit?: string | null): string 
   else text = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
 
   return unit ? `${text}${unit}` : text;
+}
+
+/**
+ * Decimal places for a market price, from its magnitude.
+ *
+ * A price is not a general-purpose number and must not be formatted like one.
+ * `toLocaleString()` caps at three fraction digits, which rendered EURUSD's
+ * 1.15550 as "1.156" — a pip and a half of invented precision loss on the one
+ * number a trader reads first. Five places for FX, three for metals and
+ * indices under 1000, one above.
+ */
+export function priceDecimals(price: number): number {
+  return price >= 1000 ? 1 : price >= 10 ? 3 : 5;
+}
+
+export function formatPrice(price: number | null | undefined): string {
+  if (price === null || price === undefined || !Number.isFinite(price)) return '—';
+  return price.toFixed(priceDecimals(Math.abs(price)));
+}
+
+/**
+ * A signed percentage, always with its sign, for day changes.
+ * Zero prints as "0.00%" with no sign — a flat market is not a rise.
+ */
+export function formatChangePct(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined || !Number.isFinite(pct)) return '—';
+  return `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+}
+
+/** Bull / bear / muted for a signed number, in the token colours. */
+export function changeColor(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined || !Number.isFinite(pct) || pct === 0) {
+    return 'text-[var(--color-muted)]';
+  }
+  return pct > 0 ? 'text-[var(--color-bull)]' : 'text-[var(--color-bear)]';
 }
 
 // ---------------------------------------------------------------------------

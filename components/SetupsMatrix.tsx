@@ -17,7 +17,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { SLOTS, SLOT_CATEGORIES, type SlotCategory } from '@/config/setups.config';
+import { SCORING_SLOTS, SLOTS, SLOT_CATEGORIES, type SlotCategory } from '@/config/setups.config';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
 
 const BIAS_STYLE: Record<string, string> = {
@@ -31,11 +31,28 @@ const BIAS_STYLE: Record<string, string> = {
 /**
  * Cell background.
  *
- * Blue for positive rather than green: the bull/bear green already means
- * "direction" elsewhere in the app, and reusing it here would imply these cells
- * are directly comparable with the -10..+10 scores. They are a different scale.
+ * Blue for positive rather than green: the bull/bear green means "this is the
+ * verdict" on the score and bias columns, and a grid of 13 green cells competes
+ * with the one number the row is actually about. The hue difference is a
+ * hierarchy cue, not a claim that the scales differ — since the scorecard was
+ * unified there is only one scale in the app.
  */
+/**
+ * A cell whose number came from one leg because the other failed.
+ *
+ * It keeps its colour and its digit — it still votes, and blanking it would
+ * overstate the failure. The amber inset ring is the whole message: this number
+ * is built on half the usual information, and if it moved since the last run
+ * that is probably why.
+ */
+const PARTIAL_RING = 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)';
+
 function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProperties; text: string } {
+  if (cell.status === 'partial') {
+    const base = cellStyle({ ...cell, status: 'scored' });
+    return { ...base, style: { ...base.style, boxShadow: PARTIAL_RING } };
+  }
+
   if (cell.status === 'stale') {
     return {
       className: 'bg-[var(--color-surface-2)]/40 text-[var(--color-faint)] italic',
@@ -52,20 +69,40 @@ function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProp
   }
 
   const positive = v > 0;
-  const intensity = Math.abs(v) === 2 ? 0.55 : 0.28;
-  const rgb = positive ? '58, 122, 224' : '242, 80, 110';
+  const magnitude = Math.abs(v);
+  // Trend reaches 3, so this is a three-step ramp rather than the old binary.
+  const intensity = magnitude >= 3 ? 0.72 : magnitude === 2 ? 0.55 : 0.28;
+  const rgb = positive
+    ? 'var(--color-bull-cell-rgb)'
+    : 'var(--color-bear-cell-rgb)';
 
   return {
     className: 'font-semibold',
     style: {
-      backgroundColor: `rgba(${rgb}, ${intensity})`,
-      color: Math.abs(v) === 2 ? '#fff' : `rgb(${rgb})`,
+      backgroundColor: `rgb(${rgb} / ${intensity * 100}%)`,
+      color: magnitude >= 2 ? '#fff' : `rgb(${rgb})`,
     },
-    text: `${positive ? '' : '-'}${Math.abs(v)}`,
+    text: `${positive ? '' : '-'}${magnitude}`,
   };
 }
 
 type SortKey = 'score' | 'symbol';
+
+/**
+ * Column presets, mirroring the variants A1 offers.
+ *
+ *   full    every column, scoring and context
+ *   simple  no indicator columns at all — just the total and the block subtotals
+ *   macro   economic columns only, which is how you read "what does the data say"
+ *           without the technical and positioning noise
+ */
+type ViewKey = 'full' | 'simple' | 'macro';
+
+const VIEWS: { key: ViewKey; label: string; hint: string }[] = [
+  { key: 'full', label: 'Full', hint: 'Every column' },
+  { key: 'simple', label: 'Simple', hint: 'Totals and block subtotals only' },
+  { key: 'macro', label: 'Macro', hint: 'Economic columns only' },
+];
 
 /** Every indicator column is this wide, so the grid reads as a grid. */
 const INDICATOR_COL_WIDTH = 52;
@@ -102,15 +139,33 @@ export function SetupsMatrix({
   const [category, setCategory] = useState<SlotCategory | 'all'>('all');
   const [sort, setSort] = useState<SortKey>('score');
   const [hideNeutral, setHideNeutral] = useState(false);
+  const [view, setView] = useState<ViewKey>('full');
 
-  const visibleSlots = useMemo(
-    () => (category === 'all' ? SLOTS : SLOTS.filter((s) => s.category === category)),
-    [category],
-  );
+  /**
+   * View and category compose: Macro-Only narrowed to Inflation shows the
+   * inflation economics and nothing else. `full` is the only view that shows
+   * context columns — the whole point of Simple and Macro is fewer columns, and
+   * a non-scoring column is the first thing to drop.
+   */
+  const visibleSlots = useMemo(() => {
+    const byView =
+      view === 'macro'
+        ? SLOTS.filter((s) => s.scoring && s.kind !== 'technical' && s.kind !== 'sentiment')
+        : view === 'simple'
+          ? []
+          : SLOTS;
+
+    return category === 'all' ? byView : byView.filter((s) => s.category === category);
+  }, [view, category]);
 
   const visibleCategories = useMemo(
-    () => SLOT_CATEGORIES.filter((c) => category === 'all' || c.key === category),
-    [category],
+    () =>
+      SLOT_CATEGORIES.filter(
+        (c) =>
+          (category === 'all' || c.key === category) &&
+          visibleSlots.some((s) => s.category === c.key),
+      ),
+    [category, visibleSlots],
   );
 
   const filtered = useMemo(() => {
@@ -128,7 +183,25 @@ export function SetupsMatrix({
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* --- Controls -------------------------------------------------- */}
       <header className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
-        <h2 className="mr-auto text-[13px] font-semibold tracking-wide uppercase">Top Setups</h2>
+        <h2 className="text-[13px] font-semibold tracking-wide uppercase">Top Setups</h2>
+
+        <div className="mr-auto flex rounded border border-[var(--color-border)] p-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              title={v.hint}
+              onClick={() => setView(v.key)}
+              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                view === v.key
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
 
         <input
           type="search"
@@ -219,16 +292,38 @@ export function SetupsMatrix({
               {visibleSlots.map((slot) => (
                 <th
                   key={slot.key}
-                  title={slot.title}
+                  title={
+                    slot.scoring
+                      ? slot.title
+                      : `${slot.title} — context only, not counted in the score`
+                  }
                   /* Fixed width on every indicator column. Without this the
                      header text sizes each one and the grid comes out ragged —
                      "Crowd Sentiment" was three times the width of "COT". */
                   style={{ width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
-                  className="border-b border-[var(--color-border)] px-0.5 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)]"
+                  className={`border-b border-[var(--color-border)] px-0.5 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)] ${
+                    // A context column has to be tellable from a scoring one at a
+                    // glance, or the row's total looks like it does not add up.
+                    slot.scoring ? '' : 'italic opacity-60'
+                  }`}
                 >
                   {slot.label}
+                  {!slot.scoring && <span className="align-super text-[7px]">°</span>}
                 </th>
               ))}
+
+              {/* Simple view swaps 19 indicator columns for 5 block subtotals. */}
+              {view === 'simple' &&
+                SLOT_CATEGORIES.map((cat) => (
+                  <th
+                    key={cat.key}
+                    title={cat.label}
+                    style={{ minWidth: 78 }}
+                    className="border-b border-[var(--color-border)] px-2 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)]"
+                  >
+                    {cat.label.split(' ')[0]}
+                  </th>
+                ))}
             </tr>
           </thead>
 
@@ -263,7 +358,26 @@ export function SetupsMatrix({
                 >
                   <span className={`text-[10px] ${BIAS_STYLE[row.bias]}`}>{row.bias}</span>
                   {/* Populated count keeps a thin row from reading as confident. */}
-                  <span className="ml-1.5 text-[9px] text-[var(--color-faint)]">{row.populated}</span>
+                  <span
+                    className="ml-1.5 text-[9px] text-[var(--color-faint)]"
+                    title={`${row.populated} of ${SCORING_SLOTS.length} scored indicators resolved completely`}
+                  >
+                    {row.populated}
+                  </span>
+                  {/*
+                    Partial cells are called out beside the coverage count rather
+                    than folded into it: a row reading "16 +2◐" is saying two of
+                    its numbers came from one leg, which is a different kind of
+                    thinness from simply having fewer columns.
+                  */}
+                  {row.partial > 0 && (
+                    <span
+                      className="ml-1 text-[9px] text-[var(--color-uncertain)]"
+                      title={`${row.partial} cell(s) built from one leg because the other was expected and did not arrive`}
+                    >
+                      +{row.partial}◐
+                    </span>
+                  )}
                 </td>
 
                 {visibleSlots.map((slot) => {
@@ -280,6 +394,27 @@ export function SetupsMatrix({
                     </td>
                   );
                 })}
+
+                {view === 'simple' &&
+                  SLOT_CATEGORIES.map((cat) => {
+                    const value = row.categoryScores[cat.key];
+                    return (
+                      <td
+                        key={cat.key}
+                        style={{ minWidth: 78 }}
+                        className={`tnum border-b border-[var(--color-border)] px-2 py-0.5 text-center font-semibold ${
+                          value > 0
+                            ? 'text-[var(--color-bull-cell)]'
+                            : value < 0
+                              ? 'text-[var(--color-bear)]'
+                              : 'text-[var(--color-muted)]'
+                        }`}
+                      >
+                        {value > 0 ? '+' : ''}
+                        {value}
+                      </td>
+                    );
+                  })}
               </tr>
             ))}
           </tbody>
@@ -305,9 +440,22 @@ export function SetupsMatrix({
           <span className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/40" />
           stale — outside its freshness window, not scored
         </span>
+        <span className="flex items-center gap-1">
+          <span
+            className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/70"
+            style={{ boxShadow: PARTIAL_RING }}
+          />
+          partial — one leg missing, scored from the other
+        </span>
         <span>blank = not published for that currency</span>
+        {/* Only meaningful while some column is carried but not scored. */}
+        {SLOTS.length > SCORING_SLOTS.length && (
+          <span className="italic opacity-60">
+            ° {SLOTS.length - SCORING_SLOTS.length} context columns — shown, never counted
+          </span>
+        )}
         <span className="ml-auto">
-          The number after the bias is how many of {SLOTS.length} indicators had data.
+          The number after the bias is how many of {SCORING_SLOTS.length} scored indicators had data.
           {cotReportDate && ` COT as of ${cotReportDate}.`}
         </span>
       </footer>

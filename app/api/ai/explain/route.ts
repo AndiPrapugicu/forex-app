@@ -1,6 +1,10 @@
 /**
  * On-demand AI explanation for a single event.
  *
+ * Named `explain`, not `summarize`: summarising and headline classification were
+ * deleted when they turned out to be dead code, and the route kept the old name
+ * for a job it no longer did.
+ *
  * Deliberately NOT part of the ingest pipeline: explanations are generated when
  * someone actually opens an event, so a cron run over 200 events never bills the
  * user for prose nobody reads.

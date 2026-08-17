@@ -8,7 +8,9 @@
 
 import { NextResponse } from 'next/server';
 import { runPipeline } from '@/lib/pipeline';
-import { getStore } from '@/lib/db/client';
+import { runSetupsPipeline } from '@/lib/setups-pipeline';
+import { buildSnapshots } from '@/lib/scoring/history';
+import { getStore, type Store } from '@/lib/db/client';
 
 // Always dynamic: this route has side effects and must never be cached.
 export const dynamic = 'force-dynamic';
@@ -38,6 +40,26 @@ function authorize(request: Request): string | null {
   return 'unauthorized';
 }
 
+/**
+ * Captures a score snapshot per symbol.
+ *
+ * Deliberately swallows its own failures. This runs alongside alert delivery,
+ * and the free feeds have no history endpoint — so a broken snapshot write
+ * should cost one data point, never the alerts that matter more. The outcome is
+ * reported in the response rather than thrown, so a persistent failure is still
+ * visible in the workflow log.
+ */
+async function captureHistory(store: Store): Promise<{ saved: number; error?: string }> {
+  try {
+    const { matrix } = await runSetupsPipeline();
+    const snapshots = buildSnapshots(matrix);
+    await store.saveSnapshots(snapshots);
+    return { saved: snapshots.length };
+  } catch (err) {
+    return { saved: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 async function handle(request: Request) {
   const denied = authorize(request);
   if (denied) {
@@ -49,6 +71,7 @@ async function handle(request: Request) {
   try {
     const result = await runPipeline({ deliverAlerts: true });
     const store = getStore();
+    const history = await captureHistory(store);
 
     // Configured is not the same as working. With credentials set but no schema,
     // every query fails and alerts are silently suppressed — so dedupe is only
@@ -62,6 +85,11 @@ async function handle(request: Request) {
       storageOk: storage.ok,
       storageDetail: storage.detail,
       alertDedupeReliable: store.durable && storage.ok,
+      snapshotsSaved: history.saved,
+      snapshotError: history.error,
+      // Snapshots in memory vanish between serverless invocations, so history
+      // only accumulates for real once Supabase is configured.
+      historyDurable: store.durable && storage.ok,
       unsecured: !process.env.CRON_SECRET,
       events: result.dashboard.upcoming.length + result.dashboard.recent.length,
       newAlerts: result.newAlerts.length,

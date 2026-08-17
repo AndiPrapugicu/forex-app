@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import { FXSTREET } from '@/config/sources.config';
-import { fetchJson, stableId, useFixtures } from '@/lib/connectors/base';
+import { fetchJson, stableId, fixturesEnabled } from '@/lib/connectors/base';
 import { isMajor, ok, type Impact, type NormalizedEvent, type Result } from '@/lib/types';
 
 /**
@@ -130,7 +130,7 @@ function parsePayload(payload: unknown, source: string): Result<NormalizedEvent[
  * gets its actuals, since an event's `actual` is filled in after publication.
  */
 export async function fetchFxStreetCalendar(now = new Date()): Promise<Result<NormalizedEvent[]>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     const fixture = (await import('@/fixtures/sample-fxstreet.json')).default;
     return parsePayload(fixture, 'fxstreet:fixture');
   }
@@ -176,7 +176,7 @@ export async function fetchFxStreetHistory(
   now = new Date(),
   days = FXSTREET.historyLookbackDays,
 ): Promise<Result<NormalizedEvent[]>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     const fixture = (await import('@/fixtures/sample-fxstreet.json')).default;
     return parsePayload(fixture, 'fxstreet:fixture');
   }

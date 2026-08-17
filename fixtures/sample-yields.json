@@ -1,0 +1,14 @@
+[
+  {
+    "currency": "USD",
+    "value": 4.25,
+    "observedOn": "2026-08-06",
+    "source": "FRED"
+  },
+  {
+    "currency": "EUR",
+    "value": 2.6725142222,
+    "observedOn": "2026-08-06",
+    "source": "ECB Data Portal"
+  }
+]

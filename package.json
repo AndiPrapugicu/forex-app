@@ -12,15 +12,18 @@
     "test:watch": "vitest",
     "drill:fxstreet": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/drill-fxstreet-down.ts",
     "fixtures": "npx tsx --tsconfig tsconfig.tsx.json scripts/capture-fixtures.ts",
-    "check:supabase": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-supabase.ts"
+    "check:supabase": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-supabase.ts",
+    "backtest": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/backtest.ts",
+    "check:ai": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-ai.ts",
+    "verify:board": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/board-stability.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
     "fast-xml-parser": "^5.10.1",
+    "lightweight-charts": "^5.2.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "recharts": "^3.10.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

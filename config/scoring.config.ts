@@ -392,6 +392,10 @@ export type Regime = 'hiking' | 'cutting' | 'neutral';
  *                     calling the risks balanced.                       -> neutral
  *   CHF  SNB   0.00%  Held at zero, 2026 inflation forecast nudged UP
  *                     0.5% -> 0.6%, FX intervention readiness raised.   -> neutral
+ *   ZAR  SARB  7.00%  Hiked 6.75% -> 7.00% on 28 May 2026, then HELD on
+ *                     23 July against a 7.25% consensus. A cycle that
+ *                     stopped short of what the market priced is not
+ *                     still hiking, and one hold is not easing.         -> neutral
  *
  * To re-check: each bank publishes its decision statement, and the app's own
  * upcoming-events panel lists the next rate decisions. Update this block and the
@@ -407,6 +411,7 @@ export const CURRENCY_REGIME: Record<Currency, Regime> = {
   NZD: 'cutting',
   CAD: 'neutral',
   CHF: 'neutral',
+  ZAR: 'neutral',
 };
 
 /**
@@ -430,6 +435,10 @@ export const REGIME_MULTIPLIER: Record<Regime, number> = {
 export const SOURCE_CONFIDENCE = {
   manual: 95,
   fxstreet: 90,
+  // A calendar aggregator: a real published number carrying the same consensus
+  // ForexFactory shows, but one hop further from the issuing agency than
+  // FXStreet's own feed.
+  tradingview: 85,
   dbnomics: 80,
   faireconomy: 70,
   'ai-extracted': 55,

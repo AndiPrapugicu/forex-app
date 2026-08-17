@@ -9,7 +9,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { KEYWORD_RULES, NEWS_FEEDS, REGION_CURRENCY, RSS_CACHE_TTL_SECONDS, type NewsFeed } from '@/config/sources.config';
-import { extractDomain, fetchText, stableId, useFixtures } from '@/lib/connectors/base';
+import { extractDomain, fetchText, stableId, fixturesEnabled } from '@/lib/connectors/base';
 import { isMajor, ok, type Category, type Currency, type NewsItem, type Result } from '@/lib/types';
 
 /** RSS in the wild is inconsistent; be permissive and normalise afterwards. */
@@ -188,7 +188,7 @@ function parseFeed(xml: string, feed: NewsFeed): NewsItem[] {
  * useful, and the degraded message names exactly which sources are missing.
  */
 export async function fetchNews(): Promise<Result<NewsItem[]>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     const fixture = (await import('@/fixtures/sample-news.json')).default;
     return ok('rss:fixture', fixture as NewsItem[]);
   }

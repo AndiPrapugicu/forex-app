@@ -143,7 +143,7 @@ export function IndicatorChart({ series }: { series: IndicatorSeries }) {
                 // Colour by beat/miss, not by sign: the point of the chart is
                 // the comparison with forecast, not whether the number is
                 // positive.
-                fill={beat ? 'rgba(58,122,224,0.85)' : miss ? 'rgba(242,80,110,0.8)' : 'rgba(107,119,148,0.7)'}
+                fill={beat ? 'rgb(var(--color-bull-cell-rgb) / 85%)' : miss ? 'rgba(242,80,110,0.8)' : 'rgba(107,119,148,0.7)'}
                 opacity={hover === null || hover === i ? 1 : 0.45}
                 onMouseEnter={() => setHover(i)}
               />
@@ -188,7 +188,7 @@ export function IndicatorChart({ series }: { series: IndicatorSeries }) {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-4 py-2 text-[10px]">
         <span className="flex items-center gap-1 text-[var(--color-faint)]">
-          <span className="inline-block h-2.5 w-3 rounded-sm" style={{ backgroundColor: 'rgba(58,122,224,0.85)' }} />
+          <span className="inline-block h-2.5 w-3 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bull-cell-rgb) / 85%)' }} />
           beat forecast
         </span>
         <span className="flex items-center gap-1 text-[var(--color-faint)]">

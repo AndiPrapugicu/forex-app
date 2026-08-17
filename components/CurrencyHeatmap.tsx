@@ -121,17 +121,17 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
                     const intensity = Math.min(Math.abs(c.score) / 6, 1);
                     const uncertain = c.confidence < 40;
                     const rgb = uncertain
-                      ? '224, 160, 58'
+                      ? 'var(--color-uncertain-rgb)'
                       : c.score > 0
-                        ? '38, 208, 164'
-                        : '242, 80, 110';
+                        ? 'var(--color-bull-rgb)'
+                        : 'var(--color-bear-cell-rgb)';
 
                     return (
                       <td
                         key={quote}
                         className="tnum h-8 rounded text-[11px] font-semibold"
                         style={{
-                          backgroundColor: `rgba(${rgb}, ${0.08 + intensity * 0.42})`,
+                          backgroundColor: `rgb(${rgb} / ${(0.08 + intensity * 0.42) * 100}%)`,
                           color: intensity > 0.35 ? `rgb(${rgb})` : 'var(--color-muted)',
                         }}
                         title={`${base}/${quote} score ${formatScore(c.score)}, confidence ${c.confidence}${uncertain ? ' (below threshold — treat as uncertain)' : ''}`}

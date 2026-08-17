@@ -18,8 +18,16 @@
 import { describe, expect, it } from 'vitest';
 import { EVENT_RULES, matchEventRule } from '@/config/scoring.config';
 import { PRIMARY_COUNTRY, SLOTS } from '@/config/setups.config';
-import { ALL_SYMBOLS, CURRENCY_COT_CONTRACT, FX_SYMBOLS } from '@/config/symbols.config';
-import { MAJORS } from '@/lib/types';
+import {
+  ALL_SYMBOLS,
+  CURRENCY_COT_CONTRACT,
+  FX_SYMBOLS,
+  MINOR_FX_SYMBOLS,
+  findSymbol,
+  streamTicker,
+  tradingViewSymbol,
+} from '@/config/symbols.config';
+import { MAJORS, isMajor } from '@/lib/types';
 
 /** [event name as it appears in the feed, expected rule key] */
 const CLASSIFICATIONS: [string, string][] = [
@@ -106,10 +114,21 @@ describe('setups config', () => {
   });
 
   it('gives every economic slot a polarity and at least one pattern', () => {
+    const hasPatterns = (m: { match?: RegExp[]; matchByCurrency?: object }) =>
+      (m.match?.length ?? 0) > 0 || Object.keys(m.matchByCurrency ?? {}).length > 0;
+
     for (const slot of SLOTS.filter((s) => s.kind === 'economic')) {
       expect(slot.polarity, `${slot.key} polarity`).toBeDefined();
-      const hasPatterns = (slot.match?.length ?? 0) > 0 || Object.keys(slot.matchByCurrency ?? {}).length > 0;
-      expect(hasPatterns, `${slot.key} patterns`).toBe(true);
+
+      // A composite slot (PMI) carries its patterns on its components instead.
+      if (slot.components) {
+        expect(slot.components.length, `${slot.key} components`).toBeGreaterThan(0);
+        for (const component of slot.components) {
+          expect(hasPatterns(component), `${slot.key}.${component.key} patterns`).toBe(true);
+        }
+      } else {
+        expect(hasPatterns(slot), `${slot.key} patterns`).toBe(true);
+      }
     }
   });
 
@@ -122,9 +141,36 @@ describe('setups config', () => {
 
 describe('symbols config', () => {
   it('builds all 28 unique major pairs', () => {
-    expect(FX_SYMBOLS).toHaveLength(28);
-    const symbols = FX_SYMBOLS.map((s) => s.symbol);
-    expect(new Set(symbols).size).toBe(28);
+    /**
+     * The cross product, measured on its own rather than on FX_SYMBOLS.
+     *
+     * FX_SYMBOLS now also carries hand-listed minors, and asserting a flat
+     * total would turn "one more minor pair" into a failing test with nothing
+     * wrong. What must not drift is that the eight majors still produce exactly
+     * their 28 combinations and no duplicates.
+     */
+    const crosses = FX_SYMBOLS.filter(
+      (s) => isMajor(s.base) && isMajor(s.quote),
+    );
+    expect(crosses).toHaveLength(28);
+    expect(new Set(crosses.map((s) => s.symbol)).size).toBe(28);
+  });
+
+  it('lists every minor pair by hand rather than crossing it', () => {
+    // A minor in MAJORS would silently create seven more pairs against it.
+    for (const s of MINOR_FX_SYMBOLS) {
+      expect(isMajor(s.base) && isMajor(s.quote), s.symbol).toBe(false);
+      expect(FX_SYMBOLS).toContain(s);
+    }
+  });
+
+  it('maps every currency with a scored leg to a COT contract', () => {
+    // A pair whose leg has no contract gets a silently empty COT cell rather
+    // than an error, so this is the only place that catches it.
+    for (const s of FX_SYMBOLS) {
+      expect(CURRENCY_COT_CONTRACT[s.base!], s.base).toBeTruthy();
+      expect(CURRENCY_COT_CONTRACT[s.quote!], s.quote).toBeTruthy();
+    }
   });
 
   it('never pairs a currency with itself', () => {
@@ -142,5 +188,73 @@ describe('symbols config', () => {
 
   it('maps every major currency to a COT contract', () => {
     for (const c of MAJORS) expect(CURRENCY_COT_CONTRACT[c], c).toBeTruthy();
+  });
+
+  /**
+   * The copper bug, generalised.
+   *
+   * `tradingViewSymbol` falls through to `FX:${symbol}` for FX and to the bare
+   * symbol for everything else. That fallback is right for the 36 FX pairs and
+   * wrong for every non-FX row, because our tickers — XCUUSD, XAUUSD, SPX500 —
+   * are our own invention and TradingView has never heard of them. Copper shipped
+   * without an entry and the widget came up blank with nothing on screen saying
+   * why, because an unresolvable ticker is not an error there.
+   */
+  /**
+   * The streaming aliases.
+   *
+   * Yahoo's socket ACCEPTS a subscription to `USDJPY=X` and then never sends a
+   * frame for it — measured at zero over 40 seconds against 39 for `JPY=X`. So
+   * the failure this guards is not an error anywhere; it is USDJPY, USDCHF and
+   * USDCAD quietly staying on the 15-second poll while every other pair
+   * streams, which looks exactly like nothing being wrong.
+   */
+  it('strips the USD from USD-base pairs, which is the only name that ticks', () => {
+    const streamOf = (symbol: string) => streamTicker(findSymbol(symbol)!);
+
+    expect(streamOf('USDJPY')).toBe('JPY=X');
+    expect(streamOf('USDCHF')).toBe('CHF=X');
+    expect(streamOf('USDCAD')).toBe('CAD=X');
+
+    // Only when USD is the BASE. Everything else keeps its own ticker.
+    expect(streamOf('EURUSD')).toBe('EURUSD=X');
+    expect(streamOf('GBPUSD')).toBe('GBPUSD=X');
+    expect(streamOf('EURGBP')).toBe('EURGBP=X');
+  });
+
+  it('does not offer a socket for the futures that never send one', () => {
+    // GC=F, SI=F, CL=F and HG=F all accept the subscription and stay silent;
+    // they are ten minutes delayed over REST and a socket does not change that.
+    for (const symbol of ['XAUUSD', 'XAGUSD', 'WTIUSD', 'XCUUSD', 'EURX']) {
+      expect(streamTicker(findSymbol(symbol)!), symbol).toBeNull();
+    }
+
+    // Cash indices and the dollar index DO stream, during their own session.
+    expect(streamTicker(findSymbol('UK100')!)).toBe('^FTSE');
+    expect(streamTicker(findSymbol('DXY')!)).toBe('DX-Y.NYB');
+  });
+
+  it('never maps two symbols onto one stream ticker', () => {
+    // The tick fan-out is keyed by feed ticker, so a collision would deliver
+    // one market's price to another market's row.
+    const seen = new Map<string, string>();
+    for (const s of ALL_SYMBOLS) {
+      const ticker = streamTicker(s);
+      if (!ticker) continue;
+      expect(seen.has(ticker), `${ticker} claimed by both ${seen.get(ticker)} and ${s.symbol}`).toBe(
+        false,
+      );
+      seen.set(ticker, s.symbol);
+    }
+  });
+
+  it('gives every non-FX symbol an explicit TradingView ticker', () => {
+    for (const s of ALL_SYMBOLS) {
+      if (s.kind === 'fx') continue;
+      expect(
+        tradingViewSymbol(s),
+        `${s.symbol} falls through to a ticker TradingView cannot resolve`,
+      ).toMatch(/^[A-Z0-9_]+:/);
+    }
   });
 });

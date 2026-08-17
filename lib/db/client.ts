@@ -9,7 +9,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Alert, EventScore, NewsItem, NormalizedEvent } from '@/lib/types';
+import type { Alert, EventScore, NewsItem, NormalizedEvent, ScoreSnapshot } from '@/lib/types';
 
 export interface Store {
   /** False for the memory fallback — alert dedupe is best-effort only. */
@@ -48,6 +48,21 @@ export interface Store {
 
   getAiCache(hash: string): Promise<unknown | null>;
   setAiCache(hash: string, kind: string, model: string, output: unknown): Promise<void>;
+
+  /**
+   * Appends one score snapshot per symbol. Idempotent on (symbol, capturedAt),
+   * so a cron run that overlaps itself cannot double-write.
+   */
+  saveSnapshots(snapshots: ScoreSnapshot[]): Promise<void>;
+  /** Snapshots for one symbol, oldest first, for charting against price. */
+  getSnapshots(symbol: string, sinceUtc: string): Promise<ScoreSnapshot[]>;
+  /**
+   * Snapshots for EVERY symbol since a cut-off, oldest first.
+   *
+   * The change log needs one prior reading for each of ~51 rows, and doing that
+   * through `getSnapshots` would be 51 round trips on every page render.
+   */
+  getAllSnapshots(sinceUtc: string): Promise<ScoreSnapshot[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +80,8 @@ const mem = {
   news: new Map<string, NewsItem>(),
   alerts: new Map<string, Alert>(),
   ai: new Map<string, unknown>(),
+  /** Keyed `symbol|capturedAt`, mirroring the table's composite primary key. */
+  snapshots: new Map<string, ScoreSnapshot>(),
 };
 
 class MemoryStore implements Store {
@@ -142,11 +159,53 @@ class MemoryStore implements Store {
   async setAiCache(hash: string, _kind: string, _model: string, output: unknown) {
     mem.ai.set(hash, output);
   }
+
+  /**
+   * Works, but only within one process. On Vercel each invocation gets its own
+   * memory, so history accumulated here is lost between requests — which is
+   * why `durable` is false and the history page says so rather than rendering
+   * an empty chart as though nothing had happened.
+   */
+  async saveSnapshots(snapshots: ScoreSnapshot[]) {
+    for (const s of snapshots) mem.snapshots.set(`${s.symbol}|${s.capturedAtUtc}`, s);
+  }
+
+  async getSnapshots(symbol: string, sinceUtc: string) {
+    return [...mem.snapshots.values()]
+      .filter((s) => s.symbol === symbol && s.capturedAtUtc >= sinceUtc)
+      .sort((a, b) => a.capturedAtUtc.localeCompare(b.capturedAtUtc));
+  }
+
+  async getAllSnapshots(sinceUtc: string) {
+    return [...mem.snapshots.values()]
+      .filter((s) => s.capturedAtUtc >= sinceUtc)
+      .sort((a, b) => a.capturedAtUtc.localeCompare(b.capturedAtUtc));
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Supabase store
 // ---------------------------------------------------------------------------
+
+function rowToSnapshot(r: Record<string, unknown>): ScoreSnapshot {
+  return {
+    symbol: r.symbol as string,
+    capturedAtUtc: new Date(r.captured_at as string).toISOString(),
+    totalScore: r.total_score as number,
+    bias: r.bias as string,
+    populated: r.populated as number,
+    categoryScores: {
+      technical: r.technical as number,
+      sentiment: r.sentiment as number,
+      growth: r.growth as number,
+      inflation: r.inflation as number,
+      jobs: r.jobs as number,
+    },
+    price: (r.price as number) ?? null,
+    cells: (r.cells ?? {}) as Record<string, number | null>,
+    partialLegs: (r.partial_legs ?? {}) as Record<string, string>,
+  };
+}
 
 /** DB snake_case <-> app camelCase. Kept explicit; the shapes must not drift. */
 function rowToEvent(r: Record<string, unknown>): NormalizedEvent {
@@ -405,6 +464,56 @@ class SupabaseStore implements Store {
 
   async setAiCache(hash: string, kind: string, model: string, output: unknown) {
     await this.db.from('ai_cache').upsert({ hash, kind, model, output }, { onConflict: 'hash' });
+  }
+
+  async saveSnapshots(snapshots: ScoreSnapshot[]) {
+    if (!snapshots.length) return;
+
+    const rows = snapshots.map((s) => ({
+      symbol: s.symbol,
+      captured_at: s.capturedAtUtc,
+      total_score: s.totalScore,
+      bias: s.bias,
+      populated: s.populated,
+      technical: s.categoryScores.technical ?? 0,
+      sentiment: s.categoryScores.sentiment ?? 0,
+      growth: s.categoryScores.growth ?? 0,
+      inflation: s.categoryScores.inflation ?? 0,
+      jobs: s.categoryScores.jobs ?? 0,
+      price: s.price,
+      cells: s.cells,
+      partial_legs: s.partialLegs ?? {},
+    }));
+
+    // Composite key, so a re-run at the same timestamp overwrites rather than
+    // erroring or duplicating.
+    const { error } = await this.db
+      .from('score_snapshots')
+      .upsert(rows, { onConflict: 'symbol,captured_at' });
+    if (error) throw new Error(`saveSnapshots: ${error.message}`);
+  }
+
+  async getSnapshots(symbol: string, sinceUtc: string) {
+    const { data, error } = await this.db
+      .from('score_snapshots')
+      .select('*')
+      .eq('symbol', symbol)
+      .gte('captured_at', sinceUtc)
+      .order('captured_at', { ascending: true });
+
+    if (error) throw new Error(`getSnapshots: ${error.message}`);
+    return (data ?? []).map(rowToSnapshot);
+  }
+
+  async getAllSnapshots(sinceUtc: string) {
+    const { data, error } = await this.db
+      .from('score_snapshots')
+      .select('*')
+      .gte('captured_at', sinceUtc)
+      .order('captured_at', { ascending: true });
+
+    if (error) throw new Error(`getAllSnapshots: ${error.message}`);
+    return (data ?? []).map(rowToSnapshot);
   }
 }
 

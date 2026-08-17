@@ -10,16 +10,43 @@
 // Currencies & assets
 // ---------------------------------------------------------------------------
 
-/** The 8 majors. Everything else from a feed is ingested but not scored. */
+/**
+ * The 8 majors. This list is what `buildFxPairs()` crosses into the 28 pairs,
+ * and what the currency-strength and carry tables rank — so it is a
+ * SCORING-UNIVERSE list, not merely a list of currency codes.
+ */
 export const MAJORS = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'NZD', 'CAD', 'CHF'] as const;
-export type Currency = (typeof MAJORS)[number];
+
+/**
+ * Currencies we score a leg of, but do NOT cross into every pair.
+ *
+ * ZAR is here for USDZAR, which EdgeFinder carries as a major. Adding it to
+ * MAJORS instead would have manufactured eight ZAR crosses nobody asked for —
+ * EURZAR, GBPZAR and so on — because the pair table is a full cross product of
+ * that list. Keeping the two lists separate is what makes "one more pair" cost
+ * one entry instead of eight.
+ */
+export const MINOR_CURRENCIES = ['ZAR'] as const;
+
+/** Every currency the app can carry a macro or positioning reading for. */
+export const CURRENCIES = [...MAJORS, ...MINOR_CURRENCIES] as const;
+export type Currency = (typeof CURRENCIES)[number];
 
 /** Non-currency instruments the user trades. Scored via betas, not directly. */
 export const ASSETS = ['XAU', 'XAG', 'XPT', 'WTI'] as const;
 export type Asset = (typeof ASSETS)[number];
 
-export function isMajor(code: string | null | undefined): code is Currency {
+/**
+ * Still the 8, deliberately. Callers use this to decide what belongs in a
+ * strength ranking or a carry table, and a currency with one pair and almost no
+ * calendar coverage does not belong in either.
+ */
+export function isMajor(code: string | null | undefined): code is (typeof MAJORS)[number] {
   return !!code && (MAJORS as readonly string[]).includes(code);
+}
+
+export function isCurrency(code: string | null | undefined): code is Currency {
+  return !!code && (CURRENCIES as readonly string[]).includes(code);
 }
 
 // ---------------------------------------------------------------------------
@@ -35,6 +62,7 @@ export type SourceKind =
   | 'fxstreet'
   | 'faireconomy'
   | 'dbnomics'
+  | 'tradingview' // the Conference Board series, which no other free feed populates
   | 'ai-extracted' // parsed out of a headline by the LLM — always flagged
   | 'fixture'; // offline sample data
 
@@ -286,6 +314,36 @@ export interface SourceHealth {
   ok: boolean;
   detail?: string;
   fetchedAtUtc: string;
+}
+
+/**
+ * One symbol's score at one moment.
+ *
+ * The only thing this app stores that it cannot later recompute: the free feeds
+ * expose the CURRENT technicals and the LATEST COT report, with no history, so a
+ * snapshot not taken is a data point gone for good.
+ */
+export interface ScoreSnapshot {
+  symbol: string;
+  capturedAtUtc: string;
+  totalScore: number;
+  bias: string;
+  populated: number;
+  categoryScores: Record<string, number>;
+  price: number | null;
+  /** slotKey -> cell value, for reconstructing a past card. */
+  cells: Record<string, number | null>;
+  /**
+   * slotKey -> the currency leg that was missing when this was captured.
+   *
+   * Cannot be derived after the fact: `eur − usd` and `0 − usd` land on the
+   * same number often enough that a past cell value says nothing about whether
+   * it was built from one leg or two. Without this the change log can report
+   * that a score moved but never that an upstream failure moved it.
+   *
+   * Optional because snapshots written before this existed do not have it.
+   */
+  partialLegs?: Record<string, string>;
 }
 
 /** Everything the dashboard needs, in one payload. */

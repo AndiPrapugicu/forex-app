@@ -20,7 +20,7 @@
  */
 
 import { DBNOMICS } from '@/config/sources.config';
-import { fetchJson, useFixtures } from '@/lib/connectors/base';
+import { fetchJson, fixturesEnabled } from '@/lib/connectors/base';
 import { ok, type Currency, type Result } from '@/lib/types';
 
 /**
@@ -91,7 +91,7 @@ async function fetchSeries(
 
 /** Current policy rates. Never blocks ingest — an empty list is fine. */
 export async function fetchPolicyRates(): Promise<Result<PolicyRate[]>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     return ok('dbnomics:fixture', [] as PolicyRate[], 'policy rates not included in fixtures');
   }
 

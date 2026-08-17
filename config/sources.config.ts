@@ -152,6 +152,20 @@ export const YAHOO = {
   name: 'Yahoo Finance',
   /** Undocumented but stable; verified for GC=F, SI=F, PL=F, CL=F, FX and DXY. */
   chartBase: 'https://query1.finance.yahoo.com/v8/finance/chart',
+  /**
+   * The one BATCH quote endpoint Yahoo still answers without credentials.
+   *
+   * `v7/finance/quote` now returns `{"code":"Unauthorized"}` and `v6` is a 404,
+   * so a per-symbol chart call was the only option and 50 symbols meant 50
+   * requests. Spark takes a comma-separated list and returns the same
+   * `meta` + `indicators.quote[0].close` shape the chart endpoint does, which
+   * means `pickPreviousClose` works on it unchanged.
+   *
+   * HARD LIMIT OF 20 SYMBOLS PER CALL — 21 is an HTTP 400, not a truncated
+   * list, so the chunking in `fetchSparkQuotes` is load-bearing.
+   */
+  sparkBase: 'https://query1.finance.yahoo.com/v7/finance/spark',
+  sparkMaxSymbols: 20,
   headers: { 'User-Agent': 'Mozilla/5.0' },
   cacheTtlSeconds: 120,
 } as const;

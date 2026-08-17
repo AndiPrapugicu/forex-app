@@ -10,7 +10,12 @@
  * about what "CPI" means for a currency, which is worse than having no chart.
  */
 
-import { PRIMARY_COUNTRY, SLOTS, type SlotDefinition } from '@/config/setups.config';
+import {
+  PRIMARY_COUNTRY,
+  SLOTS,
+  type SlotCategory,
+  type SlotDefinition,
+} from '@/config/setups.config';
 import type { Currency, NormalizedEvent } from '@/lib/types';
 
 export interface IndicatorPoint {
@@ -24,6 +29,10 @@ export interface IndicatorPoint {
 export interface IndicatorSeries {
   slotKey: string;
   label: string;
+  /** Full name, for the card subtitle where the short label is ambiguous. */
+  title: string;
+  /** Growth / inflation / jobs — the page groups by this, as the scorecard does. */
+  category: SlotCategory;
   currency: Currency;
   /** The exact release name that filled this slot, so the chart is unambiguous. */
   eventName: string;
@@ -81,6 +90,8 @@ export function buildIndicatorSeries(
     return {
       slotKey: slot.key,
       label: slot.label,
+      title: slot.title,
+      category: slot.category,
       currency,
       eventName,
       unit: series[0].unit ?? null,

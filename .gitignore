@@ -41,3 +41,4 @@ yarn-error.log*
 /playwright-report
 /test-results
 shot*.mjs
+.env*

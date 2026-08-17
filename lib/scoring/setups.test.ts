@@ -11,7 +11,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { SLOTS } from '@/config/setups.config';
-import { combinePairCells, resolveSlotEvent, scoreSlot, ternarySign } from '@/lib/scoring/discrete';
+import { ALL_SYMBOLS } from '@/config/symbols.config';
+import {
+  PAIR_CELL_MAX,
+  combinePairCells,
+  resolveSlotEvent,
+  scoreSlot,
+  ternarySign,
+} from '@/lib/scoring/discrete';
 import { buildSetupsMatrix } from '@/lib/scoring/setups';
 import type { NormalizedEvent } from '@/lib/types';
 
@@ -191,14 +198,75 @@ describe('combinePairCells', () => {
     expect(combinePairCells(null, null).status).toBe('no-data');
     expect(combinePairCells(null, 1).status).toBe('scored');
   });
+
+  /**
+   * The regression the flicker never had. A leg that fails and a leg that was
+   * never going to score produce the same arithmetic; only the status can tell
+   * them apart, and it used to say 'scored' for both.
+   */
+  describe('partial cells', () => {
+    it('reports partial and names the leg when an expected leg is missing', () => {
+      const result = combinePairCells(null, 1, PAIR_CELL_MAX, {
+        base: { label: 'EUR', expected: true },
+        quote: { label: 'USD', expected: true },
+      });
+      expect(result.status).toBe('partial');
+      expect(result.missingLeg).toBe('EUR');
+      // It still votes — dropping it would swing the score further than the
+      // failure did.
+      expect(result.cell).toBe(-1);
+    });
+
+    it('stays scored when the missing leg was never expected to publish', () => {
+      const result = combinePairCells(null, -2, PAIR_CELL_MAX, {
+        base: { label: 'NZD', expected: false },
+        quote: { label: 'USD', expected: true },
+      });
+      expect(result.status).toBe('scored');
+      expect(result.missingLeg).toBeNull();
+      expect(result.cell).toBe(2);
+    });
+
+    it('stays scored when both legs resolved', () => {
+      const result = combinePairCells(2, 1, PAIR_CELL_MAX, {
+        base: { label: 'GBP', expected: true },
+        quote: { label: 'CAD', expected: true },
+      });
+      expect(result.status).toBe('scored');
+      expect(result.missingLeg).toBeNull();
+    });
+
+    it('says nothing about legs a caller cannot describe', () => {
+      // No leg state means the caller cannot distinguish the two kinds of
+      // absence, and it does not get to claim it can.
+      expect(combinePairCells(null, 1).missingLeg).toBeNull();
+    });
+  });
 });
 
 describe('buildSetupsMatrix', () => {
   const base = { cot: new Map(), technicals: new Map(), now: NOW };
 
   it('produces a row for every configured symbol', () => {
+    // Asserted against the config rather than a literal, so adding a symbol does
+    // not require editing a number here.
     const matrix = buildSetupsMatrix({ events: [], ...base });
-    expect(matrix.rows).toHaveLength(33);
+    expect(matrix.rows).toHaveLength(ALL_SYMBOLS.length);
+    expect(new Set(matrix.rows.map((r) => r.symbol))).toEqual(
+      new Set(ALL_SYMBOLS.map((s) => s.symbol)),
+    );
+  });
+
+  it('gives DAX and FTSE no COT contract, because none exists', () => {
+    // Eurex and ICE Europe are outside the CFTC's remit. This is a real gap in
+    // the data, and a blank cell is the honest rendering of it — but it must be
+    // a deliberate blank, not a typo in a contract name.
+    const matrix = buildSetupsMatrix({ events: [], ...base });
+    for (const symbol of ['GER40', 'UK100']) {
+      const row = matrix.rows.find((r) => r.symbol === symbol)!;
+      expect(row.cells.cot.cell, `${symbol} COT`).toBeNull();
+      expect(row.cells.crowd.cell, `${symbol} crowd`).toBeNull();
+    }
   });
 
   it('ranks strongest conviction first', () => {
@@ -208,13 +276,42 @@ describe('buildSetupsMatrix', () => {
     }
   });
 
-  it('scores an empty dataset as flat rather than inventing a bias', () => {
+  /**
+   * With no data at all, the ONLY thing that may still score is the rate column,
+   * and only via its regime fallback — the central bank stance is standing
+   * knowledge that does not come from the feed. Everything else must stay blank.
+   *
+   * Verified per cell rather than by totalScore, because a total of 0 would also
+   * be produced by two wrong cells cancelling.
+   */
+  it('leaves every feed-derived cell blank on an empty dataset', () => {
     const matrix = buildSetupsMatrix({ events: [], ...base });
+
     for (const row of matrix.rows) {
-      expect(row.totalScore).toBe(0);
+      for (const [key, cell] of Object.entries(row.cells)) {
+        if (key === 'rates') continue;
+        expect(cell.cell, `${row.symbol}.${key}`).toBeNull();
+      }
+      // No bias can exceed what one rate cell is worth.
+      expect(Math.abs(row.totalScore)).toBeLessThanOrEqual(2);
       expect(row.bias).toBe('Neutral');
-      expect(row.populated).toBe(0);
     }
+  });
+
+  it('scores the rate cell 0 when no central bank publishes a projection', () => {
+    /**
+     * Only the Fed publishes numeric rate projections. Everyone else guides in
+     * prose, so their leg has no view and must contribute nothing.
+     *
+     * This replaced a hand-maintained regime table that scored ±1 on our own
+     * opinion, and a 2-year-yield proxy that scored the MARKET's forecast rather
+     * than the bank's — the two disagreed outright on the dollar.
+     */
+    const matrix = buildSetupsMatrix({ events: [], ...base });
+    const eurusd = matrix.rows.find((r) => r.symbol === 'EURUSD')!;
+
+    expect(eurusd.cells.rates.cell).toBe(0);
+    expect(eurusd.cells.rates.explanation).toMatch(/no numeric rate projection/i);
   });
 
   it('propagates a currency beat into every pair that currency leads', () => {
@@ -256,6 +353,45 @@ describe('buildSetupsMatrix', () => {
       ...base,
     });
     const eurusd = matrix.rows.find((r) => r.symbol === 'EURUSD')!;
-    expect(eurusd.populated).toBe(1);
+
+    // The single CPI event, plus the rate cell that the regime table always
+    // fills. No price history and no COT in `base`, so nothing else can score.
+    expect(eurusd.populated).toBe(2);
+    expect(eurusd.cells.cpi.cell).not.toBeNull();
+    expect(eurusd.cells.rates.cell).not.toBeNull();
+  });
+
+  it('carries only the columns A1 scores — no extras', () => {
+    /**
+     * Wages and participation used to live here as context columns. They are
+     * gone: A1 has no such columns, and two more rows on an already-dense grid
+     * earned nothing.
+     *
+     * Jobless claims was also once demoted to context and is now SCORED — it
+     * does appear in their table, and demoting it was one of the errors that put
+     * our totals several points below theirs.
+     */
+    expect(SLOTS.every((s) => s.scoring)).toBe(true);
+    for (const gone of ['wages', 'participation']) {
+      expect(SLOTS.some((s) => s.key === gone), gone).toBe(false);
+    }
+    expect(SLOTS.some((s) => s.key === 'claims' && s.scoring)).toBe(true);
+  });
+
+  it('resolves a release that only one leg publishes, inverting the other side', () => {
+    // Jobless claims is US-only, so EURUSD inherits the inverted US reading.
+    const claims = makeEvent({
+      currency: 'USD',
+      countryCode: 'US',
+      name: 'Initial Jobless Claims',
+      actual: 199,
+      consensus: 202,
+    });
+    const matrix = buildSetupsMatrix({ events: [claims], ...base });
+    const eurusd = matrix.rows.find((r) => r.symbol === 'EURUSD')!;
+
+    // Fewer claims is bullish USD, so bearish for EURUSD.
+    expect(eurusd.cells.claims.cell).toBe(-1);
+    expect(eurusd.categoryScores.jobs).toBe(-1);
   });
 });

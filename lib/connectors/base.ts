@@ -50,9 +50,45 @@ function cacheGet<T>(key: string): { value: T; stale: boolean; ageSeconds: numbe
   return { value: hit.value as T, stale: true, ageSeconds };
 }
 
+/**
+ * How much of a TTL may be added as spread, and the ceiling on that spread.
+ *
+ * 10% of an hour is six minutes, which is enough to turn a synchronised
+ * stampede into a trickle without meaningfully ageing anything.
+ */
+const TTL_JITTER_FRACTION = 0.1;
+const TTL_JITTER_MAX_SECONDS = 300;
+
+/**
+ * A stable 0..1 offset for a cache key.
+ *
+ * DETERMINISTIC, not random. Two things follow from that: a key keeps the same
+ * position in the expiry spread for the life of the process, so entries do not
+ * slowly re-converge on the same second across refreshes; and the cache is
+ * still reproducible, which the twice-with-a-clear-between harness depends on.
+ */
+function keyOffset(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193) >>> 0;
+  return h / 0x1_0000_0000;
+}
+
+/**
+ * Stores an entry, spreading its expiry.
+ *
+ * The pipeline writes ~51 daily Yahoo entries inside one run, so an unjittered
+ * TTL expires all of them in the same second and the first request after that
+ * fires ~100 concurrent calls at one undocumented host. That is the poll most
+ * likely to trip the 429 that then silences every Yahoo call for up to 900s.
+ *
+ * Jitter is only ever ADDED. An entry is never less fresh than the caller asked
+ * for — it is occasionally allowed to live a little longer.
+ */
 function cacheSet(key: string, value: unknown, ttlSeconds: number) {
   const now = Date.now();
-  cache.set(key, { value, expiresAt: now + ttlSeconds * 1000, storedAt: now });
+  const spread = Math.min(ttlSeconds * TTL_JITTER_FRACTION, TTL_JITTER_MAX_SECONDS);
+  const ttl = ttlSeconds + spread * keyOffset(key);
+  cache.set(key, { value, expiresAt: now + ttl * 1000, storedAt: now });
 }
 
 export function clearCache() {
@@ -313,6 +349,6 @@ export function stableId(...parts: (string | number | null | undefined)[]): stri
 }
 
 /** True when the app should read fixtures instead of the network. */
-export function useFixtures(): boolean {
+export function fixturesEnabled(): boolean {
   return process.env.USE_FIXTURES === 'true';
 }

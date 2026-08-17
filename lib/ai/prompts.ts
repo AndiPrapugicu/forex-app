@@ -1,5 +1,10 @@
 /**
- * AI tasks: explain, summarize, classify.
+ * The AI layer: one job, explaining an event that has already been scored.
+ *
+ * It used to also summarise news clusters and classify headlines. Both were
+ * exported and called from nowhere — dead code with a live API key behind it —
+ * so they are gone. If a genuine use appears, the provider and cache below are
+ * what it should build on.
  *
  * Design rules, all of them defensive:
  *
@@ -18,7 +23,7 @@
 import { stableId } from '@/lib/connectors/base';
 import { getStore } from '@/lib/db/client';
 import { getAiProvider, type AiMessage } from '@/lib/ai/provider';
-import type { Category, EventScore, NewsCluster, NormalizedEvent } from '@/lib/types';
+import type { EventScore, NormalizedEvent } from '@/lib/types';
 
 const SYSTEM = `You are a concise financial data explainer embedded in a forex dashboard.
 
@@ -121,85 +126,70 @@ Explain why this reading points that way for ${event.currency}. Mention the chan
   });
 }
 
-/** One-line summary of a news cluster. */
-export async function summarizeCluster(cluster: NewsCluster): Promise<AiExplanationResult | null> {
-  const key = stableId('cluster', cluster.id, cluster.items.length);
 
-  return cached<AiExplanationResult>('summarize', key, async (model) => {
-    const provider = getAiProvider();
-    if (!provider) return null;
 
-    const headlines = cluster.items
-      .slice(0, 6)
-      .map((i) => `- [${i.sourceName}] ${i.title}`)
-      .join('\n');
+// ---------------------------------------------------------------------------
+// Setup plan
+// ---------------------------------------------------------------------------
 
-    const messages: AiMessage[] = [
-      { role: 'system', content: SYSTEM },
-      {
-        role: 'user',
-        content: `Summarize this news story in ONE sentence, then state in one short sentence what it means for currency markets.
-
-Reported by ${cluster.domainCount} independent source${cluster.domainCount === 1 ? '' : 's'}:
-${headlines}
-
-${
-  cluster.domainCount < 3
-    ? 'IMPORTANT: this is NOT corroborated by enough independent sources. Say so explicitly and treat it as a claim, not a fact.'
-    : ''
-}`,
-      },
-    ];
-
-    const text = await provider.complete(messages, { maxTokens: 160 });
-    if (!text) return null;
-
-    return { text, model, uncertain: cluster.domainCount < 3 };
-  });
+export interface AiPlanResult {
+  text: string;
+  model: string;
 }
 
-const CATEGORIES: Category[] = [
-  'inflation',
-  'labor',
-  'growth',
-  'central-bank',
-  'risk-sentiment',
-  'geopolitics',
-  'energy',
-  'other',
-];
-
 /**
- * Classification.
+ * Reads a finished setup bundle and says where the evidence disagrees with
+ * itself.
  *
- * The keyword scanner already assigns a category deterministically; this is a
- * second opinion for headlines the rules filed as "other". Anything the model
- * returns that is not in the allowed list is discarded rather than trusted.
+ * THE DIVISION OF LABOUR IS THE POINT. Every number on the Chart page — the
+ * score, the broken level, the retracement, the confluence, the COT flow — is
+ * computed and testable. A model that invented a level here would be the single
+ * worst failure this app could have, because a level is an instruction to place
+ * an order. So the model is given the finished arithmetic and asked for the one
+ * thing arithmetic cannot do: weigh conflicting evidence and name which
+ * objection actually matters.
+ *
+ * It is also explicitly barred from choosing a direction. The direction comes
+ * from the scorecard; a model that reverses it is not consulted, for the same
+ * reason `explainEvent` may not contradict the rule engine.
+ *
+ * Cached on the bundle text, so it is paid for once per genuine data change
+ * rather than once per page view.
  */
-export async function classifyHeadline(title: string): Promise<Category | null> {
-  const key = stableId('classify', title);
-
-  return cached<Category>('classify', key, async () => {
+export async function planSetup(brief: string, symbol: string): Promise<AiPlanResult | null> {
+  return cached<AiPlanResult>('plan', `${symbol}|${brief}`, async (model) => {
     const provider = getAiProvider();
     if (!provider) return null;
 
     const messages: AiMessage[] = [
-      { role: 'system', content: SYSTEM },
+      {
+        role: 'system',
+        content: `You are a trading desk colleague reviewing a setup someone else has already analysed.
+
+Everything in the brief was computed by a deterministic engine. Your job is NOT to redo it.
+
+STRICT RULES:
+- Quote ONLY numbers that appear in the brief. Never compute, estimate, round differently, or recall a figure.
+- Never change or argue with the direction. It comes from the scorecard and is fixed.
+- Do not add price targets, position sizes, or entry prices. Those are not yours to give.
+- No disclaimers, no hedging filler, no restating the brief back.
+
+WHAT TO WRITE, in this order, 3-4 short sentences total:
+1. The strongest tension in the evidence — the thing that most argues against taking this now. If nothing genuinely conflicts, say so in one sentence rather than inventing a concern.
+2. Why that tension matters, or why it is survivable.
+3. The single level or event that would settle it, taken from the brief.
+
+Write like a colleague who is short on time and respects the reader. Plain English.`,
+      },
       {
         role: 'user',
-        content: `Classify this headline into EXACTLY ONE of these categories. Reply with the category word only, nothing else.
-
-Categories: ${CATEGORIES.join(', ')}
-
-Headline: ${title}`,
+        content: `Setup brief for ${symbol}:\n\n${brief}`,
       },
     ];
 
-    const raw = await provider.complete(messages, { maxTokens: 12 });
-    if (!raw) return null;
+    const text = await provider.complete(messages, { maxTokens: 2000 });
+    if (!text) return null;
 
-    const normalized = raw.toLowerCase().trim().replace(/[^a-z-]/g, '');
-    // Strict allowlist — a hallucinated category is silently dropped.
-    return CATEGORIES.includes(normalized as Category) ? (normalized as Category) : null;
+    return { text, model };
   });
 }

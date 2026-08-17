@@ -121,3 +121,54 @@ create table if not exists ai_cache (
   output     jsonb not null,
   created_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Score history
+-- ---------------------------------------------------------------------------
+-- One row per symbol per ingest run. This is what makes "how did the bias move
+-- this week" answerable, and it is the only table here that is NOT reproducible
+-- from events + config — once a day passes, that day's technicals and COT are
+-- gone from the free feeds, so a snapshot missed is a snapshot lost.
+--
+-- The primary key is (symbol, captured_at) rather than a surrogate id so a cron
+-- run that fires twice in the same minute cannot double-write.
+create table if not exists score_snapshots (
+  symbol       text        not null,
+  captured_at  timestamptz not null,
+
+  total_score  double precision not null,
+  bias         text        not null,
+  populated    integer     not null,
+
+  -- Category subtotals, so a history chart can show WHICH block moved.
+  technical    double precision not null default 0,
+  sentiment    double precision not null default 0,
+  growth       double precision not null default 0,
+  inflation    double precision not null default 0,
+  jobs         double precision not null default 0,
+
+  -- Closing price at capture time, so score and price share an x-axis.
+  price        double precision,
+
+  -- Full cell map, for reconstructing a past card without re-deriving it.
+  cells        jsonb not null default '{}'::jsonb,
+
+  -- slot key -> the currency leg that was missing at capture time.
+  --
+  -- Not derivable later: `eur - usd` and `0 - usd` produce the same number often
+  -- enough that a stored cell value says nothing about how many legs built it.
+  -- This is what lets the change log say "cot lost its GBP leg" rather than
+  -- reporting a silent 20 -> 19.
+  partial_legs jsonb not null default '{}'::jsonb,
+
+  primary key (symbol, captured_at)
+);
+
+-- Added after the table shipped, so existing databases pick it up too.
+alter table score_snapshots
+  add column if not exists partial_legs jsonb not null default '{}'::jsonb;
+
+create index if not exists score_snapshots_symbol_idx
+  on score_snapshots (symbol, captured_at desc);
+create index if not exists score_snapshots_time_idx
+  on score_snapshots (captured_at desc);

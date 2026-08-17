@@ -27,12 +27,44 @@
   --color-muted: #8b97b0;
   --color-faint: #5a6580;
 
+  /*
+    TWO BULLISH COLOURS, ON PURPOSE — but each defined once, here.
+
+    `bull` is the status accent: a bias label, a live dot, an "above" tag. It is
+    teal so it reads as positive next to the rose bear without either shouting.
+
+    `bull-cell` is the fill for a bullish CELL in a dense grid — the setups
+    matrix, the scorecard table, the candles. Teal at 18 shades of opacity
+    against a teal-accented page turns a table into a wash; the blue separates
+    "this cell voted up" from "this label says bullish", which is the same
+    distinction EdgeFinder's own blue-and-red grid draws.
+
+    They used to be three hardcoded hexes scattered across PriceChart,
+    SetupsMatrix and the scorecard page, drifting apart (#3a7ae0 vs #5b95e8).
+    The `-rgb` variants exist because those grids compose their own alphas.
+  */
   --color-bull: #26d0a4;
   --color-bull-dim: #178f70;
   --color-bear: #f2506e;
   --color-bear-dim: #a8324a;
+  --color-bull-cell: #3a7ae0;
+  --color-bull-cell-rgb: 58 122 224;
+  --color-bear-cell: #f2506e;
+  --color-bear-cell-rgb: 242 80 110;
   --color-neutral: #6b7794;
   --color-uncertain: #e0a03a;
+
+  /*
+    SPACE-separated, not comma-separated, and that is load-bearing.
+    These exist for fills that compose their own alpha in a style attribute,
+    where a hex cannot carry opacity. Only the modern space form accepts the
+    slash: `rgb(38 208 164 / 75%)` is valid, `rgb(38, 208, 164 / 75%)` is not —
+    it parses as invalid and paints nothing. Every consumer must therefore use
+    `rgb(var(--x) / N%)` and never `rgba(var(--x), 0.N)`.
+  */
+  --color-bull-rgb: 38 208 164;
+  --color-bear-rgb: 242 80 110;
+  --color-uncertain-rgb: 224 160 58;
 
   --color-critical: #f2506e;
   --color-high: #f28b3a;

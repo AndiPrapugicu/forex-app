@@ -29,7 +29,7 @@ export function AiExplanation({ eventId, released }: { eventId: string; released
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch('/api/ai/summarize', {
+      const res = await fetch('/api/ai/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId }),

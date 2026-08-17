@@ -39,6 +39,9 @@ function makeReport(overrides: Partial<CotReport> = {}): CotReport {
     openInterest: 200_000,
     openInterestChange: 0,
     specNetChange: 0,
+    specLongPctChange: 0,
+    specLongChange: 0,
+    specShortChange: 0,
     ...overrides,
   };
 }
@@ -81,13 +84,13 @@ describe('percentileRank', () => {
 describe('scoreCot', () => {
   const rising = Array.from({ length: 60 }, (_, i) => i * 1000);
 
-  it('scores from the LONG SHARE, not the percentile', () => {
-    // The gold case that drove this change: a big net long sitting BELOW its own
-    // 3-year median. Percentile ranking called it bearish; the long share, which
-    // is what the reference product uses, calls it bullish.
+  it('scores an asset from the LONG SHARE, not the percentile', () => {
+    // A big net long sitting BELOW its own 3-year median. Percentile ranking
+    // called it bearish; the long share, which is what A1 uses, calls it
+    // bullish. Both readings are kept, only one votes.
     const history = Array.from({ length: 60 }, (_, i) => 210_000 + i * 1000);
-    const series = makeSeries([197_634, ...history], { specLongPct: 85.4, specNetChange: 15_564 });
-    const score = scoreCot(series)!;
+    const series = makeSeries([197_634, ...history], { specLongPct: 85.4, specNetChange: 15_564, specLongPctChange: 0.78 });
+    const score = scoreCot(series, 'asset')!;
 
     expect(score.percentile).toBeLessThan(50); // still true, still reported
     expect(score.netPositioning).toBe(1); // 85.4% long
@@ -95,17 +98,28 @@ describe('scoreCot', () => {
     expect(score.cell).toBe(2);
   });
 
-  it('splits the cell into the two sub-scores the reference product shows', () => {
-    const flat = makeSeries([100, 200, 300], { specLongPct: 50, specNetChange: 0 });
-    const score = scoreCot(flat)!;
+  it('ignores the long share on an FX leg, where A1 scores only the weekly change', () => {
+    const history = Array.from({ length: 60 }, (_, i) => 210_000 + i * 1000);
+    const series = makeSeries([197_634, ...history], { specLongPct: 85.4, specNetChange: 15_564, specLongPctChange: 0.78 });
+    const score = scoreCot(series, 'fx')!;
+
+    expect(score.netPositioning).toBe(1); // computed and displayed
+    expect(score.cell).toBe(1); // but the cell is the weekly change alone
+  });
+
+  it('splits the cell into the two sub-scores A1 shows', () => {
+    const flat = makeSeries([100, 200, 300], { specLongPct: 50, specNetChange: 0, specLongPctChange: 0 });
+    const score = scoreCot(flat, 'asset')!;
     expect(score.netPositioning).toBe(0);
     expect(score.latestBuysSells).toBe(0);
     expect(score.cell).toBe(0);
   });
 
-  it('scores a heavily short book as -2', () => {
-    const series = makeSeries([100, 200, 300], { specLongPct: 12, specNetChange: -5000 });
-    expect(scoreCot(series)!.cell).toBe(-2);
+  it('scores a heavily short asset book as -2', () => {
+    const series = makeSeries([100, 200, 300], { specLongPct: 12, specNetChange: -5000, specLongPctChange: -2.5 });
+    expect(scoreCot(series, 'asset')!.cell).toBe(-2);
+    // The same book on an FX leg is only -1, because positioning does not vote.
+    expect(scoreCot(series, 'fx')!.cell).toBe(-1);
   });
 
   it('still reports the percentile as context', () => {
@@ -161,10 +175,13 @@ describe('scoreCrowd', () => {
   });
 
   it('respects the exact bucket boundaries', () => {
-    expect(crowd(55)!.cell).toBe(-1);
-    expect(crowd(54.9)!.cell).toBe(0);
-    expect(crowd(45)!.cell).toBe(1);
-    expect(crowd(45.1)!.cell).toBe(0);
+    // A1's published thresholds are 60/40, and both are inclusive:
+    // ">= 60% long -> -1", "<= 40% long -> +1". We previously used 55/45, which
+    // scored a signal on positioning they call neutral.
+    expect(crowd(60)!.cell).toBe(-1);
+    expect(crowd(59.9)!.cell).toBe(0);
+    expect(crowd(40)!.cell).toBe(1);
+    expect(crowd(40.1)!.cell).toBe(0);
   });
 
   it('flags divergence when retail and large specs sit on opposite sides', () => {

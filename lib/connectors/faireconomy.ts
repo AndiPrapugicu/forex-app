@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import { FAIRECONOMY } from '@/config/sources.config';
-import { fetchJson, parseNumeric, stableId, useFixtures } from '@/lib/connectors/base';
+import { fetchJson, parseNumeric, stableId, fixturesEnabled } from '@/lib/connectors/base';
 import { isMajor, ok, type Impact, type NormalizedEvent, type Result } from '@/lib/types';
 
 const FfEvent = z.object({
@@ -108,7 +108,7 @@ function parsePayload(payload: unknown, source: string): Result<NormalizedEvent[
 }
 
 export async function fetchFairEconomyCalendar(): Promise<Result<NormalizedEvent[]>> {
-  if (useFixtures()) {
+  if (fixturesEnabled()) {
     const fixture = (await import('@/fixtures/sample-faireconomy.json')).default;
     return parsePayload(fixture, 'faireconomy:fixture');
   }

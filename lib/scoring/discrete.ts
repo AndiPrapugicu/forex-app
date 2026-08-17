@@ -14,17 +14,28 @@
 
 import {
   CELL_MAX,
-  CELL_MIN,
   DEFAULT_MAX_AGE_DAYS,
+  PAIR_CELL_MAX,
+  PAIR_CELL_MIN,
   PRIMARY_COUNTRY,
   TERNARY_EPSILON,
+  type SeriesMatcher,
   type SlotDefinition,
 } from '@/config/setups.config';
 import { computeSurprise } from '@/lib/scoring/surprise';
 import type { Currency, NormalizedEvent } from '@/lib/types';
 
-/** Why a cell has no value. Drives how the UI renders the blank. */
-export type CellStatus = 'scored' | 'stale' | 'no-data' | 'not-released';
+/**
+ * Why a cell reads the way it does. Drives how the UI renders it.
+ *
+ * `partial` is the odd one out: it carries a NUMBER, not a blank. It means one
+ * contributing leg was expected and did not arrive, so the value on screen is
+ * built from the other leg alone. That distinction used to be invisible — a
+ * failed COT contract turned EURUSD's cell from `eur − usd` into `0 − usd` and
+ * still stamped it `scored`, so a transient upstream failure was indistinguishable
+ * from a genuine neutral reading.
+ */
+export type CellStatus = 'scored' | 'partial' | 'stale' | 'no-data' | 'not-released';
 
 export interface SlotResult {
   slotKey: string;
@@ -36,6 +47,17 @@ export interface SlotResult {
   event: NormalizedEvent | null;
   sigma: number | null;
   ageDays: number | null;
+  explanation: string;
+  /** Per-sub-series detail for composite slots (PMI). Empty otherwise. */
+  components?: ComponentResult[];
+}
+
+/** One sub-series of a composite slot, so PMI can show both legs. */
+export interface ComponentResult {
+  key: string;
+  label: string;
+  cell: number;
+  event: NormalizedEvent;
   explanation: string;
 }
 
@@ -83,14 +105,14 @@ function ageInDays(iso: string, now: Date): number {
  * Within the country, patterns are tried in order and the first with a released
  * value wins, so the canonical series is chosen deterministically.
  */
-export function resolveSlotEvent(
-  slot: SlotDefinition,
+export function resolveSeries(
+  matcher: SeriesMatcher,
   currency: Currency,
   events: NormalizedEvent[],
+  /** What the cell will be scored against, so an unscoreable print is skipped. */
+  compare: 'forecast' | 'previous' = 'forecast',
 ): NormalizedEvent | null {
-  if (slot.kind !== 'economic') return null;
-
-  const patterns = slot.matchByCurrency?.[currency] ?? slot.match ?? [];
+  const patterns = matcher.matchByCurrency?.[currency] ?? matcher.match ?? [];
   if (patterns.length === 0) return null;
 
   const country = PRIMARY_COUNTRY[currency];
@@ -98,15 +120,43 @@ export function resolveSlotEvent(
     (e) => e.currency === currency && e.actual !== null && (e.countryCode ?? country) === country,
   );
 
+  const newest = (list: NormalizedEvent[]) =>
+    list.reduce((best, e) => (e.dateUtc > best.dateUtc ? e : best));
+
+  const hasReference = (e: NormalizedEvent) =>
+    (compare === 'previous' ? e.previous : e.consensus) !== null;
+
   for (const pattern of patterns) {
     const matches = pool.filter((e) => pattern.test(e.name));
     if (matches.length === 0) continue;
 
-    // Most recent release of the first matching series.
-    return matches.reduce((newest, e) => (e.dateUtc > newest.dateUtc ? e : newest));
+    /**
+     * The most recent SCOREABLE print, not simply the most recent.
+     *
+     * A release with an actual but no forecast cannot produce a beat or a miss,
+     * and taking it anyway discarded an older print that could. Measured on the
+     * live feed: UK core PPI's latest entry carries no consensus, so GBPUSD's
+     * PPI cell fell to a USD-only reading, and Australia's Westpac confidence
+     * did the same — both silently scoring half of what they should.
+     *
+     * Falls back to the newest print regardless, so a series that has genuinely
+     * never carried a forecast still surfaces as "awaiting" rather than
+     * vanishing from the card.
+     */
+    const scoreable = matches.filter(hasReference);
+    return newest(scoreable.length > 0 ? scoreable : matches);
   }
 
   return null;
+}
+
+export function resolveSlotEvent(
+  slot: SlotDefinition,
+  currency: Currency,
+  events: NormalizedEvent[],
+): NormalizedEvent | null {
+  if (slot.kind !== 'economic') return null;
+  return resolveSeries(slot, currency, events, slot.compare ?? 'forecast');
 }
 
 /**
@@ -129,6 +179,8 @@ export function scoreSlot(
     return { ...base, status: 'no-data', explanation: 'Computed elsewhere' };
   }
 
+  if (slot.components) return scoreCompositeSlot(slot, currency, events, now);
+
   const event = resolveSlotEvent(slot, currency, events);
   if (!event) {
     return { ...base, status: 'no-data', explanation: `No ${slot.label} data for ${currency}` };
@@ -149,18 +201,27 @@ export function scoreSlot(
   }
 
   /**
-   * Ternary needs a forecast to compare against. Without one there is no beat or
-   * miss to read, so the slot goes unscored rather than falling back to the
-   * previous print — "above last month" is a different claim from "above what
-   * the market expected", and conflating them was never intended here.
+   * What the print is measured against.
+   *
+   * `forecast` is the default and needs a consensus — without one there is no
+   * beat or miss to read, so the slot goes unscored rather than quietly falling
+   * back to the previous print. "Above last month" is a different claim from
+   * "above what the market expected".
+   *
+   * `previous` is PMI only, and there it is A1's actual rule rather than a
+   * fallback.
    */
-  if (event.consensus === null || event.actual === null) {
+  const againstPrevious = slot.compare === 'previous';
+  const reference = againstPrevious ? event.previous : event.consensus;
+  const referenceLabel = againstPrevious ? 'previous' : 'forecast';
+
+  if (reference === null || reference === undefined || event.actual === null) {
     return {
       ...base,
       event,
       ageDays: Math.round(age),
       status: 'not-released',
-      explanation: `${event.name}: no forecast to compare against`,
+      explanation: `${event.name}: no ${referenceLabel} to compare against`,
     };
   }
 
@@ -170,8 +231,9 @@ export function scoreSlot(
 
   // Polarity converts "the number went up" into "the currency should go up".
   const polarity = slot.polarity ?? 1;
+  const bound = slot.maxCell ?? CELL_MAX;
   const cell = normalizeZero(
-    Math.max(CELL_MIN, Math.min(CELL_MAX, ternarySign(event.actual, event.consensus) * polarity)),
+    Math.max(-bound, Math.min(bound, ternarySign(event.actual, reference) * polarity)),
   );
 
   const sigmaNote =
@@ -186,29 +248,153 @@ export function scoreSlot(
     sigma: surprise.sigma === null ? null : Math.round(surprise.sigma * 100) / 100,
     ageDays: Math.round(age),
     explanation:
-      `${event.name}: ${event.actual}${event.unit ?? ''} vs ${event.consensus}${event.unit ?? ''} forecast` +
+      `${event.name}: ${event.actual}${event.unit ?? ''} vs ${reference}${event.unit ?? ''} ${referenceLabel}` +
       sigmaNote +
       (polarity === -1 ? ', inverted — higher is bearish here' : ''),
   };
 }
 
 /**
+ * Scores a slot made of several sub-series.
+ *
+ * PMI is the only one. A1 reads manufacturing AND services under a single
+ * column, so the two are scored independently and then collapsed back to a
+ * single +/-1 for the currency. Collapsing by SIGN OF THE SUM means the two
+ * agreeing gives +/-1 and the two disagreeing gives 0 — a currency where
+ * factories are slowing while services accelerate is genuinely saying nothing.
+ *
+ * One missing sub-series does not void the column; the other still votes.
+ */
+function scoreCompositeSlot(
+  slot: SlotDefinition,
+  currency: Currency,
+  events: NormalizedEvent[],
+  now: Date,
+): SlotResult {
+  const base = { slotKey: slot.key, currency, cell: null, event: null, sigma: null, ageDays: null };
+  const maxAge = slot.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const polarity = slot.polarity ?? 1;
+  const againstPrevious = slot.compare === 'previous';
+
+  const scored: ComponentResult[] = [];
+  let sawStale = false;
+
+  for (const component of slot.components ?? []) {
+    const event = resolveSeries(component, currency, events, slot.compare ?? 'forecast');
+    if (!event || event.actual === null) continue;
+
+    if (ageInDays(event.dateUtc, now) > maxAge) {
+      sawStale = true;
+      continue;
+    }
+
+    const reference = againstPrevious ? event.previous : event.consensus;
+    if (reference === null || reference === undefined) continue;
+
+    scored.push({
+      key: component.key,
+      label: component.label,
+      cell: normalizeZero(ternarySign(event.actual, reference) * polarity),
+      event,
+      explanation:
+        `${component.label}: ${event.actual} vs ${reference} ` +
+        (againstPrevious ? 'previous' : 'forecast'),
+    });
+  }
+
+  if (scored.length === 0) {
+    return sawStale
+      ? { ...base, status: 'stale', explanation: `${slot.label} prints are beyond the ${maxAge}-day window` }
+      : { ...base, status: 'no-data', explanation: `No ${slot.label} data for ${currency}` };
+  }
+
+  const sum = scored.reduce((total, c) => total + c.cell, 0);
+  const bound = slot.maxCell ?? CELL_MAX;
+  const cell = normalizeZero(Math.max(-bound, Math.min(bound, Math.sign(sum))));
+
+  // The freshest sub-series stands in as "the" event for detail views.
+  const newest = scored.reduce((a, b) => (b.event.dateUtc > a.event.dateUtc ? b : a));
+
+  return {
+    slotKey: slot.key,
+    currency,
+    cell,
+    status: 'scored',
+    event: newest.event,
+    sigma: null, // A composite of two series has no single meaningful sigma.
+    ageDays: Math.round(ageInDays(newest.event.dateUtc, now)),
+    explanation: scored.map((c) => c.explanation).join('  |  '),
+    components: scored,
+  };
+}
+
+/**
+ * What a caller knows about one leg of a pair cell.
+ *
+ * `expected` is the whole point. A leg can be missing for two completely
+ * different reasons and the cell must not treat them alike:
+ *
+ *   by design    NZD publishes no payrolls, so NZDUSD's NFP cell is the
+ *                inverted USD reading and always was. Nothing failed.
+ *   by failure   the EURO FX contract 404'd this run, so EURUSD's COT cell is
+ *                missing its base leg. Something failed, and last run's number
+ *                was built from more information than this run's.
+ *
+ * Only the second makes a cell `partial`. Callers set `expected` from the
+ * SOURCE, not from the value — a currency present in the lookup with a null
+ * score was expected and did not arrive; a currency absent from the lookup
+ * entirely was never going to score.
+ */
+export interface PairLegState {
+  /** Reported as the missing leg — a currency code. */
+  label?: string;
+  /** True when this leg should have resolved to a value. */
+  expected?: boolean;
+}
+
+export interface PairCellResult {
+  cell: number | null;
+  status: CellStatus;
+  /** Named when the status is 'partial'. Null otherwise. */
+  missingLeg: string | null;
+}
+
+/**
  * Combines two currency legs into a pair cell.
  *
- * A missing leg counts as 0 rather than voiding the cell, which is what lets
- * NZDUSD show a value in the NFP column: NZD publishes no payrolls, so the cell
- * is simply the inverted USD reading. Clamped because two opposing ±2 legs would
- * otherwise produce ±4.
+ * A missing leg counts as 0 rather than voiding the cell — dropping the cell
+ * entirely would swing the score further than the failure did. Clamped because
+ * two opposing ±2 legs would otherwise produce ±4.
+ *
+ * Without `legs` this reports `scored` exactly as before, so a caller that
+ * genuinely cannot tell the two kinds of absence apart does not get to claim it
+ * can.
  */
 export function combinePairCells(
   baseCell: number | null,
   quoteCell: number | null,
-): { cell: number | null; status: CellStatus } {
-  if (baseCell === null && quoteCell === null) return { cell: null, status: 'no-data' };
+  bound = PAIR_CELL_MAX,
+  legs?: { base?: PairLegState; quote?: PairLegState },
+): PairCellResult {
+  if (baseCell === null && quoteCell === null) {
+    return { cell: null, status: 'no-data', missingLeg: null };
+  }
 
   const value = (baseCell ?? 0) - (quoteCell ?? 0);
+
+  const missingLeg =
+    baseCell === null && legs?.base?.expected
+      ? (legs.base.label ?? 'base')
+      : quoteCell === null && legs?.quote?.expected
+        ? (legs.quote.label ?? 'quote')
+        : null;
+
   return {
-    cell: normalizeZero(Math.max(CELL_MIN, Math.min(CELL_MAX, value))),
-    status: 'scored',
+    cell: normalizeZero(Math.max(-bound, Math.min(bound, value))),
+    status: missingLeg ? 'partial' : 'scored',
+    missingLeg,
   };
 }
+
+// Re-exported so consumers importing from this module get the pair bounds too.
+export { PAIR_CELL_MAX, PAIR_CELL_MIN };

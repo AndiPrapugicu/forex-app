@@ -18,6 +18,10 @@ const REQUIRED_TABLES = [
   'news_items',
   'alert_log',
   'ai_cache',
+  // Score history. Added after the initial schema, so an existing project needs
+  // the tail of lib/db/schema.sql re-run — this is what makes that visible
+  // instead of surfacing as an empty history chart.
+  'score_snapshots',
 ];
 
 function isPlaceholder(v: string | undefined): boolean {

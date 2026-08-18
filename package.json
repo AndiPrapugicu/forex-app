@@ -14,6 +14,7 @@
     "fixtures": "npx tsx --tsconfig tsconfig.tsx.json scripts/capture-fixtures.ts",
     "check:supabase": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-supabase.ts",
     "backtest": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/backtest.ts",
+    "parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/parity.ts",
     "check:ai": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-ai.ts",
     "verify:board": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/board-stability.ts"
   },

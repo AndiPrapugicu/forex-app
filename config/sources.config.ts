@@ -123,6 +123,45 @@ export const TRADINGVIEW = {
   batchSize: 4,
 } as const;
 
+/**
+ * TradingView's quote endpoint, for the 2-year government yields no keyless
+ * daily source covered.
+ *
+ * The rate column asks whether the market prices a bank to hike or cut, which is
+ * the 2-year against the standing policy rate. Only the Fed publishes its own
+ * projection, so without a yield for the other seven that column is a hard 0 —
+ * and therefore 0 on every non-USD cross, by construction.
+ *
+ * Returns `{"close": 4.3815, "update_mode": "streaming"}`. No key, one symbol per
+ * request. USD and EUR are listed for completeness but FRED and the ECB remain
+ * primary for those: they are the issuers' own series.
+ */
+export const TRADINGVIEW_QUOTE = {
+  name: 'TradingView quotes',
+  base: 'https://scanner.tradingview.com/symbol',
+  headers: {
+    Origin: 'https://www.tradingview.com',
+    Referer: 'https://www.tradingview.com/',
+    'User-Agent': 'Mozilla/5.0',
+    Accept: 'application/json',
+  },
+  /** TradingView's own tickers for each 2-year benchmark. */
+  yield2y: {
+    USD: 'TVC:US02Y',
+    EUR: 'TVC:EU02Y',
+    GBP: 'TVC:GB02Y',
+    JPY: 'TVC:JP02Y',
+    AUD: 'TVC:AU02Y',
+    NZD: 'TVC:NZ02Y',
+    CAD: 'TVC:CA02Y',
+    CHF: 'TVC:CH02Y',
+  } as Record<string, string>,
+  /** A yield moves slowly enough that polling harder buys nothing. */
+  cacheTtlSeconds: 6 * 3600,
+  /** Concurrency, matching the other batched connectors. */
+  batchSize: 4,
+} as const;
+
 // ---------------------------------------------------------------------------
 // News — the corroboration set
 // ---------------------------------------------------------------------------

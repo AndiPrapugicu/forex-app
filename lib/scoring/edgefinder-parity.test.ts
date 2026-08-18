@@ -615,7 +615,8 @@ describe('the rate column routes by asset class', () => {
      */
     const gbpx = row('GBPX').cells.rates;
     expect(gbpx.cell).toBe(0);
-    expect(gbpx.explanation).toMatch(/no numeric rate projection/);
+    expect(gbpx.explanation).toMatch(/GBP/);
+    // The risk-asset yield wording is the tell that it read the US 2-year.
     expect(gbpx.explanation).not.toMatch(/tailwind|headwind/);
   });
 

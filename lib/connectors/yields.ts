@@ -17,14 +17,26 @@
  *   EUR  The ECB Data Portal's AAA-rated euro-area yield curve, 2-year spot.
  *        Keyless, daily, verified same-day.
  *
- * GBP, JPY, CAD, AUD, NZD and CHF were investigated and dropped: DBnomics has no
- * clean daily 2-year for them, Yahoo has no reliable tickers, and FRED's OECD
- * mirrors are MONTHLY and run about two months behind — presenting those as a
- * daily market signal would be worse than admitting the gap. Those currencies
- * fall back to the hand-maintained CURRENCY_REGIME, and the cell says so.
+ * THE OTHER SIX NOW HAVE ONE TOO. GBP, JPY, CAD, AUD, NZD and CHF were
+ * previously dropped — DBnomics has no clean daily 2-year for them, Yahoo has no
+ * reliable tickers, and FRED's OECD mirrors are monthly and run about two months
+ * behind, which is worse than admitting the gap. TradingView's quote endpoint
+ * serves all six keyless and live, verified during planning:
+ *
+ *   GB 4.3815   JP 1.685   CH 0.0949   CA 2.984   AU 4.626   NZ 3.588
+ *
+ * That matters because the rate column is otherwise a guaranteed 0 for every
+ * non-USD currency, since the Fed is the only bank publishing a numeric
+ * projection — so every non-USD CROSS scores 0 there by construction, and the
+ * crosses are where the remaining gaps against A1 live.
+ *
+ * FRED and the ECB stay PRIMARY for USD and EUR. They are the issuers' own
+ * series and were verified first; TradingView is the fallback that fills what
+ * they never covered, not a replacement for what they do.
  */
 
-import { fetchText, fixturesEnabled } from '@/lib/connectors/base';
+import { TRADINGVIEW_QUOTE } from '@/config/sources.config';
+import { fetchJson, fetchText, fixturesEnabled } from '@/lib/connectors/base';
 import { ok, type Currency, type Result } from '@/lib/types';
 
 const FRED = {
@@ -100,6 +112,45 @@ function parseEcbCsv(body: string): { value: number; observedOn: string } | null
 }
 
 /**
+ * One currency's 2-year from TradingView.
+ *
+ * Null on anything unexpected rather than a guess: a missing currency falls back
+ * to a published projection or to 0, which is honest, whereas a wrong yield
+ * would flip the sign of a rate cell on every pair that currency appears in.
+ *
+ * `observedOn` is today's date, not an observation date — the endpoint returns a
+ * streaming quote with no timestamp. That is the one thing this source is weaker
+ * at than FRED and the ECB, and the reason those two stay primary.
+ */
+async function fetchTradingViewYield(currency: Currency): Promise<SovereignYield | null> {
+  const symbol = TRADINGVIEW_QUOTE.yield2y[currency];
+  if (!symbol) return null;
+
+  const res = await fetchJson<{ close?: unknown }>(
+    TRADINGVIEW_QUOTE.name,
+    `${TRADINGVIEW_QUOTE.base}?symbol=${encodeURIComponent(symbol)}&fields=close`,
+    {
+      headers: { ...TRADINGVIEW_QUOTE.headers },
+      cacheTtlSeconds: TRADINGVIEW_QUOTE.cacheTtlSeconds,
+      cacheKey: `tv:yield:${symbol}`,
+      timeoutMs: 15_000,
+      retries: 1,
+    },
+  );
+  if (!res.ok) return null;
+
+  const value = res.data?.close;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+
+  return {
+    currency,
+    value,
+    observedOn: new Date().toISOString().slice(0, 10),
+    source: TRADINGVIEW_QUOTE.name,
+  };
+}
+
+/**
  * Every 2-year yield we can get for free, keyed by currency.
  *
  * Never throws and never fails as a whole: a currency we cannot reach is simply
@@ -140,12 +191,29 @@ export async function fetchSovereignYields(): Promise<Result<Map<Currency, Sover
     if (parsed) out.set('EUR', { currency: 'EUR', ...parsed, source: ECB.name });
   }
 
+  /**
+   * Everything the issuers' own feeds do not cover, from TradingView.
+   *
+   * Filled AFTER the two above and skipped where they succeeded, so FRED and the
+   * ECB stay authoritative for USD and EUR and this can only ever add currencies
+   * rather than override a verified one.
+   */
+  const missing = (Object.keys(TRADINGVIEW_QUOTE.yield2y) as Currency[]).filter((c) => !out.has(c));
+  for (let i = 0; i < missing.length; i += TRADINGVIEW_QUOTE.batchSize) {
+    const batch = missing.slice(i, i + TRADINGVIEW_QUOTE.batchSize);
+    const quotes = await Promise.all(batch.map((c) => fetchTradingViewYield(c)));
+    quotes.forEach((q, j) => {
+      if (q) out.set(batch[j], q);
+    });
+  }
+
+  const wanted = Object.keys(TRADINGVIEW_QUOTE.yield2y).length;
   const degraded =
-    out.size === 2
+    out.size === wanted
       ? undefined
       : out.size === 0
-        ? 'no sovereign yields available — every rate cell falls back to the regime table'
-        : `${2 - out.size} of 2 yield sources unavailable`;
+        ? 'no sovereign yields available — every rate cell falls back to a published projection or 0'
+        : `${wanted - out.size} of ${wanted} currencies have no 2-year yield`;
 
   return ok('Sovereign yields', out, degraded);
 }

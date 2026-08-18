@@ -106,3 +106,88 @@ describe('scoreRateExpectation', () => {
     expect(scored.basis).toBe('projection');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Why the 2-year spread is shown but not scored
+// ---------------------------------------------------------------------------
+
+describe('the 2-year spread is context, not a score', () => {
+  /** A standing policy rate, which the spread is measured against. */
+  function decision(currency: Currency, rate: number): NormalizedEvent[] {
+    return [
+      {
+        id: 'decision',
+        seriesId: null,
+        name: currency === 'GBP' ? 'Bank Rate' : `${currency} Interest Rate Decision`,
+        currency,
+        countryCode: currency === 'GBP' ? 'UK' : 'CH',
+        dateUtc: '2026-07-30T11:00:00Z',
+        impact: 'HIGH',
+        actual: rate,
+        consensus: rate,
+        previous: rate,
+        revised: null,
+        unit: '%',
+        ratioDeviation: null,
+        isBetterThanExpected: null,
+        isSpeech: false,
+        isPreliminary: false,
+        source: 'fxstreet',
+        actualSource: 'fxstreet',
+        sourceUrl: null,
+        lastUpdated: null,
+      },
+    ];
+  }
+
+  const yieldOf = (currency: Currency, value: number) =>
+    new Map([[currency, { currency, value, observedOn: '2026-08-11', source: 'TradingView quotes' }]]);
+
+  it('computes the spread and reports it without letting it score', () => {
+    const scored = scoreRateExpectation('GBP', yieldOf('GBP', 4.38), decision('GBP', 3.75), NOW);
+
+    expect(scored.spread).toBeCloseTo(0.63, 2);
+    expect(scored.explanation).toMatch(/for context/i);
+    expect(scored.basis).toBe('none');
+    expect(scored.cell).toBe(0);
+  });
+
+  /**
+   * THE MEASUREMENT THAT SETTLED IT, kept as a test so the idea is not retried
+   * a third time without meeting the evidence.
+   *
+   * Sovereign 2-years are now available for all eight majors, so scoring the
+   * spread is mechanically possible. It just says nothing: every curve slopes
+   * up, so every leg would score +1 and every non-USD CROSS would cancel to 0 —
+   * the exact cell the change was meant to fix. The term premium is common to
+   * all of them and swamps the policy expectation the column is asking about.
+   *
+   * Live spreads on the day this was measured, all positive.
+   */
+  it('would score every major identically, which is why it cannot inform a cross', () => {
+    const spreads: Record<string, number> = {
+      USD: 0.42, EUR: 0.48, GBP: 0.63, JPY: 0.69,
+      AUD: 0.27, NZD: 1.09, CAD: 0.73, CHF: 0.1,
+    };
+
+    const wouldScore = Object.values(spreads).map((s) => (Math.abs(s) < 0.1 ? 0 : s > 0 ? 1 : -1));
+    expect(new Set(wouldScore).size).toBe(1); // one value across all eight
+    expect(wouldScore[0]).toBe(1);
+
+    // And so every cross built from two of them differences to nothing.
+    expect(wouldScore[2] - wouldScore[3]).toBe(0); // GBP - JPY
+    expect(wouldScore[2] - wouldScore[7]).toBe(0); // GBP - CHF
+  });
+
+  it('keeps the bank OWN projection ahead of anything market-derived', () => {
+    /**
+     * The case that rejected the market proxy the first time: the US 2-year sat
+     * above the policy rate implying hikes while the Fed's dots projected cuts.
+     */
+    const events = [...projection('USD', 3.9, 3.4), ...decision('USD', 3.63)];
+    const scored = scoreRateExpectation('USD', yieldOf('USD', 4.19), events, NOW);
+
+    expect(scored.basis).toBe('projection');
+    expect(scored.cell).toBe(-1); // cuts, per the dots — not the market's hikes
+  });
+});

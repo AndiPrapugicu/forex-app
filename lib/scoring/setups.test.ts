@@ -298,14 +298,15 @@ describe('buildSetupsMatrix', () => {
     }
   });
 
-  it('scores the rate cell 0 when no central bank publishes a projection', () => {
+  it('scores the rate cell 0 with neither a projection nor a yield', () => {
     /**
-     * Only the Fed publishes numeric rate projections. Everyone else guides in
-     * prose, so their leg has no view and must contribute nothing.
+     * The column has three tiers: the bank's own published projection, then the
+     * market's view from the 2-year against the policy rate, then nothing. With
+     * no events and no yields supplied, every tier is empty and the cell must
+     * contribute 0 rather than fall back to an opinion.
      *
      * This replaced a hand-maintained regime table that scored ±1 on our own
-     * opinion, and a 2-year-yield proxy that scored the MARKET's forecast rather
-     * than the bank's — the two disagreed outright on the dollar.
+     * view of each central bank.
      */
     const matrix = buildSetupsMatrix({ events: [], ...base });
     const eurusd = matrix.rows.find((r) => r.symbol === 'EURUSD')!;

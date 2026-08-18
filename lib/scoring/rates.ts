@@ -49,7 +49,9 @@ export interface RateExpectation {
   spread: number | null;
   /**
    * `projection` — the central bank's own published forecast, the only thing
-   * that scores. `none` — no forecast published, so the cell is 0.
+   * that scores. `none` — no forecast published, so the cell is 0. The 2-year
+   * spread is carried alongside for display and deliberately does not score;
+   * see scoreRateExpectation for the measurement that settled it.
    */
   basis: 'projection' | 'none';
   explanation: string;
@@ -184,6 +186,30 @@ export function scoreRateExpectation(
     };
   }
 
+  /**
+   * NO PROJECTION MEANS NO VIEW. The 2-year spread is shown, never scored.
+   *
+   * Scoring it was tried and MEASURED, and the result is worth recording so it
+   * is not tried a third time. Sovereign 2-years are now available for all eight
+   * majors, so the mechanism was there; the signal is not:
+   *
+   *   USD +0.42   EUR +0.48   GBP +0.63   JPY +0.69
+   *   AUD +0.27   NZD +1.09   CAD +0.73   CHF +0.10
+   *
+   * Every curve slopes up, so every leg scores +1 and every non-USD CROSS
+   * cancels to 0 — the exact cell it was meant to fix, unchanged, while the USD
+   * pairs moved. The term premium is common to all of them and swamps the policy
+   * expectation the cell is asking about. Measured on the parity harness: exact
+   * 6 -> 7 but total gap 49 -> 50 and within-1 19 -> 18.
+   *
+   * A cross-sectional version (each spread against the median) is the obvious
+   * next idea and reproduces A1's GBPCHF but not their GBPJPY, which is fitting
+   * a band to two observations rather than finding a rule.
+   *
+   * So the honest reading stays 0, and it is the only honest one for seven of
+   * the eight majors. The spread rides along as context because the contrast
+   * between what a bank projects and what the market prices is worth seeing.
+   */
   return {
     currency,
     cell: 0,
@@ -194,8 +220,10 @@ export function scoreRateExpectation(
     explanation:
       `${currency}'s central bank publishes no numeric rate projection, so this column has ` +
       `no view — scored 0 rather than guessed.` +
-      (spread !== null
-        ? `  For context, the 2-year is ${spread > 0 ? 'above' : 'below'} the ${policy?.rate.toFixed(2)}% policy rate.`
+      (spread !== null && policy
+        ? `  For context the market prices ${spread > 0 ? 'hikes' : 'cuts'}: the 2-year is ` +
+          `${spread > 0 ? 'above' : 'below'} the ${policy.rate.toFixed(2)}% policy rate ` +
+          `(${spread > 0 ? '+' : ''}${spread.toFixed(2)}).`
         : ''),
   };
 }

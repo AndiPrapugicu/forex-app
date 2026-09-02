@@ -149,6 +149,19 @@ const clampPair = (n: number) => Math.max(-2, Math.min(2, n));
  * the same thing for the same reason; this list is the macro subset that has
  * both a pair row and an index row, which is what makes the comparison possible.
  */
+/**
+ * How long a caller should allow `comparePairAndIndexLegs` to run.
+ *
+ * The solve behind it is a brute force: 3^9 = 19,683 ternary leg assignments
+ * per column, scored against every captured row. That is microseconds for one
+ * column and tens of seconds for a whole 54-row board, which is fine for an
+ * offline evidence check and far past a test runner's default. It lives here,
+ * beside the cost, so the tests that pay it cannot drift from it.
+ *
+ * Measured 2026-09-02 on the 08-31 and 09-01 captures: 26s, 17s and 9s.
+ */
+export const SOLVER_TIMEOUT_MS = 120_000;
+
 export const DIFFERENCED_MACRO_SLOTS = [
   'gdp', 'mpmi', 'spmi', 'retail-sales', 'consumer-confidence',
   'cpi', 'ppi', 'pce',

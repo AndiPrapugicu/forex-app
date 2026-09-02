@@ -8,6 +8,7 @@ import {
   comparePairAndIndexLegs,
   parseCapture,
   type ColumnComparison,
+  SOLVER_TIMEOUT_MS,
 } from '@/lib/scoring/a1-pair-legs';
 import type { Currency } from '@/lib/types';
 
@@ -163,7 +164,7 @@ describe('the PPI flip is A1 reading the stocks impact', () => {
     }
 
     expect(checked.sort()).toEqual(['AU', 'CA', 'CH', 'EU', 'JP', 'NZ', 'UK', 'US']);
-  });
+  }, SOLVER_TIMEOUT_MS);
 
   /**
    * And the tiebreak, which is not a vote. UK PPI printed 3.1 against a 3.2

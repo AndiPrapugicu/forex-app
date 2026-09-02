@@ -45,6 +45,9 @@
  * is worth knowing before anyone bisects it looking for a regression.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import board from '@/fixtures/a1-board.json';
 import { SCORING_SLOTS } from '@/config/setups.config';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
@@ -57,6 +60,9 @@ import {
   explainGaps,
   solveA1Legs,
 } from '@/lib/scoring/a1-legs';
+import { listCaptures } from '@/lib/a1-capture-file';
+import { parseCapture } from '@/lib/scoring/a1-pair-legs';
+import { NAME_MAP, NOT_MODELED } from '@/lib/scoring/a1-symbol-map';
 
 interface Capture {
   /** null when the capture's date could not be established. */
@@ -66,7 +72,60 @@ interface Capture {
   cells: Record<string, Record<string, number>>;
 }
 
-const captures = board.captures as unknown as Capture[];
+/**
+ * The `fixtures/a1-top-setups-*.csv` captures, in this file's own Capture shape.
+ *
+ * WHY THESE EXIST SEPARATELY FROM a1-board.json. The JSON holds transcriptions
+ * read off livestream video frames: a handful of rows per capture, cells for
+ * fewer still, and a date that is sometimes only a day. The CSVs are the board
+ * read out of the DOM during A1's full-access week — all 54 rows, all 18 cells,
+ * stamped to the minute. Both are evidence and both are kept, but they are not
+ * the same grade of evidence, and `selectCapture` prefers the newest, which is
+ * now always a CSV.
+ *
+ * The filename's time is UTC, matching the convention `lib/a1-capture-file.ts`
+ * documents. A capture with no time is left as a bare date, which the existing
+ * CAPTURED_END_OF_DAY handling already reads as end-of-day.
+ *
+ * Rows are keyed by OUR symbol because that is what `totals[symbol]` is compared
+ * against. A1's index rows carry their own names (US-DOLLAR, EURO, ...) and map
+ * through NAME_MAP; their pair rows already are our symbols. A row we do not
+ * model is skipped rather than mapped to nothing, so it cannot show up as a
+ * phantom gap.
+ */
+function csvCaptures(): Capture[] {
+  const out: Capture[] = [];
+  for (const { file, date, time } of listCaptures()) {
+    let text: string;
+    try {
+      text = readFileSync(path.join(process.cwd(), 'fixtures', file), 'utf8');
+    } catch {
+      continue;
+    }
+    const parsed = parseCapture(text, file);
+    const totals: Record<string, number> = {};
+    const cells: Record<string, Record<string, number>> = {};
+
+    for (const [name, score] of parsed.scores) {
+      if (NOT_MODELED.has(name)) continue;
+      const symbol = NAME_MAP[name] ?? name;
+      if (!Number.isFinite(score)) continue;
+      totals[symbol] = score;
+      const row = parsed.rows.get(name);
+      if (row) cells[symbol] = { ...row };
+    }
+
+    out.push({
+      capturedUtc: time === '0000' ? date : `${date}T${time.slice(0, 2)}:${time.slice(2)}:00.000Z`,
+      provenance: `fixtures/${file} — read from A1's DOM during full access`,
+      totals,
+      cells,
+    });
+  }
+  return out;
+}
+
+const captures = [...(board.captures as unknown as Capture[]), ...csvCaptures()];
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const pad = (s: string | number, n: number) => String(s).padEnd(n);
@@ -84,7 +143,7 @@ const padStart = (s: string | number, n: number) => String(s).padStart(n);
 function selectCapture(): Capture {
   const dated = captures.filter((c) => c.capturedUtc !== null);
   if (dated.length === 0) {
-    throw new Error('fixtures/a1-board.json has no dated capture — nothing can be scored against');
+    throw new Error('no dated capture in fixtures/ — nothing can be scored against');
   }
   return dated.sort((a, b) => b.capturedUtc!.localeCompare(a.capturedUtc!))[0];
 }

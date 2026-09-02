@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest';
 
 import { biasFromScore } from '@/config/setups.config';
 import { mirrorBoard, mirrorDiffCount, PAIR_CONVENTIONS } from '@/lib/scoring/a1-mirror';
-import { comparePairAndIndexLegs, parseCapture } from '@/lib/scoring/a1-pair-legs';
+import {
+  comparePairAndIndexLegs,
+  parseCapture,
+  SOLVER_TIMEOUT_MS,
+} from '@/lib/scoring/a1-pair-legs';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
 
 const CAPTURES = ['a1-top-setups-2026-08-31.csv', 'a1-top-setups-2026-09-01.csv'] as const;
@@ -160,5 +164,8 @@ describe('PAIR_CONVENTIONS matches what their captures actually do', () => {
       if (PAIR_CONVENTIONS[column.slotKey]) continue;
       expect(column.agreement, column.slotKey).toBe('IDENTICAL');
     }
-  });
+    // The leg solve is a 3^9 brute force per column over 54 captured rows.
+    // It legitimately takes tens of seconds; the default 5s would fail it for
+    // being slow rather than wrong, which hides real regressions behind noise.
+  }, SOLVER_TIMEOUT_MS);
 });

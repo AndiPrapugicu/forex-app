@@ -152,18 +152,26 @@ export interface ScoreChange {
 }
 
 /** Cells whose slot keys are worth naming first in a cause. */
+/**
+ * BOTH KINDS OF LOSS, NOT WHICHEVER COMES FIRST.
+ *
+ * This used to return the partial cells OR, failing that, the dark ones. One
+ * upstream failure routinely causes both at once, and the else branch then threw
+ * half the explanation away: dropping the EURO FX contract leaves EURUSD's `cot`
+ * partial — it still has the dollar leg — while `crowd`, which reads that one
+ * contract directly, has nothing left at all. The log said "cot lost its EUR
+ * leg" and never mentioned the column that went blank, so the reported cause did
+ * not account for the whole move.
+ *
+ * Partial cells lead because a named leg is the more specific fact.
+ */
 function describeCause(cells: CellChange[]): string | null {
-  const lost = cells.filter((c) => c.becamePartial);
-  if (lost.length > 0) {
-    return lost.map((c) => `${c.slotKey} lost its ${c.missingLeg} leg`).join(' · ');
-  }
+  const parts = [
+    ...cells.filter((c) => c.becamePartial).map((c) => `${c.slotKey} lost its ${c.missingLeg} leg`),
+    ...cells.filter((c) => c.wentDark).map((c) => `${c.slotKey} lost its data`),
+  ];
 
-  const dark = cells.filter((c) => c.wentDark);
-  if (dark.length > 0) {
-    return dark.map((c) => `${c.slotKey} lost its data`).join(' · ');
-  }
-
-  return null;
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 /**

@@ -182,8 +182,13 @@ export async function fetchFxStreetHistory(
   }
 
   const from = new Date(now.getTime() - days * 86_400_000);
-  // A week ahead, so the same payload can also fill the upcoming-events panel.
-  const to = new Date(now.getTime() + 7 * 86_400_000);
+  /**
+   * Forward as well as back — see `FXSTREET.historyLookaheadDays` for why this
+   * is a quarter rather than the week it used to be. The upcoming-events panel
+   * still only renders the near edge; the far edge exists so the Interest Rates
+   * column can see the next scheduled central bank decision.
+   */
+  const to = new Date(now.getTime() + FXSTREET.historyLookaheadDays * 86_400_000);
 
   const url = `${FXSTREET.base}/${from.toISOString()}/${to.toISOString()}`;
 
@@ -192,7 +197,7 @@ export async function fetchFxStreetHistory(
     cacheTtlSeconds: FXSTREET.historyCacheTtlSeconds,
     // Bucketed by day: the window only needs to move once per day, and a
     // per-millisecond key would make the cache useless on a multi-MB payload.
-    cacheKey: `fxstreet:history:${days}:${from.toISOString().slice(0, 10)}`,
+    cacheKey: `fxstreet:history:${days}:${FXSTREET.historyLookaheadDays}:${from.toISOString().slice(0, 10)}`,
     // Several megabytes over a slow link needs more than the default.
     timeoutMs: 60_000,
     retries: 1,

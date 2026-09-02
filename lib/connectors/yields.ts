@@ -71,21 +71,56 @@ export interface SovereignYield {
   source: string;
 }
 
+/** One dated observation of a FRED series. */
+export interface DatedObservation {
+  /** `YYYY-MM-DD`, FRED's own observation date. */
+  date: string;
+  value: number;
+}
+
 /**
- * Last non-empty row of a FRED CSV.
+ * Every non-empty row of a FRED CSV, oldest first.
  *
  * FRED writes "." for missing observations on holidays, which parses as NaN
  * rather than throwing — the guard below is the whole reason this is a function
  * and not an inline split.
  */
-function parseFredCsv(body: string): { value: number; observedOn: string } | null {
+export function parseFredSeries(body: string): DatedObservation[] {
+  const out: DatedObservation[] = [];
   const lines = body.trim().split('\n');
-  for (let i = lines.length - 1; i >= 1; i--) {
+  for (let i = 1; i < lines.length; i++) {
     const [date, raw] = lines[i].split(',');
     const value = Number.parseFloat(raw ?? '');
-    if (date && Number.isFinite(value)) return { value, observedOn: date.trim() };
+    if (date && Number.isFinite(value)) out.push({ date: date.trim(), value });
   }
-  return null;
+  return out;
+}
+
+/** The newest observation of a parsed series, in the shape the level callers want. */
+function lastOf(series: readonly DatedObservation[]): { value: number; observedOn: string } | null {
+  const last = series[series.length - 1];
+  return last ? { value: last.value, observedOn: last.date } : null;
+}
+
+/**
+ * A FRED series as dated daily observations, oldest first.
+ *
+ * THE ONLY PATH TO FRED IN THIS FILE, and it is one on purpose. Three callers
+ * want DGS2 in a single pipeline run — the rate column, the sovereign yield map
+ * and the curve panel — and before this they issued two distinct cache keys for
+ * the identical CSV, so a cold run fetched the same 12,557-row export twice.
+ * One key, one fetch, and each caller takes the slice it needs: the rate column
+ * needs the HISTORY (an average cannot be rewound from a single number), the
+ * other two need only the last row.
+ */
+export async function fetchFredSeries(id: string): Promise<Result<DatedObservation[]>> {
+  const res = await fetchText(FRED.name, `${FRED.csv}?id=${id}`, {
+    cacheTtlSeconds: FRED.cacheTtlSeconds,
+    cacheKey: `fred:${id}`,
+    timeoutMs: 15_000,
+  });
+  if (!res.ok) return res;
+  return ok(FRED.name, parseFredSeries(res.data));
 }
 
 /**
@@ -169,11 +204,7 @@ export async function fetchSovereignYields(): Promise<Result<Map<Currency, Sover
   }
 
   const [usd, eur] = await Promise.all([
-    fetchText(FRED.name, `${FRED.csv}?id=DGS2`, {
-      cacheTtlSeconds: FRED.cacheTtlSeconds,
-      cacheKey: 'fred:DGS2',
-      timeoutMs: 15_000,
-    }),
+    fetchFredSeries('DGS2'),
     fetchText(ECB.name, ECB.url, {
       cacheTtlSeconds: ECB.cacheTtlSeconds,
       cacheKey: 'ecb:yc:2y',
@@ -182,7 +213,7 @@ export async function fetchSovereignYields(): Promise<Result<Map<Currency, Sover
   ]);
 
   if (usd.ok) {
-    const parsed = parseFredCsv(usd.data);
+    const parsed = lastOf(usd.data);
     if (parsed) out.set('USD', { currency: 'USD', ...parsed, source: FRED.name });
   }
 
@@ -254,16 +285,10 @@ export async function fetchYieldCurve(): Promise<Result<YieldCurve>> {
   }
 
   const series = await Promise.all(
-    (['DGS2', 'DGS10', 'T10Y2Y'] as const).map((id) =>
-      fetchText(FRED.name, `${FRED.csv}?id=${id}`, {
-        cacheTtlSeconds: FRED.cacheTtlSeconds,
-        cacheKey: `fred:${id}`,
-        timeoutMs: 15_000,
-      }),
-    ),
+    (['DGS2', 'DGS10', 'T10Y2Y'] as const).map((id) => fetchFredSeries(id)),
   );
 
-  const [two, ten, spread] = series.map((r) => (r.ok ? parseFredCsv(r.data) : null));
+  const [two, ten, spread] = series.map((r) => (r.ok ? lastOf(r.data) : null));
 
   const degraded =
     spread === null

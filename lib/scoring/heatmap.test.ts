@@ -9,7 +9,25 @@
 
 import { describe, expect, it } from 'vitest';
 import { bullishShare, buildCurrencyHeatmap } from '@/lib/scoring/heatmap';
+import { SLOTS } from '@/config/setups.config';
+import heatmaps from '@/fixtures/a1-heatmaps.json';
 import type { NormalizedEvent } from '@/lib/types';
+
+interface A1CardRow {
+  label: string;
+  slotKey: string;
+  actual: number | null;
+  forecast: number | null;
+  previous: number | null;
+  surprise: number;
+  currencyImpact: number;
+  stocksImpact: number;
+  illegible?: string[];
+}
+
+interface A1Capture {
+  cards: Record<string, { impactPct: { currency: number; stocks: number }; rows: A1CardRow[] }>;
+}
 
 function makeEvent(o: Partial<NormalizedEvent> = {}): NormalizedEvent {
   return {
@@ -178,20 +196,43 @@ describe('which rows appear at all', () => {
 });
 
 describe('impact percentages', () => {
-  it('is the bullish share of resolved readings', () => {
-    // A1's published EU card reads 57.14% — 4 bullish of 7 rows.
-    expect(bullishShare([1, 1, 1, 1, -1, -1, -1])).toBeCloseTo(57.14, 2);
+  /**
+   * TRANSCRIBED FROM A1's OWN CARDS, not reasoned about.
+   *
+   * This rule was wrong for as long as it was argued rather than checked: the
+   * previous version counted neutral rows in the denominator and cited "their EU
+   * card reads 57.14%, which is 4 bullish of 7 rows" to justify it. The EU card
+   * reads 50%. 57.14% is the AU card. One number attributed to the wrong
+   * screenshot, and a test written to match it.
+   *
+   * So each case below names its card and its row counts. Any future change to
+   * `bullishShare` has to reproduce all seven or explain which published card it
+   * is calling wrong.
+   */
+  it.each([
+    ['EU', [1, 1, -1, -1, 0, 0, 0, 0], 50],
+    ['CN', [1, 1, 1, 1, -1, -1, 0], 66.67],
+    ['JP', [1, 1, 1, 1, -1, -1, 0, 0], 66.67],
+    ['UK', [1, 1, -1, -1, -1, -1, 0], 33.33],
+    ['NZ', [1, 1, 1, 1, -1, 0, 0], 80],
+    ['NZ stocks', [1, 1, 1, 1, 1, 0, 0], 100],
+    ['UK stocks', [1, -1, -1, -1, -1, -1, 0], 16.67],
+  ])("reproduces A1's published %s card", (_card, impacts, expected) => {
+    expect(bullishShare(impacts as number[])).toBeCloseTo(expected, 2);
   });
 
-  it('counts neutral rows in the denominator', () => {
-    // Dropping them would let one beat alongside three exact prints read 100%.
-    expect(bullishShare([1, 0, 0, 0])).toBe(25);
+  it('excludes neutral rows from the denominator', () => {
+    // 1 bullish, 0 bearish, 3 neutral. Counting the neutrals gives 25%, which
+    // reproduces none of the cards above.
+    expect(bullishShare([1, 0, 0, 0])).toBe(100);
   });
 
-  it('is null rather than 0 when nothing resolved', () => {
+  it('is null rather than 0 when nothing DIRECTIONAL resolved', () => {
     // 0% would read as "everything is bearish", which is a claim we cannot make.
     expect(bullishShare([])).toBeNull();
     expect(bullishShare([null, null])).toBeNull();
+    // All-neutral is a currency with no signal, not a uniformly bearish one.
+    expect(bullishShare([0, 0, 0])).toBeNull();
   });
 
   it('reports both columns off the same rows', () => {
@@ -199,5 +240,102 @@ describe('impact percentages', () => {
     // One cooler CPI: bearish for the currency, bullish for stocks.
     expect(map.currencyImpactPct).toBe(0);
     expect(map.stocksImpactPct).toBe(100);
+  });
+});
+
+describe('the reported basis is the one the cell was scored on', () => {
+  /**
+   * `slot.compare` says what was ASKED for; `SlotResult.referenceLabel` says
+   * what was USED. They part company when no consensus exists and the score
+   * falls back to the prior print, which is A1's rule.
+   *
+   * This is pinned because re-deriving the label from the slot did not merely
+   * mislabel a column — a diagnostic built on it reported that NO cell scored
+   * against the prior print while five of sixty-six were doing exactly that,
+   * including the JPY services PMI that reads +1 where A1 reads -1. The bug
+   * concealed its own symptom, so the honest label is the load-bearing part.
+   */
+  it('says "previous" and measures against it when the forecast is missing', () => {
+    const map = buildCurrencyHeatmap(
+      'USD',
+      [makeEvent({ actual: 3.4, consensus: null, previous: 3.1 })],
+      NOW,
+    );
+    const cpi = map.rows.find((r) => r.slotKey === 'cpi')!;
+
+    expect(cpi.referenceLabel).toBe('previous');
+    expect(cpi.reference).toBe(3.1);
+    // 3.4 beats the prior 3.1, so the surprise is measured off that same number.
+    expect(cpi.surprise).toBeCloseTo(0.3, 5);
+    expect(cpi.currencyImpact).toBe(1);
+  });
+
+  it('still says "forecast" when there is one', () => {
+    const map = buildCurrencyHeatmap(
+      'USD',
+      [makeEvent({ actual: 3.4, consensus: 3.6, previous: 3.1 })],
+      NOW,
+    );
+    const cpi = map.rows.find((r) => r.slotKey === 'cpi')!;
+
+    expect(cpi.referenceLabel).toBe('forecast');
+    expect(cpi.reference).toBe(3.6);
+    // A miss against forecast even though it rose against the prior print —
+    // which is the whole reason the two labels must not be conflated.
+    expect(cpi.currencyImpact).toBe(-1);
+  });
+});
+
+/**
+ * The card transcription in `fixtures/a1-heatmaps.json`, checked against itself.
+ *
+ * These assert a TRANSCRIPTION, not our scoring — the same job
+ * `edgefinder-parity.test.ts` does for the board fixture. A failure here means
+ * go and re-read a cell off the screenshot; it does not mean the code broke.
+ *
+ * The second check is the load-bearing one. Counting neutral rows in the
+ * denominator reproduces NONE of these nine percentages, which is how the rule
+ * in `bullishShare` was settled after a version that counted them shipped behind
+ * a test that made it look verified.
+ */
+describe("A1's published country cards", () => {
+  const capture = (heatmaps as { captures: A1Capture[] }).captures[0];
+  const cards = Object.entries(capture.cards);
+
+  it('covers every major plus China', () => {
+    expect(cards).toHaveLength(9);
+  });
+
+  it.each(cards)('%s: every surprise is actual minus forecast, or minus previous', (_currency, card) => {
+    for (const row of card.rows) {
+      if (row.actual === null) continue;
+      const reference = row.forecast ?? row.previous;
+      if (reference === null) continue;
+      expect(Math.round((row.actual - reference) * 100) / 100).toBeCloseTo(row.surprise, 6);
+    }
+  });
+
+  it.each(cards)('%s: the published Impact percentage is bullish over directional', (_currency, card) => {
+    expect(bullishShare(card.rows.map((r) => r.currencyImpact))).toBeCloseTo(card.impactPct.currency, 2);
+    expect(bullishShare(card.rows.map((r) => r.stocksImpact))).toBeCloseTo(card.impactPct.stocks, 2);
+  });
+
+  it.each(cards)('%s: every row maps to a slot we carry', (_currency, card) => {
+    const known = new Set(SLOTS.map((s) => s.key));
+    for (const row of card.rows) {
+      expect(known.has(row.slotKey), `${row.label} -> ${row.slotKey}`).toBe(true);
+    }
+  });
+
+  /**
+   * A blank Forecast is the evidence for `compareByCurrency`, so it must mean
+   * BLANK and never "could not read it". An unreadable cell is declared.
+   */
+  it('never records an illegible cell as a blank forecast', () => {
+    for (const [, card] of cards) {
+      for (const row of card.rows) {
+        if (row.illegible?.includes('forecast')) expect(row.forecast).toBeNull();
+      }
+    }
   });
 });

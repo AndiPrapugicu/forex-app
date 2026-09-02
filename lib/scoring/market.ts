@@ -15,7 +15,7 @@
 import { SCORING_SLOTS } from '@/config/setups.config';
 import type { CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
-import { scoreSlot } from '@/lib/scoring/discrete';
+import { buildCurrencyHeatmap } from '@/lib/scoring/heatmap';
 import type { CurrencySlotScores } from '@/lib/scoring/setups';
 import type { Currency, NormalizedEvent } from '@/lib/types';
 
@@ -191,8 +191,13 @@ export function buildSmartMoney(
 
 export interface SurpriseIndex {
   currency: Currency;
-  /** 0..100. 100 = every tracked release beat, 0 = every one missed. */
-  index: number;
+  /**
+   * 0..100. 100 = every DIRECTIONAL release beat, 0 = every one missed.
+   *
+   * Null when nothing directional resolved — no releases at all, or every one
+   * landing exactly on forecast. Both are "no signal", and neither is 50.
+   */
+  index: number | null;
   beats: number;
   misses: number;
   inline: number;
@@ -206,38 +211,52 @@ export const SURPRISE_MIN_SAMPLE = 4;
 /**
  * Share of recent releases that beat expectations, per currency.
  *
- * Reads the SAME scoreSlot results the matrix uses, so the index can never
- * disagree with the cells about whether something beat. On-forecast prints count
- * as half a beat rather than being dropped — they are genuine information that
- * expectations were correct, and dropping them would let one lucky beat read as
- * 100%.
+ * DERIVED FROM THE HEATMAP, not computed a second time. Three functions in this
+ * repo used to answer this one question and no two agreed: `bullishShare`
+ * divided by every resolved row, this one counted an on-forecast print as half a
+ * beat, and A1 — whose number we are trying to match — excludes neutrals from
+ * the denominator entirely. Two of the three were ours, on two different pages,
+ * and a user comparing /macro against /heatmap would have been shown different
+ * percentages for the same currency on the same data.
+ *
+ * So this now reads `buildCurrencyHeatmap` and reports what it reports.
+ *
+ * SAMPLE SIZES STILL DIFFER BY CURRENCY, and that is not a bug to fix here. The
+ * dollar has thirteen rows against seven for the Australian dollar, because the
+ * United States genuinely publishes payrolls, claims, ADP, JOLTS and PCE and
+ * nobody else does. The heatmap drops slots an economy does not publish rather
+ * than counting them as empty, so no currency is penalised for a series that
+ * does not exist — but a percentage over thirteen releases is a steadier number
+ * than one over seven, which is what `sampled` and SURPRISE_MIN_SAMPLE are for.
  */
 export function buildSurpriseIndex(
   currency: Currency,
   events: NormalizedEvent[],
   now = new Date(),
 ): SurpriseIndex {
+  const heatmap = buildCurrencyHeatmap(currency, events, now);
+
   let beats = 0;
   let misses = 0;
   let inline = 0;
 
-  for (const slot of SCORING_SLOTS) {
-    if (slot.kind !== 'economic') continue;
-
-    const result = scoreSlot(slot, currency, events, now);
-    if (result.status !== 'scored' || result.cell === null) continue;
-
-    // Polarity is already applied, so a positive cell means "bullish for this
+  for (const row of heatmap.rows) {
+    // Polarity is already applied, so a positive impact means "bullish for this
     // currency", which for an inverted slot like unemployment is a lower print.
-    if (result.cell > 0) beats++;
-    else if (result.cell < 0) misses++;
+    if (row.currencyImpact === null) continue;
+    if (row.currencyImpact > 0) beats++;
+    else if (row.currencyImpact < 0) misses++;
     else inline++;
   }
 
-  const sampled = beats + misses + inline;
-  const index = sampled === 0 ? 50 : ((beats + inline * 0.5) / sampled) * 100;
-
-  return { currency, index: Math.round(index), beats, misses, inline, sampled };
+  return {
+    currency,
+    index: heatmap.currencyImpactPct,
+    beats,
+    misses,
+    inline,
+    sampled: beats + misses + inline,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +271,8 @@ export interface StrengthRow {
   realYield: number | null;
   policyRate: number | null;
   cpi: number | null;
-  surpriseIndex: number;
+  /** Null when no directional release resolved — see `SurpriseIndex.index`. */
+  surpriseIndex: number | null;
   /** Rank position, 1 = strongest. */
   rank: number;
 }

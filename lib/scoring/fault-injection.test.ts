@@ -190,12 +190,19 @@ describe('the change log over an injected failure', () => {
 
     expect(entry).toBeDefined();
     /**
-     * BOTH columns, because one contract feeds both: `cot` reads its weekly
-     * change and `crowd` reads its retail positioning. That is the real cost of
-     * a dropped contract and the log names all of it rather than the first one
-     * it happened to find.
+     * BOTH columns, because one contract feeds both — but they fail
+     * DIFFERENTLY, and the log has to say so.
+     *
+     * `cot` differences two legs, so losing the euro contract leaves the dollar
+     * one and the cell degrades to `partial` with a named missing leg. `crowd`
+     * reads the pair's own contract directly (EURO FX *is* EURUSD), so losing it
+     * leaves nothing to build a number from and the cell goes dark.
+     *
+     * That asymmetry is the point: the log names all of it rather than the first
+     * one it happened to find. `describeCause` used to return the partial cells
+     * OR the dark ones, and this exact failure produced both at once.
      */
-    expect(entry.cause).toBe('cot lost its EUR leg · crowd lost its EUR leg');
+    expect(entry.cause).toBe('cot lost its EUR leg · crowd lost its data');
     expect(entry.from).toBe(healthy.row.totalScore);
     expect(entry.to).toBe(broken.row.totalScore);
   });

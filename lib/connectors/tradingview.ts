@@ -9,17 +9,22 @@
  * producer prices and the SECO consumer survey both arrive with no forecast, so
  * every franc cross was scoring those columns from one leg.
  *
- * DELIBERATELY NOT A SECOND SOURCE OF TRUTH. It never contributes an event, an
- * actual, a date or an impact — FXStreet remains the record of what happened.
- * All this can do is fill a hole in the forecast column, which keeps the failure
- * mode small: if the merge misfires, a cell reads a wrong forecast rather than
- * the calendar disagreeing with itself about what was released.
+ * NOT A SECOND SOURCE OF TRUTH, WITH ONE NAMED EXCEPTION. For every series
+ * FXStreet publishes, this contributes a forecast and nothing else — no event,
+ * no actual, no date, no impact — so if the merge misfires a cell reads a wrong
+ * forecast rather than the calendar disagreeing with itself about what was
+ * released.
+ *
+ * The exception is `fetchTradingViewActuals`, which emits real events for the
+ * handful of series in `TRADINGVIEW.actualSeries` that FXStreet does not carry
+ * at all. There the alternative is not a different number but a permanently
+ * blank column, and every such event is stamped `actualSource: 'tradingview'`.
  */
 
 import { z } from 'zod';
 import { TRADINGVIEW } from '@/config/sources.config';
-import { fetchJson, fixturesEnabled } from '@/lib/connectors/base';
-import { ok, type NormalizedEvent, type Result } from '@/lib/types';
+import { fetchJson, fixturesEnabled, stableId } from '@/lib/connectors/base';
+import { isMajor, ok, type NormalizedEvent, type Result } from '@/lib/types';
 
 const TvEvent = z.object({
   title: z.string(),
@@ -87,6 +92,47 @@ export const SERIES_ALIASES: Record<string, string> = {
   // TradingView abbreviates the two most common series names everywhere.
   'gross domestic product mom': 'gdp mom',
   'producer price index qoq': 'ppi qoq',
+
+  /**
+   * TradingView's HOUSE VOCABULARY, which is the reason the backfill was barely
+   * working: it fetched 1,526 forecast rows and lent 64, nearly all of them EIA
+   * oil stocks the scorecard never reads.
+   *
+   * The two calendars do not disagree about the data, they disagree about the
+   * words. FXStreet names a series after the statistical office's title;
+   * TradingView names it after the thing measured, identically for every
+   * country. Neither is wrong, and normalisation cannot bridge them because
+   * "Consumer Price Index (YoY)" and "Inflation Rate YoY" share no tokens at all.
+   *
+   * Every pair below was checked against the live feed by confirming the two
+   * sides describe the same release on the same day — not by similarity, which
+   * the file header rightly warns is how "Core CPI" gets paired with "CPI". The
+   * near-misses that were REJECTED are worth recording, because each looks
+   * plausible and each would lend a forecast of a different series:
+   *
+   *   retail trade s.a. (MoM)      vs  retail sales yoy      different transform
+   *   producer and import prices yoy vs producer and import prices mom  ditto
+   *   Ivey Purchasing Managers Index vs ivey pmi s a         adjusted, not raw
+   *   AiG Manufacturing PMI        vs  s&p global manufacturing pmi final
+   *                                                          different survey
+   */
+  'consumer price index yoy': 'inflation rate yoy',
+  'consumer price index mom': 'inflation rate mom',
+  'gross domestic product qoq': 'gdp growth rate qoq',
+  'gross domestic product yoy': 'gdp growth rate yoy',
+  'producer price index output qoq': 'ppi output qoq',
+  // Switzerland titles its labour series "s.a. (MoM)" though it is a rate, not
+  // a change; TradingView calls it what it is. Same release either way.
+  'unemployment rate s a mom': 'unemployment rate',
+  'unemployment rate s a': 'unemployment rate',
+  // The UK's headline labour measure, published by the ONS on the ILO basis.
+  'ilo unemployment rate 3m': 'unemployment rate',
+  // Singular on one side, plural on the other, and nothing else differs.
+  'kof leading indicator': 'kof leading indicators',
+  // Japan's and Switzerland's retail series, both named for the national
+  // statistical title rather than for the measure.
+  'retail trade yoy': 'retail sales yoy',
+  'real retail sales yoy': 'retail sales yoy',
 };
 
 function aliasFor(normalized: string): string {
@@ -122,6 +168,50 @@ function daysBetween(a: string, b: string): number {
   return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
 }
 
+type TvRow = z.infer<typeof TvEvent>;
+
+/**
+ * One country's slice of the window, parsed but not yet interpreted.
+ *
+ * Shared by the forecast backfill and the allowlisted-actuals reader so the two
+ * cannot drift apart on headers, window or cache key — and so the second reader
+ * is served from `base.ts`'s in-process cache rather than issuing its own
+ * request. See TRADINGVIEW.countries for why this is per country and not one
+ * call for all eight.
+ */
+async function pullCountry(
+  country: string,
+  from: Date,
+  to: Date,
+): Promise<{ rows: TvRow[]; capped: boolean } | null> {
+  const url =
+    `${TRADINGVIEW.base}?from=${encodeURIComponent(from.toISOString())}` +
+    `&to=${encodeURIComponent(to.toISOString())}&countries=${country}`;
+
+  const res = await fetchJson<unknown>(TRADINGVIEW.name, url, {
+    headers: { ...TRADINGVIEW.headers },
+    cacheTtlSeconds: TRADINGVIEW.cacheTtlSeconds,
+    cacheKey: `tradingview:${country}:${from.toISOString().slice(0, 10)}`,
+    timeoutMs: 20_000,
+    retries: 1,
+  });
+  if (!res.ok) return null;
+
+  const parsed = TvResponse.safeParse(res.data);
+  if (!parsed.success) return null;
+
+  const result = parsed.data.result ?? [];
+  const rows: TvRow[] = [];
+  for (const raw of result) {
+    const row = TvEvent.safeParse(raw);
+    // One malformed row must not discard the rest, as in the FXStreet connector.
+    if (!row.success) continue;
+    rows.push(row.data);
+  }
+
+  return { rows, capped: result.length >= TRADINGVIEW.rowCap };
+}
+
 /**
  * Fetches the forecast column for the scorecard's window.
  *
@@ -137,32 +227,16 @@ export async function fetchTradingViewForecasts(
   const to = new Date(now.getTime() + 86_400_000);
   const from = new Date(now.getTime() - TRADINGVIEW.lookbackDays * 86_400_000);
 
-  /** One country's slice of the window. See TRADINGVIEW.countries for why. */
-  async function pull(country: string): Promise<{ rows: TvForecast[]; capped: boolean } | null> {
-    const url =
-      `${TRADINGVIEW.base}?from=${encodeURIComponent(from.toISOString())}` +
-      `&to=${encodeURIComponent(to.toISOString())}&countries=${country}`;
+  const out: TvForecast[] = [];
+  const failed: string[] = [];
+  const capped: string[] = [];
 
-    const res = await fetchJson<unknown>(TRADINGVIEW.name, url, {
-      headers: { ...TRADINGVIEW.headers },
-      cacheTtlSeconds: TRADINGVIEW.cacheTtlSeconds,
-      cacheKey: `tradingview:${country}:${from.toISOString().slice(0, 10)}`,
-      timeoutMs: 20_000,
-      retries: 1,
-    });
-    if (!res.ok) return null;
+  const pull = async (country: string) => {
+    const raw = await pullCountry(country, from, to);
+    if (!raw) return null;
 
-    const parsed = TvResponse.safeParse(res.data);
-    if (!parsed.success) return null;
-
-    const result = parsed.data.result ?? [];
     const rows: TvForecast[] = [];
-    for (const raw of result) {
-      const row = TvEvent.safeParse(raw);
-      // One malformed row must not discard the rest, as in the FXStreet connector.
-      if (!row.success) continue;
-
-      const { title, country: rowCountry, currency, date, forecast } = row.data;
+    for (const { title, country: rowCountry, currency, date, forecast } of raw.rows) {
       if (forecast === null || forecast === undefined) continue;
       if (!rowCountry || !currency) continue;
 
@@ -175,12 +249,8 @@ export async function fetchTradingViewForecasts(
       });
     }
 
-    return { rows, capped: result.length >= TRADINGVIEW.rowCap };
-  }
-
-  const out: TvForecast[] = [];
-  const failed: string[] = [];
-  const capped: string[] = [];
+    return { rows, capped: raw.capped };
+  };
 
   const countries = [...TRADINGVIEW.countries];
   for (let i = 0; i < countries.length; i += TRADINGVIEW.batchSize) {
@@ -210,6 +280,91 @@ export async function fetchTradingViewForecasts(
 }
 
 /**
+ * The allowlisted series, as ordinary calendar events.
+ *
+ * Reads the SAME per-country responses `fetchTradingViewForecasts` does — same
+ * URL, same `cacheKey` — so within one run this is served from the in-process
+ * cache in `base.ts` and costs no additional request.
+ *
+ * Scoped hard by construction: a row is emitted only if its normalized title is
+ * an exact match for an `actualSeries` entry AND the country agrees. Nothing
+ * fuzzy, nothing inferred. See `TRADINGVIEW.actualSeries` for why this exception
+ * exists and why it is a list rather than a fallback.
+ */
+export async function fetchTradingViewActuals(
+  now = new Date(),
+): Promise<Result<NormalizedEvent[]>> {
+  const label = `${TRADINGVIEW.name}:actuals`;
+  if (fixturesEnabled()) return ok(label, []);
+
+  const wanted: readonly {
+    currency: string; countryCode: string; tvName: string; publishAs: string; unit: string;
+  }[] = TRADINGVIEW.actualSeries;
+
+  const to = new Date(now.getTime() + 86_400_000);
+  const from = new Date(now.getTime() - TRADINGVIEW.lookbackDays * 86_400_000);
+
+  const countries = [...new Set(wanted.map((w) => w.countryCode))];
+  const out: NormalizedEvent[] = [];
+  const failed: string[] = [];
+
+  for (const country of countries) {
+    const raw = await pullCountry(country, from, to);
+    if (!raw) {
+      failed.push(country);
+      continue;
+    }
+
+    for (const row of raw.rows) {
+      const { title, country: rowCountry, currency, date, actual, previous, forecast } = row;
+      if (actual === null || actual === undefined) continue;
+      if (!rowCountry || !currency) continue;
+
+      const normalized = normalizeSeriesName(title);
+      const spec = wanted.find(
+        (w) => w.tvName === normalized && w.countryCode === toOurCountry(rowCountry),
+      );
+      if (!spec || spec.currency !== currency) continue;
+      // Narrows to the Currency union, and refuses anything outside it.
+      if (!isMajor(currency)) continue;
+
+      out.push({
+        id: stableId('tv', spec.publishAs, currency, date),
+        seriesId: null,
+        // Published under OUR name, so the slot matcher targets one string and
+        // does not have to know this series arrived by a different road.
+        name: spec.publishAs,
+        currency,
+        countryCode: spec.countryCode,
+        dateUtc: new Date(date).toISOString(),
+        impact: 'MEDIUM',
+        actual,
+        consensus: forecast ?? null,
+        previous: previous ?? null,
+        revised: null,
+        unit: spec.unit,
+        ratioDeviation: null,
+        isBetterThanExpected: null,
+        isSpeech: false,
+        isPreliminary: false,
+        source: 'tradingview',
+        // The point of the whole exercise: this number is not FXStreet's, and
+        // every consumer can see that without reading this file.
+        actualSource: 'tradingview',
+        sourceUrl: null,
+        lastUpdated: null,
+      });
+    }
+  }
+
+  return ok(
+    label,
+    out,
+    failed.length > 0 ? `no rows for ${failed.join(', ')}` : undefined,
+  );
+}
+
+/**
  * Lends a forecast to every released event that has none.
  *
  * PURE, and narrow by construction — it returns a new list in which the only
@@ -226,6 +381,15 @@ export async function fetchTradingViewForecasts(
 export function backfillConsensus(
   events: NormalizedEvent[],
   forecasts: TvForecast[],
+  /**
+   * Whose forecast this is, stamped onto every event it fills.
+   *
+   * Defaulted rather than required so existing callers are untouched, but a
+   * SECOND source must pass its own name or `consensusSource` silently lies —
+   * and a provenance field that lies is worse than one that is absent, because
+   * the card will name a source that never published the number.
+   */
+  sourceName: string = TRADINGVIEW.name,
 ): { events: NormalizedEvent[]; filled: number } {
   if (forecasts.length === 0) return { events, filled: 0 };
 
@@ -258,7 +422,7 @@ export function backfillConsensus(
 
     filled++;
     // Provenance travels with the number: this forecast is not FXStreet's.
-    return { ...e, consensus: forecast, consensusSource: TRADINGVIEW.name } satisfies NormalizedEvent;
+    return { ...e, consensus: forecast, consensusSource: sourceName } satisfies NormalizedEvent;
   });
 
   return { events: out, filled };

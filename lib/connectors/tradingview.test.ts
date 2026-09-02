@@ -15,6 +15,7 @@ import {
   normalizeSeriesName,
   type TvForecast,
 } from '@/lib/connectors/tradingview';
+import { TRADINGVIEW } from '@/config/sources.config';
 import type { NormalizedEvent } from '@/lib/types';
 
 function event(overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
@@ -200,5 +201,82 @@ describe('backfillConsensus', () => {
 
     expect(filled).toBe(0);
     expect(events).toBe(input); // same reference: nothing was rebuilt
+  });
+});
+
+/**
+ * Provenance, which only matters once there is more than one lender.
+ *
+ * The source name was hardcoded for as long as TradingView was the only
+ * backfill. A second one chained after it would have stamped every event it
+ * filled as TradingView's — and a provenance field that lies is worse than one
+ * that is absent, because the card names a source that never published the
+ * number.
+ */
+describe('backfillConsensus provenance', () => {
+  const forecast: TvForecast[] = [
+    {
+      countryCode: 'CH',
+      currency: 'CHF',
+      day: '2026-07-14',
+      normalizedName: 'producer and import prices mom',
+      forecast: 0.2,
+    },
+  ];
+
+  it('stamps TradingView by default', () => {
+    const { events, filled } = backfillConsensus([event()], forecast);
+    expect(filled).toBe(1);
+    expect(events[0].consensusSource).toBe('TradingView calendar');
+  });
+
+  it('stamps whichever source actually lent the number', () => {
+    const { events } = backfillConsensus([event()], forecast, 'ForexFactory (FairEconomy)');
+    expect(events[0].consensusSource).toBe('ForexFactory (FairEconomy)');
+  });
+
+  it('chains idempotently, and the FIRST source keeps the event', () => {
+    // Order is precedence: the second pass only sees what the first left null.
+    const second: TvForecast[] = [{ ...forecast[0], forecast: 9.9 }];
+
+    const first = backfillConsensus([event()], forecast, 'first');
+    const chained = backfillConsensus(first.events, second, 'second');
+
+    expect(chained.filled).toBe(0);
+    expect(chained.events[0].consensus).toBe(0.2);
+    expect(chained.events[0].consensusSource).toBe('first');
+  });
+});
+
+/**
+ * The allowlist is the one place this connector is allowed to be a source of
+ * truth rather than a forecast backfill, so its invariants are worth holding
+ * explicitly rather than by review.
+ */
+describe('TRADINGVIEW.actualSeries', () => {
+  it('names every entry under a title FXStreet does not already use', () => {
+    // Publishing under FXStreet's own name would put two series behind one
+    // string and let arrival order decide which fills the slot. The Swiss
+    // unemployment pair is the live case: FXStreet's is `Unemployment Rate
+    // s.a (MoM)`, this one is deliberately not.
+    const published = TRADINGVIEW.actualSeries.map((s) => s.publishAs);
+    expect(new Set(published).size).toBe(published.length);
+    expect(published).not.toContain('Unemployment Rate s.a (MoM)');
+  });
+
+  it('carries the Swiss unadjusted rate, which FXStreet does not publish', () => {
+    const ch = TRADINGVIEW.actualSeries.find((s) => s.currency === 'CHF');
+    expect(ch).toBeDefined();
+    expect(ch!.countryCode).toBe('CH');
+    // Their title normalizes to this; the alias table must not rewrite it, or
+    // the lookup in fetchTradingViewActuals stops matching.
+    expect(normalizeSeriesName('Unemployment Rate')).toBe(ch!.tvName);
+    expect(ch!.publishAs).toBe('Unemployment Rate');
+  });
+
+  it('stores tvName already normalized, since the lookup compares exactly', () => {
+    for (const s of TRADINGVIEW.actualSeries) {
+      expect(normalizeSeriesName(s.tvName)).toBe(s.tvName);
+    }
   });
 });

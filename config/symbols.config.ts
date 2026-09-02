@@ -309,6 +309,23 @@ export const COMMODITY_SYMBOLS: SymbolDefinition[] = [
  *
  * `macroPolarity` is deliberately unset: a currency's own strong data is bullish
  * for it, which is the +1 default.
+ *
+ * THEY ARE SINGLE-ECONOMY ROWS, NOT PAIRS AGAINST THE DOLLAR, and that was
+ * tested rather than assumed. A1's own board argues for the other reading: their
+ * CA-DOLLAR row shows Cnsmr Conf 0 while their CADCHF shows -2, and CAD - CHF =
+ * -2 with CAD = 0 needs CHF = +2, which no single leg can reach. Scoring these
+ * rows as `CUR - USD` makes that algebra legal.
+ *
+ * It also makes the board worse. Simulated over all seven rows: total absolute
+ * gap 20 -> 35, and every row moved by exactly +5 because the US macro leg sums
+ * to -5 and was being subtracted uniformly. A1's currency rows average about +1
+ * and ours average +0.7 as they stand, so the single-economy reading is the one
+ * their totals support.
+ *
+ * The unexplained part is therefore one cell, not the model: CADCHF's Cnsmr Conf
+ * is most likely mis-transcribed. Its row sums correctly, but the sum check
+ * cannot see two errors that cancel — which has already happened once in this
+ * fixture. Do not re-run this experiment without a re-read of that cell.
  */
 export const CURRENCY_INDEX_SYMBOLS: SymbolDefinition[] = [
   { symbol: 'EURX', label: 'Euro', kind: 'currency', yahoo: '6E=F', macroEconomy: 'EUR', cotContract: 'EURO FX' },

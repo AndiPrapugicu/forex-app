@@ -44,6 +44,31 @@ export const FXSTREET = {
    */
   historyLookbackDays: 150,
   /**
+   * How far FORWARD the same window reaches, in days.
+   *
+   * Named rather than the magic 7 it used to be inline, because this is the knob
+   * the Interest Rates column's coverage hangs on: `resolveNextRateDecision` can
+   * only see a central bank meeting inside this window.
+   *
+   * WIDENING IT WAS TRIED AND MEASURED AND IS NOT WORTH IT — recorded here so
+   * the next round does not repeat the experiment. A1's own published horizon is
+   * a full QUARTER: their free "Interest Rate Projections" dashboard
+   * (a1trading.com/interest-rates-data/) plots "market consensus estimates on
+   * future projected interest rates" by calendar quarter. So 100 days was set to
+   * match, and it worked in the sense that every G10 meeting became visible —
+   * the event pool went 4,297 -> 6,481 and the next ECB, Fed, BoE, BoJ, SNB and
+   * RBA decisions all appeared.
+   *
+   * NOT ONE OF THEM CARRIED A CONSENSUS. FXStreet publishes a forecast for a
+   * rate decision only in the days before it: on 2026-08-29 the two meetings 4
+   * days out (RBNZ, BoC) had one and every meeting 12 days or further out —
+   * ECB 10 Sep, Fed 16 Sep, BoE 17 Sep, BoJ 18 Sep, SNB 24 Sep, RBA 29 Sep —
+   * had `consensus: null`. So the wider window moved no cell, and cost a third
+   * more payload on every run. The horizon that matters is the FORECASTER's,
+   * not the fetch's.
+   */
+  historyLookaheadDays: 7,
+  /**
    * Historical releases do not change, so this is cached hard. Only the leading
    * edge moves, and the 48-hour ingest window handles that.
    */
@@ -69,7 +94,8 @@ export const FAIRECONOMY = {
 } as const;
 
 /**
- * TradingView's economic calendar — a CONSENSUS BACKFILL, never a replacement.
+ * TradingView's economic calendar — a CONSENSUS BACKFILL, with one named
+ * exception listed in `actualSeries` below.
  *
  * FXStreet remains the source of record for what was released and when. This
  * exists for one narrow failure it has: a release arriving with an actual but
@@ -77,6 +103,13 @@ export const FAIRECONOMY = {
  * the live feed, Switzerland is the worst hit — producer prices and the SECO
  * consumer survey both publish an actual against a null consensus, so every
  * franc cross lost those cells outright.
+ *
+ * The exception exists because "never a replacement" answers the wrong question
+ * for a series FXStreet does not carry AT ALL: there is nothing to replace and
+ * nothing to disagree with, only a column that stays blank forever. That is a
+ * different situation from two feeds reporting the same release differently,
+ * and it is confined to an explicit allowlist so it can never quietly become
+ * the general case.
  *
  * Coverage is PARTIAL and that is expected: of the releases carrying an actual,
  * a forecast comes with 69% for the UK, 56% for Switzerland and 18% for New
@@ -121,6 +154,69 @@ export const TRADINGVIEW = {
   rowCap: 2000,
   /** Concurrency, matching the discipline the other batched connectors use. */
   batchSize: 4,
+
+  /**
+   * THE NAMED EXCEPTION to "never a second source of truth" above.
+   *
+   * Every entry here is a series FXStreet does not publish AT ALL, so there is
+   * no row for the ordinary forecast backfill to attach to and no disagreement
+   * for this to resolve wrongly — the choice is this or an empty column.
+   *
+   * An allowlist rather than a fallback, and that distinction is the whole
+   * safety property: a fallback would silently adopt TradingView for any series
+   * that happened to be missing on a given fetch, which turns a transient
+   * FXStreet outage into a quiet source switch. Adding a row here is a
+   * deliberate act, reviewed once, and the emitted event carries
+   * `actualSource: 'tradingview'` so the card can say where the number came from.
+   *
+   * AUD retail sales is the case that forced it. The ABS retired monthly Retail
+   * Trade in favour of the Household Spending Indicator, and FXStreet carries
+   * neither — checked across all 217 Australian rows in a 120-day window, there
+   * is no Retail Sales (MoM), no Retail Sales (QoQ) and no Household Spending.
+   * TradingView carries Household Spending with both an actual and a forecast,
+   * so the column is recoverable; without this it is blank forever.
+   */
+  actualSeries: [
+    {
+      currency: 'AUD',
+      countryCode: 'AU',
+      /** Their title, already normalized — see `normalizeSeriesName`. */
+      tvName: 'household spending mom',
+      /** What we publish it as. The slot's matcher targets THIS name. */
+      publishAs: 'Household Spending (MoM)',
+      unit: '%',
+    },
+    /**
+     * Switzerland's UNADJUSTED registered unemployment rate.
+     *
+     * "FXStreet does not publish it AT ALL" is true here in the way that
+     * matters, and the way it is true is worth stating precisely: SECO releases
+     * TWO rates on the same morning, adjusted and unadjusted, and FXStreet
+     * carries only `Unemployment Rate s.a (MoM)`. Same publisher, same day, same
+     * statistic — a DIFFERENT SERIES. Checked across all 88 Swiss rows in the
+     * window: there is exactly one unemployment row and it is the adjusted one.
+     *
+     * The two are not interchangeable, and the seasonal shape is what proves it:
+     *
+     *   unadjusted   3.2 3.1 3.0 3.0 2.9 3.0     Feb..Jul 2026, winter high, summer low
+     *   adjusted     3.0 3.0 3.0 3.1 3.1 3.1     flat, by construction
+     *
+     * The July print therefore ROSE on one series (2.9 -> 3.0) and was FLAT on
+     * the other (3.1 -> 3.1). One release, two opposite cells.
+     */
+    {
+      currency: 'CHF',
+      countryCode: 'CH',
+      tvName: 'unemployment rate',
+      /**
+       * Deliberately NOT the FXStreet name. Publishing it as
+       * `Unemployment Rate s.a (MoM)` would put two different series under one
+       * string and let whichever arrived first win the slot.
+       */
+      publishAs: 'Unemployment Rate',
+      unit: '%',
+    },
+  ] as const,
 } as const;
 
 /**
@@ -269,6 +365,47 @@ export const FRANKFURTER = {
   name: 'Frankfurter',
   url: 'https://api.frankfurter.dev/v1/latest',
   cacheTtlSeconds: 600,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Retail positioning (the Crowd Sentiment column)
+// ---------------------------------------------------------------------------
+
+/**
+ * Myfxbook Community Outlook — the retail long/short share, per instrument.
+ *
+ * WHY THIS PROVIDER AND NOT FXSSI. A1's crowd cell matches FXSSI's broker
+ * aggregate closely enough to be the same population, so FXSSI was the first
+ * choice and had to be rejected on licensing, not on fit: FXSSI publish that
+ * they provide no data-output service and that their agreements with the
+ * contributing brokers forbid redistribution to third parties. The only way to
+ * get their numbers is to scrape the page, which is exactly the dependency this
+ * repo will not take.
+ *
+ * Myfxbook is the closest LEGITIMATE substitute, and not by accident — `MFB` is
+ * one of the nine broker feeds FXSSI itself aggregates. So this is one of A1's
+ * own constituent populations rather than an unrelated proxy: the same measure
+ * over a narrower sample. Expect agreement on direction and occasional
+ * disagreement near the 40/60 boundaries.
+ *
+ * COVERAGE IS THE OPEN QUESTION, and it is the reason this ships disabled. The
+ * endpoint returns every symbol it tracks in ONE response, so what it covers
+ * cannot be checked without an account. Turn it on and `npm run crowd-coverage`
+ * prints exactly which of our 29 FX symbols it answers for.
+ *
+ * ONE CALL PER REFRESH, DELIBERATELY. The free tier allows 100 requests per 24
+ * hours and there is no per-symbol query — asking for 29 symbols individually is
+ * both impossible and a way to burn the quota in an hour. A 20-minute TTL is 72
+ * calls a day, inside the free limit with room for restarts.
+ */
+export const MYFXBOOK = {
+  name: 'Myfxbook Community Outlook',
+  login: 'https://www.myfxbook.com/api/login.json',
+  outlook: 'https://www.myfxbook.com/api/get-community-outlook.json',
+  /** 72 calls/day against a 100/day free quota. */
+  cacheTtlSeconds: 1200,
+  /** Sessions are IP-bound and live a month; re-login well before that. */
+  sessionTtlSeconds: 86_400,
 } as const;
 
 // ---------------------------------------------------------------------------

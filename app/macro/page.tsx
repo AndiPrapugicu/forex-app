@@ -17,6 +17,7 @@
 
 import Link from 'next/link';
 import { CURRENCY_REGIME } from '@/config/scoring.config';
+import { COMPONENT_MAX } from '@/lib/scoring/eco-strength';
 import { FX_SYMBOLS } from '@/config/symbols.config';
 import { YIELD_SMA_DAYS } from '@/config/setups.config';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
@@ -40,11 +41,18 @@ const REGIME_STYLE: Record<string, { label: string; tone: string }> = {
 };
 
 export default async function MacroPage() {
-  const { risk, strength, policyRates, sovereignYields, yieldCurve, events, clusters } =
+  const { risk, strength, ecoStrength, policyRates, sovereignYields, yieldCurve, events, clusters } =
     await runSetupsPipeline();
 
   const carry = buildCarryTable(FX_SYMBOLS, policyRates);
-  const surprise = MAJORS.map((c) => buildSurpriseIndex(c, events)).sort((a, b) => b.index - a.index);
+  /**
+   * Currencies with no directional release sort last rather than to the middle.
+   * `index` is null for them, and treating that as 50 would rank "we know
+   * nothing" above a genuinely weak economy.
+   */
+  const surprise = MAJORS.map((c) => buildSurpriseIndex(c, events)).sort(
+    (a, b) => (b.index ?? -1) - (a.index ?? -1),
+  );
 
   // Full-width bar geometry for the -6..+6 gauge.
   const riskPct = ((risk.score + 6) / 12) * 100;
@@ -255,6 +263,95 @@ export default async function MacroPage() {
           </p>
         </Panel>
 
+        {/*
+          --- Eco strength index -------------------------------------------
+          THE OTHER QUESTION. Every other panel on this page and every cell on
+          the board scores a SURPRISE: how a release compared to what was
+          expected. That deliberately says nothing about level — an economy can
+          beat a low bar and lead the strength table while sitting last here.
+
+          The construction is A1's, adopted because it reproduces: all 32
+          published sub-scores fall out of it exactly (lib/scoring/eco-strength.ts).
+          The numbers below are ours, computed from the same releases the board
+          scores. It is never added to a symbol's score — a level and a surprise
+          on the same release are not independent evidence.
+        */}
+        <Panel
+          title="Eco strength index"
+          subtitle="Where each economy stands, not whether it beat expectations"
+        >
+          <table className="w-full text-left text-[11px]">
+            <thead className="text-[10px] uppercase tracking-wide text-[var(--color-faint)]">
+              <tr className="border-b border-[var(--color-border)]">
+                <th className="px-4 py-1.5 font-medium">Cur</th>
+                <th className="px-2 py-1.5 text-right font-medium" title="GDP growth, higher is stronger">
+                  GDP
+                </th>
+                <th className="px-2 py-1.5 text-right font-medium" title="Unemployment rate, LOWER is stronger">
+                  Jobs
+                </th>
+                <th className="px-2 py-1.5 text-right font-medium" title="Headline CPI year on year, LOWER is stronger">
+                  CPI
+                </th>
+                <th className="px-2 py-1.5 text-right font-medium" title="Policy rate, higher is stronger">
+                  Rate
+                </th>
+                <th className="px-2 py-1.5 text-right font-medium">Score</th>
+                <th className="px-4 py-1.5 text-right font-medium">Real</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border)]">
+              {ecoStrength.map((row) => (
+                <tr key={row.currency}>
+                  <td className="px-4 py-1.5 font-semibold">{row.currency}</td>
+                  {[row.gdpScore, row.unemploymentScore, row.cpiScore, row.interestRateScore].map(
+                    (component, i) => (
+                      <td
+                        key={i}
+                        className={`tnum px-2 py-1.5 text-right ${
+                          component === null ? 'text-[var(--color-faint)]' : ''
+                        }`}
+                      >
+                        {component ?? '—'}
+                      </td>
+                    ),
+                  )}
+                  <td className="tnum px-2 py-1.5 text-right font-semibold">
+                    {row.totalScore}
+                    {/*
+                      A row missing a component cannot reach 100 and must not be
+                      read beside one that can. Flagged rather than hidden.
+                    */}
+                    {row.componentsScored < 4 && (
+                      <span
+                        className="ml-1 text-[9px] text-[var(--color-uncertain)]"
+                        title={`Only ${row.componentsScored} of 4 components resolved — not comparable with a full row`}
+                      >
+                        {row.componentsScored}/4
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    className={`tnum px-4 py-1.5 text-right ${
+                      row.realYield === null ? 'text-[var(--color-faint)]' : signColor(row.realYield)
+                    }`}
+                    title="Policy rate minus headline CPI"
+                  >
+                    {row.realYield === null
+                      ? '—'
+                      : `${row.realYield > 0 ? '+' : ''}${row.realYield.toFixed(2)}%`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="border-t border-[var(--color-border)] px-4 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+            Each column is scored 0&ndash;{COMPONENT_MAX} against the other seven majors, so a 25 means
+            best of the eight rather than good. Read it as a ranking with distances: if every economy
+            weakens together the table barely moves.
+          </p>
+        </Panel>
+
         {/* --- Surprise index --------------------------------------------- */}
         <Panel title="Economic surprise index" subtitle="Share of recent releases that beat expectations">
           <div className="divide-y divide-[var(--color-border)]">
@@ -264,19 +361,25 @@ export default async function MacroPage() {
 
                 <div className="relative h-2 flex-1 rounded-full bg-[var(--color-surface-2)]">
                   <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--color-border-bright)]" />
-                  <div
-                    className="absolute inset-y-0 rounded-full"
-                    style={{
-                      left: s.index >= 50 ? '50%' : `${s.index}%`,
-                      width: `${Math.abs(s.index - 50)}%`,
-                      backgroundColor: s.index >= 50 ? 'var(--color-bull)' : 'var(--color-bear)',
-                      opacity: 0.8,
-                    }}
-                  />
+                  {s.index !== null && (
+                    <div
+                      className="absolute inset-y-0 rounded-full"
+                      style={{
+                        left: s.index >= 50 ? '50%' : `${s.index}%`,
+                        width: `${Math.abs(s.index - 50)}%`,
+                        backgroundColor: s.index >= 50 ? 'var(--color-bull)' : 'var(--color-bear)',
+                        opacity: 0.8,
+                      }}
+                    />
+                  )}
                 </div>
 
-                <span className={`tnum w-10 text-right text-xs font-semibold ${signColor(s.index - 50)}`}>
-                  {s.index}%
+                <span
+                  className={`tnum w-10 text-right text-xs font-semibold ${
+                    s.index === null ? 'text-[var(--color-faint)]' : signColor(s.index - 50)
+                  }`}
+                >
+                  {s.index === null ? '—' : `${s.index}%`}
                 </span>
                 <span
                   className="w-20 text-right text-[10px] text-[var(--color-faint)]"

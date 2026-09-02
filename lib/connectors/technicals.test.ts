@@ -14,8 +14,11 @@ import {
   ONE_WEEK,
   WEEK_ANCHOR_OFFSET,
   fetchTechnicals,
+  redateSpotFridays,
   resampleBars,
+  seriesAsOf,
   smaSeries,
+  yield2yAsOf,
   type DailyBars,
 } from '@/lib/connectors/technicals';
 
@@ -338,14 +341,21 @@ describe('fetchTechnicals retry', () => {
   });
 
   /**
-   * The leg that used to fail with no trace at all. The daily series is fine, so
-   * the symbol scores; only the monthly request fails, so `seasonality` is `{}`
-   * and a ±1 cell quietly disappears. Nothing was appended to `failed[]`, so no
-   * `degraded` note ever mentioned it.
+   * The leg that used to fail with no trace at all. The 2-year daily series is
+   * fine, so the symbol scores; only the long-run history fails, so
+   * `seasonality` is `{}` and a ±1 cell quietly disappears. Nothing was appended
+   * to `failed[]`, so no `degraded` note ever mentioned it.
+   *
+   * THE URL THIS MOCKS CHANGED, and the reason matters. Seasonality used to come
+   * from `range=11y&interval=1mo`, a series Yahoo returns corrupt — two March
+   * bars every year and closes stamped with the wrong month, which put the WRONG
+   * SIGN on EURUSD's cell. It now comes from the long-run DAILY series, which is
+   * requested with explicit epoch bounds, so `period1=` is what identifies it —
+   * and distinguishes it from the 2-year daily fetch, which uses `range=`.
    */
-  it('reports a missing monthly series instead of silently unscoring seasonality', async () => {
+  it('reports a missing long-run history instead of silently unscoring seasonality', async () => {
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (url.includes('interval=1mo')) return response({}, 500);
+      if (url.includes('period1=')) return response({}, 500);
       return response(chart());
     });
 
@@ -355,5 +365,234 @@ describe('fetchTechnicals retry', () => {
     if (!res.ok) return;
     expect(res.data.get('GOOD')?.seasonality).toEqual({});
     expect(res.degraded).toMatch(/seasonality unscored/);
+  });
+});
+
+/**
+ * The price cutoff behind a rewound board.
+ *
+ * WHAT THIS PROTECTS. `runSetupsPipeline` has always taken a `now` and handed it
+ * to the calendar connectors, but never to this one, so the moving averages —
+ * and the TREND cell over them — were the tail of the series no matter which
+ * date was being reproduced. `scripts/parity.ts` printed "rewound to end of that
+ * day" over a comparison in which one column was not rewound at all.
+ *
+ * Measured 2026-08-30 against A1's eight checksummed trend cells: computed live
+ * ours matched six, cut off at each capture's own timestamp it matched eight.
+ * EURCHF went +2 -> -1 and CHFX -2 -> +2, landing exactly on A1's printed cells.
+ * `scoreTrend` was not touched — only the window it reads.
+ *
+ * The identity case below is the one that matters most: it is what keeps the
+ * LIVE board byte-identical, including reading Yahoo's quote rather than the
+ * last close.
+ */
+describe('seriesAsOf', () => {
+  const day = 86_400;
+  const start = Math.floor(Date.UTC(2026, 7, 20) / 1000);
+  const series = () => ({
+    timestamps: [0, 1, 2, 3, 4].map((i) => start + i * day),
+    opens: [1, 2, 3, 4, 5],
+    highs: [1, 2, 3, 4, 5],
+    lows: [1, 2, 3, 4, 5],
+    closes: [10, 20, 30, 40, 50],
+    volumes: [1, 2, 3, 4, 5],
+    price: 99,
+  });
+
+  it('returns the very same object when nothing is after the cutoff', () => {
+    // Identity, not just equality: the live path must not pay to copy five
+    // arrays per symbol, and must not swap the live quote for the last close.
+    const s = series();
+    const at = new Date((start + 10 * day) * 1000);
+    expect(seriesAsOf(s, at)).toBe(s);
+    expect(seriesAsOf(s, at).price).toBe(99);
+  });
+
+  it('drops the bars after the cutoff and keeps every array aligned', () => {
+    const cut = seriesAsOf(series(), new Date((start + 2 * day) * 1000));
+    expect(cut.closes).toEqual([10, 20, 30]);
+    expect(cut.timestamps).toHaveLength(3);
+    expect(cut.opens).toHaveLength(3);
+    expect(cut.highs).toHaveLength(3);
+    expect(cut.lows).toHaveLength(3);
+    expect(cut.volumes).toHaveLength(3);
+  });
+
+  it('replaces the live quote with the last close inside the window', () => {
+    // `price` is compared against the rewound averages to build `aboveCount`.
+    // Leaving today's quote there would compare a price from after the cutoff
+    // against averages from before it.
+    expect(seriesAsOf(series(), new Date((start + 2 * day) * 1000)).price).toBe(30);
+  });
+
+  it('leaves bars that carry no price alone', () => {
+    // The seasonal history is `DailyBars`, which has no `price` field at all.
+    const bars: DailyBars = {
+      timestamps: [start, start + day],
+      opens: [1, 2],
+      highs: [1, 2],
+      lows: [1, 2],
+      closes: [10, 20],
+    };
+    const cut = seriesAsOf(bars, new Date(start * 1000));
+    expect(cut.closes).toEqual([10]);
+    expect('price' in cut).toBe(false);
+  });
+
+  it('empties the series when the cutoff precedes every bar', () => {
+    // Deliberately NOT a fallback to the full series. `computeForTicker` checks
+    // `closes.length < 20` and declines to score, which is the honest answer for
+    // a rewind further back than the history reaches.
+    const cut = seriesAsOf(series(), new Date((start - day) * 1000));
+    expect(cut.closes).toEqual([]);
+    expect(cut.timestamps).toEqual([]);
+  });
+
+  it('is what lets a past date score a different trend from today', () => {
+    // The whole point, on a synthetic series that rises then falls. Computed at
+    // the peak the 3-day average leads the 14-day; computed after the fall it
+    // trails. Same formula, two windows, two cells.
+    const rising = Array.from({ length: 20 }, (_, i) => 100 + i);
+    const falling = Array.from({ length: 6 }, (_, i) => 119 - (i + 1) * 4);
+    const closes = [...rising, ...falling];
+    const full = {
+      timestamps: closes.map((_, i) => start + i * day),
+      opens: closes, highs: closes, lows: closes, closes,
+      price: closes[closes.length - 1],
+    };
+
+    const peak = seriesAsOf(full, new Date((start + 19 * day) * 1000));
+    expect(peak.closes[peak.closes.length - 1]).toBe(119);
+
+    const sma = (v: number[], n: number) => v.slice(-n).reduce((a, b) => a + b, 0) / n;
+    expect(sma(peak.closes, 3)).toBeGreaterThan(sma(peak.closes, 14));
+    expect(sma(full.closes, 3)).toBeLessThan(sma(full.closes, 14));
+  });
+});
+
+/**
+ * The 2-year reading, which is the input to every non-FX rate cell.
+ *
+ * WHAT THIS PROTECTS IS A SOURCE CHOICE, not arithmetic. The column read
+ * Yahoo's `2YY=F` for four rounds; A1's Asset Scorecard names "US02Yield (21
+ * day SMA)", which is FRED DGS2, and the futures quote was 24bp away from it
+ * on the day the two were finally compared. Nothing here can catch that on its
+ * own — but the cutoff below is what makes the series replayable at all, and
+ * an un-replayable series is how the discrepancy stayed invisible.
+ */
+describe('yield2yAsOf', () => {
+  /** 25 sessions, so a 21-observation window has room to move under a cut. */
+  const series = Array.from({ length: 25 }, (_, i) => ({
+    date: `2026-08-${String(i + 1).padStart(2, '0')}`,
+    value: 4 + i * 0.01,
+  }));
+
+  it('reads the last observation and averages the trailing window', () => {
+    const live = yield2yAsOf(series)!;
+    expect(live.observedOn).toBe('2026-08-25');
+    expect(live.current).toBeCloseTo(4.24, 10);
+    // Mean of the last 21 values, which start at 4.04.
+    expect(live.sma).toBeCloseTo(4.14, 10);
+  });
+
+  /**
+   * THE POINT OF THE WHOLE CHANGE. A replayed board must not see a yield that
+   * had not printed yet, and the observation date has to say which one it saw.
+   */
+  it('cuts on the observation date, inclusive', () => {
+    const cut = yield2yAsOf(series, new Date('2026-08-24T23:59:59Z'))!;
+    expect(cut.observedOn).toBe('2026-08-24');
+    expect(cut.current).toBeCloseTo(4.23, 10);
+    // The window slid back one observation with it, rather than staying put.
+    expect(cut.sma).toBeCloseTo(4.13, 10);
+  });
+
+  it('ignores observations after the cutoff entirely', () => {
+    const cut = yield2yAsOf(series, new Date('2026-08-21T00:00:00Z'))!;
+    expect(cut.observedOn).toBe('2026-08-21');
+  });
+
+  /**
+   * A short window is a different statistic, not a rougher one. Averaging six
+   * observations and calling the result a 21-day average is the failure this
+   * refuses.
+   */
+  it('returns null rather than shortening the average', () => {
+    expect(yield2yAsOf(series, new Date('2026-08-06T00:00:00Z'))).toBeNull();
+    expect(yield2yAsOf(series.slice(0, 20))).toBeNull();
+    // Exactly enough is enough.
+    expect(yield2yAsOf(series.slice(0, 21))).not.toBeNull();
+  });
+});
+
+
+/**
+ * The observed shape, pinned so a change in Yahoo's dating is a test failure
+ * rather than a silent shift in every FX trend cell.
+ *
+ * Values are the real ones measured 2026-09-01: spot EURUSD=X against 6E=F
+ * futures, which carry clean Mon-Fri bars for the same underlying.
+ */
+describe('redateSpotFridays', () => {
+  const day = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 1000);
+  const dow = (ts: number) => new Date(ts * 1000).getUTCDay();
+
+  /** Mon-Thu correctly dated, Friday stamped the following Sunday. */
+  const observed = {
+    timestamps: [
+      day('2026-08-24'), day('2026-08-25'), day('2026-08-26'),
+      day('2026-08-27'), day('2026-08-30'),
+    ],
+    closes: [1.16683, 1.16747, 1.16549, 1.16564, 1.15890],
+  };
+
+  it('moves a Sunday bar back to the Friday it actually traded', () => {
+    const out = redateSpotFridays(observed);
+    // 2026-08-30 is a Sunday; the session it holds is Friday 2026-08-28, whose
+    // futures close was 1.15875 against this 1.15890.
+    expect(out.timestamps[4]).toBe(day('2026-08-28'));
+    expect(dow(out.timestamps[4])).toBe(5);
+  });
+
+  it('leaves correctly dated weekdays exactly where they are', () => {
+    const out = redateSpotFridays(observed);
+    expect(out.timestamps.slice(0, 4)).toEqual(observed.timestamps.slice(0, 4));
+  });
+
+  it('preserves order and length, so no moving average changes', () => {
+    const out = redateSpotFridays(observed);
+    expect(out.timestamps).toHaveLength(observed.timestamps.length);
+    expect([...out.timestamps].sort((a, b) => a - b)).toEqual(out.timestamps);
+    // The whole point: re-dating is a correctness fix for date CUTS, not a
+    // change to what the live board scores.
+    expect(out.closes).toEqual(observed.closes);
+  });
+
+  it('makes a Friday-close rewind include that Friday', () => {
+    // The bug this exists to fix. Cut at Friday 2026-08-28 end of day: the
+    // mis-stamped series loses the session entirely, the re-dated one keeps it.
+    const cut = new Date('2026-08-28T23:59:59Z');
+    const bars = (t: { timestamps: number[]; closes: number[] }): DailyBars => ({
+      timestamps: t.timestamps,
+      opens: t.closes,
+      highs: t.closes,
+      lows: t.closes,
+      closes: t.closes,
+    });
+    expect(seriesAsOf(bars(observed), cut).closes).not.toContain(1.15890);
+    expect(seriesAsOf(bars(redateSpotFridays(observed)), cut).closes).toContain(1.15890);
+  });
+
+  it('refuses to overwrite a Friday that is already there', () => {
+    // No such collision exists in the observed feed. If one appears the feed
+    // has changed shape and the assumption needs re-measuring, so the bar is
+    // left alone rather than clobbering a real session.
+    const collides = { timestamps: [day('2026-08-28'), day('2026-08-30')], closes: [1.1, 1.2] };
+    expect(redateSpotFridays(collides).timestamps).toEqual(collides.timestamps);
+  });
+
+  it('returns the input untouched when there is nothing to move', () => {
+    const clean = { timestamps: [day('2026-08-27'), day('2026-08-28')], closes: [1, 2] };
+    expect(redateSpotFridays(clean)).toBe(clean);
   });
 });

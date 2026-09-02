@@ -5,7 +5,7 @@
  * fills a slot in both places.
  */
 
-import { fetchFxStreetHistory } from '@/lib/connectors/fxstreet';
+import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import { buildCurrencyHeatmap } from '@/lib/scoring/heatmap';
 import { EconomicHeatmap } from '@/components/EconomicHeatmap';
 import { EmptyState, Panel } from '@/components/ui';
@@ -24,18 +24,32 @@ export default async function HeatmapPage({
   // universe here — a minor like ZAR has no series to chart.
   const currency = isMajor(requested) ? requested : 'USD';
 
-  const history = await fetchFxStreetHistory();
+/**
+ * Reads the SCORECARD's event pool, not a raw calendar fetch.
+ *
+ * This used to call `fetchFxStreetHistory` directly, which meant it never saw
+ * the consensus backfill or the allowlisted actuals the scorecard runs on. The
+ * same release could therefore be scored here and blank there, or scored
+ * differently — and once the Impact percentages started feeding the Economic
+ * Surprise Meter, that stopped being a cosmetic difference and became two
+ * headline numbers disagreeing about the same economy.
+ *
+ * `runSetupsPipeline` costs no extra upstream requests: every connector inside
+ * it is cached, and /macro and the board are already calling it.
+ */
+  const { events, health } = await runSetupsPipeline();
 
-  if (!history.ok) {
+  if (events.length === 0) {
+    const calendar = health.find((h) => !h.ok);
     return (
       <div className="px-4 py-4">
         <h1 className="mb-4 text-lg font-bold">Economic Heatmap</h1>
         <Panel title="Unavailable">
-          <EmptyState message="Could not load calendar history" hint={history.error} />
+          <EmptyState message="Could not load calendar history" hint={calendar?.detail} />
         </Panel>
       </div>
     );
   }
 
-  return <EconomicHeatmap data={buildCurrencyHeatmap(currency, history.data)} />;
+  return <EconomicHeatmap data={buildCurrencyHeatmap(currency, events)} />;
 }

@@ -1,0 +1,140 @@
+{
+  "_readme": [
+    "DIRECT OBSERVATIONS of A1's own free, public EdgeFinder dashboards, captured",
+    "2026-08-29 by driving the pages in a browser. This is a different KIND of",
+    "evidence from every other fixture here: not a screenshot of a paid product",
+    "transcribed by eye, but values read out of the live pages' own DOM -- including",
+    "their own Bearish/Bullish/Neutral classification of each row.",
+    "",
+    "IT IS EVIDENCE, NOT A FEED. These pages are embedded Looker Studio reports",
+    "carrying A1's proprietary 'EdgeFinder Pro' data. Nothing in this repo fetches",
+    "them at runtime and nothing should: there is no documented API, and the",
+    "standing rule is no scraping and no undocumented endpoint as a production",
+    "dependency. The numbers below are frozen here so rules can be tested against",
+    "them.",
+    "",
+    "WHAT IT OVERTURNED. A prior round concluded the free Retail Sentiment page",
+    "covered 19 symbols and 'zero FX crosses', and closed that avenue as a dead",
+    "end. It was wrong: the page's Category control simply DEFAULTS to excluding",
+    "minor pairs. Switching it on reveals 22 crosses, and a 'Currencies' category",
+    "reveals the eight currency-index rows as well."
+  ],
+
+  "source": {
+    "retailSentiment": "a1trading.com/retail-sentiment/ -> lookerstudio.google.com/embed/reporting/cfd37bd1-45ce-459a-8d11-b6b7eac72b0d ('EdgeFinder Free Demo'), page 'Retail Sentiment'",
+    "retailSentimentHistory": "same report, page 'Retail Sent. History' (p_1jk2lb88md) -- daily Long/Short per asset, alongside Price and Net COT positioning",
+    "forexScorecard": "same report, page 'Forex Scorecard' (p_entcpay0wd) -- free tier locked to EURCHF",
+    "interestRateProjections": "a1trading.com/interest-rates-data/ -> lookerstudio.google.com/embed/reporting/3653e7d4-e20d-4fd2-9853-c0a425b25973 ('EdgeFinder - Free Economic Data'), page 'Interest Rate Projections'",
+    "attribution": "Every chart footers 'Source: A1 EdgeFinder | www.a1trading.com' or 'A1 EdgeFinder Pro'. NO upstream provider is named anywhere on any page."
+  },
+
+  "retailSentiment": {
+    "_note": "Long share, percent. FX rows are whole integers; index/CFD rows and USDZAR carry two decimals. DATE CAVEAT, added 2026-08-30: this page shows each symbol's LATEST available row, and those rows are not all the same day. Re-reading it on 2026-08-30 returned values identical to 2026-08-29, and its NZDUSD (48) matches the history page's 2026-08-29 point exactly -- but its EURUSD (47), USDCHF (61) and GOLD (10.84) match no August point in the history page for those symbols. Use fixtures/a1-retail-sentiment-history.json for anything that needs a date; use this capture only for the cross-sectional facts it was captured for (the banding and the index identities, both of which are internal to one screen).",
+    "majorCurrencyPairs": { "USDCHF": 61, "GBPUSD": 50, "NZDUSD": 48, "EURUSD": 47, "USDJPY": 44, "USDCAD": 42, "AUDUSD": 28 },
+    "minorCurrencyPairs": {
+      "GBPAUD": 89, "EURCAD": 84, "EURAUD": 80, "GBPNZD": 75, "GBPCAD": 71, "EURNZD": 62,
+      "USDZAR": 60.84, "NZDCAD": 54, "CHFJPY": 53, "CADCHF": 44, "EURGBP": 40, "GBPJPY": 39,
+      "CADJPY": 38, "GBPCHF": 33, "EURJPY": 31, "NZDJPY": 30, "NZDCHF": 27, "EURCHF": 26,
+      "AUDJPY": 24, "AUDNZD": 13, "AUDCHF": 10, "AUDCAD": 6
+    },
+    "currencies": {
+      "US-DOLLAR": 92.51, "CA-DOLLAR": 58, "JP-YEN": 56, "GB-POUND": 50,
+      "NZ-DOLLAR": 48, "EURO": 47, "CH-FRANC": 39, "AU-DOLLAR": 28
+    },
+    "classificationByLongPct": {
+      "bearish": [92.51, 89, 84, 80, 75, 71, 62, 61, 60.84],
+      "neutral": [58, 56, 54, 53, 50, 48, 47, 44, 42],
+      "bullish": [40, 39, 38, 33, 31, 30, 28, 27, 26, 24, 13, 10, 6]
+    },
+    "_thresholdFinding": "EURGBP at EXACTLY 40 is classified Bullish, pinning the lower bound as inclusive. The upper bound is bracketed rather than pinned: 58 is Neutral and 60.84 is Bearish, so it lies in (58, 60.84] -- A1's published '>= 60' sits inside that interval. CROWD_LONG_PCT_BUCKETS (40/60, inclusive both sides) reproduces all 29 rows.",
+    "_currencyIndexFinding": "Each of the seven non-dollar index rows equals its own dollar pair exactly: GB-POUND 50 = GBPUSD 50; NZ-DOLLAR 48 = NZDUSD 48; EURO 47 = EURUSD 47; AU-DOLLAR 28 = AUDUSD 28; CA-DOLLAR 58 = 100-USDCAD; JP-YEN 56 = 100-USDJPY; CH-FRANC 39 = 100-USDCHF. US-DOLLAR does NOT fit -- 92.51 with two decimals, its own instrument's book. Eight rows for eight."
+  },
+
+  "retailSentimentHistory": {
+    "_note": "Daily long share from A1's own historical page, for the dates this repo holds Top Setups cells on. This is the measurement that resolved the EURCHF/GBPCHF 'threshold contradiction'.",
+    "EURUSD": { "2026-08-21": 21, "2026-08-24": 25, "2026-08-25": 28 },
+    "GBPUSD": { "2026-08-21": 29, "2026-08-24": 31, "2026-08-25": 30 },
+    "EURCHF": { "2026-08-21": 34, "2026-08-24": 32, "2026-08-25": 23 },
+    "GBPCHF": { "2026-08-21": 45, "2026-08-24": 36, "2026-08-25": 23 },
+    "_crossCheck": "All four are <= 40 on 2026-08-24, all four score +1 under the unchanged rule, and all four match the Crowd cell already on file for that date.",
+    "_fxssiDivergence": "Prior rounds recorded FXSSI at EURCHF ~48% and GBPCHF ~50% on that same day, against A1's 32% and 36%. FXSSI matched A1 to the point on the seven dollar majors and does NOT match on crosses, so FXSSI is not confirmed as A1's source."
+  },
+
+  "forexScorecard": {
+    "_note": "Free tier is locked to EURCHF ('Showing EUR/CHF only. To unlock all currency pairs...'). The row LABELS are the valuable part -- they state the comparison each column makes.",
+    "symbol": "EURCHF",
+    "rowLabels": [
+      "4H/Daily Chart Trend", "Current month's 10yr seasonality", "GDP vs. forecast",
+      "ISM mPMI vs. forecast", "ISM sPMI vs. forecast", "Retail sales vs. forecast",
+      "Employment change vs. forecast", "Unemployment rate vs forecast",
+      "CPI YoY vs. forecast", "PPI YoY vs. forecast", "PCE YoY vs. forecast",
+      "Interest rates", "Weekly unemp. claims vs. forec.", "JOLTS vs. forecast",
+      "ADP vs. forecast", "Consumer Conf. vs forec."
+    ],
+    "_basisFinding": "EVERY economic row is explicitly 'vs. forecast'. The Interest rates row is the ONLY one carrying no comparison suffix -- it is not a surprise-vs-forecast read.",
+    "readings": {
+      "seasonality": "Bearish", "trend": "Bullish", "crowd": "Bullish", "gdp": "Bearish",
+      "mpmi": "Neutral", "spmi": "Neutral", "retail-sales": "Neutral",
+      "consumer-confidence": "Bearish", "cpi": "Neutral", "ppi": "Neutral", "pce": "Neutral",
+      "rates": "Bullish", "cot": "Neutral", "mainScore": 1
+    },
+    "aiSummary": "Overall Outlook: EURCHF exhibits a modest bullish edge (Main Score: +1) ... Technical score (+1) reflects a positive trend reading (+2) offset by negative seasonality (-1) ... ECO score (-1) driven by negative GDP momentum, partially offset by positive interest rate divergence."
+  },
+
+  "interestRateProjections": {
+    "_note": "A1's own words, verbatim from the page: 'The graph above shows market consensus estimates on future projected interest rates for the selected currencies/economies.' Plotted by CALENDAR QUARTER.",
+    "_readMethod": "RE-READ 2026-08-30 FROM THE CHART'S OWN TOOLTIPS, replacing the previous round's geometric read off bar heights. Hovering the line chart with several currencies selected produces one combined tooltip listing every series at that quarter, so a value and its currency come from the same rendered element. The tooltip rounds to one decimal, which is its only limitation: a 0.05 move is invisible here and was visible to the geometric read.",
+    "currenciesOffered": ["AUD", "CAD", "CHF", "CHY", "EUR", "GBP", "INR", "JPY", "NZD", "USD", "ZAR"],
+    "quarters": ["2026Q3", "2026Q4", "2027Q1", "2027Q2"],
+    "percentByTooltip": {
+      "AUD": [4.4, 4.4, 4.4, 4.4],
+      "GBP": [4.0, 4.0, 4.3, 4.3],
+      "USD": [3.8, 4.0, 4.0, 4.3],
+      "NZD": [2.8, 3.0, 3.5, 3.8],
+      "EUR": [2.7, 2.7, 2.9, 2.9],
+      "CAD": [2.3, 2.3, 2.3, 2.3],
+      "JPY": [1.3, 1.5, 1.5, 1.5],
+      "CHF": [0.0, 0.0, 0.0, 0.0]
+    },
+    "_chfCorrection": {
+      "previousClaim": "The previous round recorded 'CHF is a selectable dimension value but renders NO bars and NO line -- the dataset carries no CHF projection, or it is null throughout.'",
+      "finding": "Half wrong, and the wrong half mattered. With CHF selected alone the BAR chart is empty -- because every bar has height zero -- but the LINE chart draws a flat line, and its tooltip reads 'CHF: 0,0%' at 2026Q2, Q3, Q4, 2027Q1 and Q2. Five hovers, five explicit zeros.",
+      "whyItIsRealData": "The SNB policy rate has been 0.00% since mid-2025, so a market consensus of 0.00% every quarter is a correct projection rather than a missing one. CHF is not a hole in their dataset.",
+      "consequence": "Under ANY quarter-over-quarter rule the CHF rates leg is 0 in every quarter, permanently. It cannot produce the -1 that solving EURCHF against EURX implied for 2026-08-24."
+    },
+    "_quarterOverQuarterRuleIsFALSIFIED": {
+      "claim": "The previous round recorded 'Compare current quarter -> next quarter' as A1's rates rule, on a 3-of-5 fit whose two misses were called timing-confounded.",
+      "refutation": "Same-day, same-source, no timing confound. On 2026-08-29 A1's free Forex Scorecard prints EURCHF 'Interest Rates: Bullish' (+1). On the same day their own projections read EUR 2.7 -> 2.7 and CHF 0.0 -> 0.0 across 2026Q3 -> Q4. A quarter-over-quarter difference is 0 - 0 = 0 and cannot be +1.",
+      "whatSurvives": "The PAGE is still A1's, still free, and still says 'market consensus estimates'. What is retired is the transformation, not the source. A level differential (EUR 2.7 vs CHF 0.0 -> Bullish) fits this row and also fits GBPUSD on 2026-08-24 (GBP 4.0 > USD 3.8 -> +1), but it fails EURUSD on that date (EUR 2.7 < USD 3.8 predicts -1; A1 printed +1). No single rule tested so far fits all of them.",
+      "doNotRetry": "Per-currency 2Y yield vs its own 21-day SMA. Already falsified against real historical yields on 2026-08-24, missing USD, EUR and GBP. See lib/scoring/rates-research.ts."
+    },
+    "_assetRowsAreDifferentAndARECONFIRMED": {
+      "finding": "A1's free ASSET Scorecard prints its interest-rate row label verbatim as 'US02Yield (21 day SMA)' -- read 2026-08-30 off the PLATINUM card's row-label list.",
+      "consequence": "The 21-day-SMA rule is A1's published input for ASSET rows (metals, commodities, indices), where this repo already uses it via scoreYield2y. It is NOT a general per-currency rule; that generalisation is the one that was tested and rejected twice. Keeping the two apart is why lib/scoring/source-confidence.ts grades them as separate entries."
+    }
+  },
+
+  "forexScorecard20260829": {
+    "_note": "The free Forex Scorecard, read 2026-08-30 and stamped by A1 with the date 29 aug. 2026. Free tier is locked to EURCHF. These are A1's OWN cell readings for a date this repo can reason about.",
+    "symbol": "EURCHF",
+    "date": "2026-08-29",
+    "readings": {
+      "seasonality": "Bearish", "trend": "Bullish", "crowd": "Bullish",
+      "gdp": "Bearish", "mpmi": "Neutral", "spmi": "Neutral", "retail-sales": "Neutral",
+      "consumer-confidence": "Bearish", "cpi": "Neutral", "ppi": "Neutral", "pce": "Neutral",
+      "rates": "Bullish",
+      "cot-net": "Neutral", "cot-weekly-change": "Bullish",
+      "technicalSignal": "Bullish", "sentimentBias": "Bullish",
+      "ecoGrowthComparison": "Bearish", "jobsMarketComparison": "Neutral",
+      "inflationDataComparison": "Bullish",
+      "edgefinderBias": "Neutral", "mainScore": 1
+    },
+    "_whatItPins": "The rates reading of Bullish on a date whose projections we also hold is what falsifies the quarter-over-quarter rule. The crowd reading of Bullish is consistent with the snapshot's EURCHF 26% long under the unchanged 40/60 bands."
+  },
+
+  "freeSurfaceMap": {
+    "demoReport": ["Asset Scorecard", "Forex Scorecard", "Top Setups", "COT Data", "Crowd Sentiment: Put-Call Ratio / AAII Sentiment / Retail Sentiment / Retail Sent. History", "Macro Scanners", "Economic Heatmaps", "Economic Data", "Seasonality Scanners", "Technical Scanners", "AI News Feed", "Market Heatmap"],
+    "economicDataReport": ["Economic Growth Data", "Inflation Data: CPI YoY / PPI YoY / PCE YoY (USA)", "Labor Market Data", "Interest Rates Data: Interest Rates / Interest Rate Projections / US Treasury Yield Curve", "US Housing Data", "Data Updates Log"],
+    "_cpiFinding": "The CPI YoY page publishes A1's own CPI AND CPI Forecast per country. For CHF every month carries a forecast, and 2026-08 reads actual 0.4% against forecast 0.4% -- which is exactly what this repo scores. So A1 does not lack a CHF CPI forecast."
+  }
+}

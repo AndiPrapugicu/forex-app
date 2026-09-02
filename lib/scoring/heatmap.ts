@@ -12,7 +12,7 @@
  * number, it is a property of a number and an asset.
  */
 
-import { SLOTS, type SlotCategory, type SlotDefinition } from '@/config/setups.config';
+import { CARD_SLOTS, type SlotCategory, type SlotDefinition } from '@/config/setups.config';
 import { RISK_ASSET_POLARITY } from '@/config/symbols.config';
 import { scoreSlot, type SlotResult } from '@/lib/scoring/discrete';
 import type { Currency, NormalizedEvent } from '@/lib/types';
@@ -50,12 +50,14 @@ export interface CurrencyHeatmap {
   scored: number;
   total: number;
   /**
-   * Share of scored rows that are bullish, 0..100, per column.
+   * Share of DIRECTIONAL rows that are bullish, 0..100, per column.
    *
-   * A1 publishes this beside their heatmap (their EU card reads 57.14% on both
-   * columns, which is 4 bullish of 7 rows). Neutral rows count in the
-   * denominator — "the data came in exactly as expected" is a real outcome and
-   * dropping it would let a single beat read as 100%.
+   * A1 publishes this beside their heatmap and drives their Economic Surprise
+   * Meter gauges from it. Neutral rows are excluded from the denominator — see
+   * `bullishShare`, where the seven published cards that establish that are
+   * listed. Yes, this means a single beat alongside six on-forecast prints reads
+   * 100%; that is what their cards do, and the honest guard against it is the
+   * `scored` count beside the percentage, not a quietly different formula.
    */
   currencyImpactPct: number | null;
   stocksImpactPct: number | null;
@@ -82,7 +84,21 @@ function toRow(
   label: string,
   event: NormalizedEvent | null,
 ): HeatmapRow {
-  const againstPrevious = slot.compare === 'previous';
+  /**
+   * READ FROM THE RESULT, NOT FROM THE SLOT.
+   *
+   * `SlotResult.referenceLabel` says what the cell was ACTUALLY measured
+   * against; `slot.compare` says only what was asked for. They part company
+   * whenever no consensus exists, because `scoreSlot` then falls back to the
+   * prior print — A1's rule, and currently five of sixty-six scored cells.
+   *
+   * Re-deriving it here labelled every one of those five "vs forecast", which is
+   * not merely a wrong caption: a diagnostic built on this column reported that
+   * NO cell was scoring against the prior print, when JPY's services PMI was
+   * doing exactly that and reading +1 where A1 reads -1. The bug hid its own
+   * symptom.
+   */
+  const againstPrevious = (result.referenceLabel ?? slot.compare ?? 'forecast') === 'previous';
   const reference = (againstPrevious ? event?.previous : event?.consensus) ?? null;
 
   /**
@@ -149,7 +165,14 @@ export function buildCurrencyHeatmap(
   let macroScore = 0;
   let scored = 0;
 
-  for (const slot of SLOTS) {
+  /**
+   * `CARD_SLOTS`, not `SLOTS`. Their per-country cards and their Top Setups
+   * board publish different row sets in BOTH directions: the cards carry
+   * Household Spending, Employment Change and Wage Growth, which the board has
+   * no column for, and the board carries Cnsmr Conf, which no card shows. See
+   * `matrixOnly` in `config/setups.config.ts`.
+   */
+  for (const slot of CARD_SLOTS) {
     // Technical, sentiment and rate slots are per-symbol or per-contract, not
     // per-currency, so they have no place on a currency heatmap.
     if (slot.kind !== 'economic') continue;
@@ -194,14 +217,37 @@ export function buildCurrencyHeatmap(
 }
 
 /**
- * Share of resolved readings that are bullish, 0..100.
+ * Share of DIRECTIONAL readings that are bullish, 0..100.
  *
- * Null when nothing resolved — a percentage off an empty set is not 0%, it is
- * unknown, and rendering 0% would read as "everything is bearish".
+ * bullish / (bullish + bearish). Neutral rows are excluded from the denominator
+ * entirely, which is A1's arithmetic — read directly off six of their published
+ * cards rather than inferred:
+ *
+ *   EU          2 bull, 2 bear, 4 neutral   they show  50%    = 2/4
+ *   CN          4 bull, 2 bear, 1 neutral              66.67% = 4/6
+ *   JP          4 bull, 2 bear, 2 neutral              66.67% = 4/6
+ *   UK          2 bull, 4 bear, 1 neutral              33.33% = 2/6
+ *   NZ          4 bull, 1 bear, 2 neutral              80%    = 4/5
+ *   NZ stocks   5 bull, 0 bear, 2 neutral              100%   = 5/5
+ *   UK stocks   1 bull, 5 bear, 1 neutral              16.67% = 1/6
+ *
+ * Counting neutrals in the denominator — which this did until the cards were
+ * checked — reproduces NONE of those seven numbers. The comment defending that
+ * version cited "their EU card reads 57.14%, which is 4 bullish of 7 rows"; the
+ * EU card reads 50%, and 57.14% is the AU card. One rule, derived from two cards
+ * mixed up, and pinned by a test that made it look verified.
+ *
+ * Null when nothing DIRECTIONAL resolved. That covers both the empty set and an
+ * all-neutral one: "every print landed on forecast" is not 0% bullish, it is a
+ * currency with no signal, and 0% would render as uniformly bearish.
  */
 export function bullishShare(impacts: (number | null)[]): number | null {
   const resolved = impacts.filter((v): v is number => v !== null);
-  if (resolved.length === 0) return null;
   const bullish = resolved.filter((v) => v > 0).length;
-  return Math.round((bullish / resolved.length) * 10000) / 100;
+  const bearish = resolved.filter((v) => v < 0).length;
+
+  const directional = bullish + bearish;
+  if (directional === 0) return null;
+
+  return Math.round((bullish / directional) * 10000) / 100;
 }

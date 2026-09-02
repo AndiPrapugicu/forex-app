@@ -9,8 +9,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  MATRIX_SLOTS,
   SCORING_SLOTS,
-  SLOTS,
   SLOT_CATEGORIES,
   TREND_SMA,
   maxCellFor,
@@ -315,7 +315,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 </thead>
                 <tbody>
                   {SLOT_CATEGORIES.map((cat) => {
-                    const slots = SLOTS.filter((s) => s.category === cat.key);
+                    const slots = MATRIX_SLOTS.filter((s) => s.category === cat.key);
                     return [
                       <tr key={`cat-${cat.key}`} className="bg-[var(--color-surface-2)]/40">
                         <td

@@ -8,11 +8,16 @@
  *              the euro area and a miss in the US both argue for EURUSD upside.
  *   technical  per SYMBOL. EURUSD trending up says nothing about EURJPY, so
  *              these are never derived from legs.
- *   sentiment  per CONTRACT, combined from legs like the economic slots, because
- *              each currency has its own COT contract.
+ *   sentiment  per CONTRACT — but the two sentiment columns are not the same
+ *              shape. COT is differenced across a pair's legs, because each
+ *              currency has its own contract and A1's own card reconciles that
+ *              way. Crowd is resolved PER SYMBOL in `lib/scoring/crowd.ts` and
+ *              is never differenced; a cross with no contract goes unscored
+ *              rather than being built out of two dollar pairs.
  */
 
 import {
+  MATRIX_SLOTS,
   SLOTS,
   biasFromScore,
   type Bias,
@@ -22,16 +27,23 @@ import { ALL_SYMBOLS, CURRENCY_COT_CONTRACT, type SymbolDefinition } from '@/con
 import type { CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
 import type { SovereignYield } from '@/lib/connectors/yields';
-import { scoreCot, scoreCrowd, type CotScore, type CrowdScore } from '@/lib/scoring/cot';
+import { scoreCot, type CotScore } from '@/lib/scoring/cot';
+import { resolveCrowd, type CrowdBasis, type RetailPositioningFeed } from '@/lib/scoring/crowd';
 import {
   PAIR_CELL_MAX,
   combinePairCells,
   normalizeZero,
+  priorPrint,
   scoreSlot,
   type CellStatus,
   type SlotResult,
 } from '@/lib/scoring/discrete';
+import projectionSnapshots from '@/fixtures/a1-rate-projections.json';
 import { scoreRateExpectation, type RateExpectation } from '@/lib/scoring/rates';
+import {
+  resolveConsensusProjectionLegs,
+  type RateProjectionSnapshot,
+} from '@/lib/scoring/rate-projections';
 import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/technical';
 import { MAJORS, type Currency, type NormalizedEvent } from '@/lib/types';
 
@@ -60,6 +72,20 @@ export interface CellLeg {
   /** This leg's own ±1 before it is differenced or inverted. */
   cell: number | null;
   status: CellStatus;
+  /**
+   * Who published the forecast, when it was not the calendar of record.
+   *
+   * Null for the ordinary case. Set when `backfillConsensus` lent one, because
+   * "beat forecast" invites the question whose forecast, and until now the
+   * answer was written into the event and read by nothing.
+   */
+  consensusSource?: string | null;
+  /**
+   * Who published the ACTUAL, when it was not FXStreet — the allowlisted series
+   * in `TRADINGVIEW.actualSeries`. A reader comparing this cell against the
+   * calendar of record has to be able to see that it is not in there.
+   */
+  actualSource?: string | null;
 }
 
 export interface MatrixCell {
@@ -84,6 +110,22 @@ export interface MatrixCell {
   legs?: CellLeg[];
   /** Extra note the cell carries beyond its legs, e.g. the CPI level band. */
   note?: string;
+  /**
+   * WHICH POPULATION a sentiment cell was measured on, where the column has
+   * more than one and they are not interchangeable.
+   *
+   * Crowd only, today. `resolveCrowd` computed this from the day it was
+   * written and `buildSetupsMatrix` dropped it on the floor, so the one column
+   * that can silently swap a WEEKLY CME FUTURES read for a DAILY RETAIL SPOT
+   * book was also the one column whose provenance never left the resolver.
+   * Every economic cell already carries `referenceLabel`, `consensusSource`
+   * and `actualSource` for exactly this reason; this closes the gap.
+   *
+   * Undefined on every non-sentiment cell, which is not the same as `'none'`
+   * and must not be read as it: `'none'` is a crowd cell that RESOLVED to
+   * nothing, and undefined is a column this question does not apply to.
+   */
+  basis?: CrowdBasis;
 }
 
 export interface SymbolRow {
@@ -144,24 +186,25 @@ export function scoreAllCurrencies(
 }
 
 /**
- * COT and crowd scores per currency, from each currency's own contract.
+ * COT scores per currency, from each currency's own contract.
  *
  * Scored with the 'fx' rule, which reads only the weekly change. Net positioning
  * is deliberately excluded here and included for commodities, indices and crypto
  * — that asymmetry is A1's, and it stops a pair double-counting a signal they
  * count once.
+ *
+ * COT ONLY. This used to return a parallel crowd map, which existed solely to be
+ * differenced across a pair's two legs; the Crowd column is resolved per symbol
+ * in `lib/scoring/crowd.ts` now and never touches a per-currency lookup.
  */
-function scoreCurrencySentiment(cot: Map<string, CotSeries>) {
+function scoreCotByCurrency(cot: Map<string, CotSeries>) {
   const cotByCurrency = new Map<Currency, CotScore | null>();
-  const crowdByCurrency = new Map<Currency, CrowdScore | null>();
 
   for (const currency of MAJORS) {
-    const series = cot.get(CURRENCY_COT_CONTRACT[currency]);
-    cotByCurrency.set(currency, scoreCot(series, 'fx'));
-    crowdByCurrency.set(currency, scoreCrowd(series));
+    cotByCurrency.set(currency, scoreCot(cot.get(CURRENCY_COT_CONTRACT[currency]), 'fx'));
   }
 
-  return { cotByCurrency, crowdByCurrency };
+  return cotByCurrency;
 }
 
 function emptyCategoryScores(): Record<SlotCategory, number> {
@@ -178,13 +221,22 @@ function emptyCategoryScores(): Record<SlotCategory, number> {
 function toLegs(currency: Currency, result: SlotResult | undefined, compare?: 'forecast' | 'previous'): CellLeg[] {
   if (!result) return [];
 
-  const referenceLabel = compare === 'previous' ? 'previous' : 'forecast';
+  /**
+   * What the cell was measured against, reported by the RESULT rather than
+   * re-derived from the slot's request.
+   *
+   * These agree today. They are read this way round so that they cannot quietly
+   * disagree later: `scoreSlot` decides the basis, and anything that changes
+   * that decision — a fallback, a per-currency rule — would otherwise leave
+   * this label describing the intent instead of the arithmetic.
+   */
+  const referenceLabel = result.referenceLabel ?? (compare === 'previous' ? 'previous' : 'forecast');
 
   const build = (event: NormalizedEvent | null, cell: number | null, sigma: number | null): CellLeg => ({
     currency,
     seriesName: event?.name ?? null,
     actual: event?.actual ?? null,
-    reference: (referenceLabel === 'previous' ? event?.previous : event?.consensus) ?? null,
+    reference: (event === null ? null : referenceLabel === 'previous' ? priorPrint(event) : event.consensus) ?? null,
     referenceLabel,
     consensus: event?.consensus ?? null,
     previous: event?.previous ?? null,
@@ -193,6 +245,8 @@ function toLegs(currency: Currency, result: SlotResult | undefined, compare?: 'f
     dateUtc: event?.dateUtc ?? null,
     cell,
     status: result.status,
+    consensusSource: event?.consensusSource ?? null,
+    actualSource: event?.actualSource ?? null,
   });
 
   if (result.components?.length) {
@@ -243,6 +297,16 @@ export interface BuildMatrixInput {
   yield2y?: { current: number; sma: number } | null;
   /** 2-year government yields per currency, for the FX rate-expectation cell. */
   sovereignYields?: Map<Currency, SovereignYield>;
+  /**
+   * Per-symbol retail long/short, keyed by symbol — the Crowd column's most
+   * direct source and the only one that reaches a cross.
+   *
+   * Absent in production today: no free retail-positioning provider has been
+   * accepted into this repo, so every symbol falls through to its own futures
+   * contract and crosses go unscored. Supplying it is what makes crosses score,
+   * and `lib/scoring/crowd.ts` documents why nothing else is used in its place.
+   */
+  retailPositioning?: RetailPositioningFeed;
   now?: Date;
 }
 
@@ -250,13 +314,37 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
   const now = input.now ?? new Date();
 
   const currencyScores = scoreAllCurrencies(input.events, now);
-  const { cotByCurrency, crowdByCurrency } = scoreCurrencySentiment(input.cot);
+  const cotByCurrency = scoreCotByCurrency(input.cot);
 
   // Rate expectations per currency, computed once and reused across all 28 pairs.
   const yields = input.sovereignYields ?? new Map<Currency, SovereignYield>();
+
+  /**
+   * THE QUARTERLY CONSENSUS, RESOLVED ONCE FOR THE WHOLE BOARD.
+   *
+   * Resolved here rather than inside `scoreRateExpectation` because it is
+   * all-or-nothing: a rates cell is a DIFFERENCE, and a leg from this rule
+   * differenced against a leg from the fallback ladder is two models subtracted.
+   * `resolveConsensusProjectionLegs` returns null the moment any major is
+   * uncovered, and then no currency uses it. That is the seam four earlier
+   * rounds recorded as the reason this rule could not ship.
+   *
+   * Snapshots are dated readings of a page with no history of its own, so a
+   * board wound back before the earliest reading gets nothing and falls through
+   * — correctly. See `lib/scoring/rate-projections.ts`.
+   */
+  const consensus = resolveConsensusProjectionLegs(
+    (projectionSnapshots as { snapshots: RateProjectionSnapshot[] }).snapshots,
+    MAJORS,
+    now.toISOString().slice(0, 10),
+  );
+
   const ratesByCurrency = new Map<Currency, RateExpectation>();
   for (const currency of MAJORS) {
-    ratesByCurrency.set(currency, scoreRateExpectation(currency, yields, input.events, now));
+    ratesByCurrency.set(
+      currency,
+      scoreRateExpectation(currency, yields, input.events, now, consensus.legs?.get(currency)),
+    );
   }
 
   const rows: SymbolRow[] = [];
@@ -273,7 +361,10 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
     // distinction is what selects the COT, seasonality and rate rules below.
     const isFx = def.kind === 'fx';
 
-    for (const slot of SLOTS) {
+    // MATRIX_SLOTS, not SLOTS: the heatmap-only columns are scored per currency
+    // above but have no place on this board — A1's Top Setups has no column for
+    // them either.
+    for (const slot of MATRIX_SLOTS) {
       let cell: MatrixCell;
 
       if (slot.kind === 'rates') {
@@ -358,8 +449,16 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
            * gives those legs, rather than a US number wearing their label.
            */
           const rate = ratesByCurrency.get(def.macroEconomy);
+          // `status` follows the CELL, not the presence of a reading. A rate
+          // expectation with a null cell is the no-calendar case, and calling
+          // that 'scored' would put a blank cell behind a confident label.
           cell = rate
-            ? { slotKey: slot.key, cell: rate.cell, status: 'scored', explanation: rate.explanation }
+            ? {
+                slotKey: slot.key,
+                cell: rate.cell,
+                status: rate.cell === null ? 'no-data' : 'scored',
+                explanation: rate.explanation,
+              }
             : {
                 slotKey: slot.key,
                 cell: null,
@@ -380,9 +479,34 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
           ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
           : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'Insufficient price history' };
       } else if (slot.kind === 'sentiment') {
-        // A symbol with its own contract and no base leg (gold, indices, crypto)
-        // is scored directly, under the non-FX COT rule.
-        if (def.cotContract && !def.base) {
+        if (slot.key === 'crowd') {
+          /**
+           * ONE RESOLUTION ORDER FOR EVERY SYMBOL, in lib/scoring/crowd.ts.
+           *
+           * This branch used to be three: a standalone contract read, a
+           * dollar-pair contract read, and a leg difference for everything
+           * else. The first two agreed and the third was a construct with no
+           * instrument behind it, so the split is now retail feed -> own
+           * contract -> nothing, and crosses land on `nothing` rather than on
+           * a difference of two dollar pairs. See that module's header for the
+           * EURCHF measurement that settled it.
+           *
+           * COT IS DELIBERATELY LEFT DIFFERENCED BELOW. Their EURUSD card reads
+           * COT Net Positioning Neutral with a Bullish Weekly Change and a
+           * subtotal of +2, which is exactly `EUR change (+1) - USD change
+           * (-1)`. That column really is differenced, and their card says so —
+           * the two sentiment columns are not the same shape and must not be
+           * unified just because they sit next to each other.
+           */
+          const crowd = resolveCrowd(def, input.cot, input.retailPositioning);
+          cell = {
+            slotKey: slot.key,
+            cell: crowd.cell,
+            status: crowd.status,
+            explanation: crowd.explanation,
+            basis: crowd.basis,
+          };
+        } else if (def.cotContract && !def.base) {
           /**
            * The split is STANDALONE SYMBOL vs LEG OF A PAIR, not currency vs
            * asset. Anything reading one contract directly scores both
@@ -398,23 +522,21 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
            * made the euro cell look like a change-only read.
            */
           const series = input.cot.get(def.cotContract);
-          const score = slot.key === 'cot' ? scoreCot(series, 'asset') : scoreCrowd(series);
+          const score = scoreCot(series, 'asset');
           cell = score
             ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
             : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'No COT data' };
         } else {
-          const lookup = slot.key === 'cot' ? cotByCurrency : crowdByCurrency;
-          const baseScore = def.base ? (lookup.get(def.base)?.cell ?? null) : null;
-          const quoteScore = def.quote ? (lookup.get(def.quote)?.cell ?? null) : null;
+          const baseScore = def.base ? (cotByCurrency.get(def.base)?.cell ?? null) : null;
+          const quoteScore = def.quote ? (cotByCurrency.get(def.quote)?.cell ?? null) : null;
           /**
            * Every major has its own contract, so a currency in the lookup with
            * no score means that contract failed THIS RUN — the one case the
            * matrix used to render as a confident number.
            */
-          // Crowd is +/-1 for the whole symbol, not per leg.
           const combined = combinePairCells(baseScore, quoteScore, slot.maxCell, {
-            base: { label: def.base, expected: !!def.base && lookup.has(def.base) },
-            quote: { label: def.quote, expected: !!def.quote && lookup.has(def.quote) },
+            base: { label: def.base, expected: !!def.base && cotByCurrency.has(def.base) },
+            quote: { label: def.quote, expected: !!def.quote && cotByCurrency.has(def.quote) },
           });
 
           cell = {

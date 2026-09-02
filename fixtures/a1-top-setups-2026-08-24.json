@@ -1,0 +1,94 @@
+{
+  "_readme": "Top Setups is A1's actual 18-column scoring matrix, normally paywalled ('Premium only feature'). These captures come from six screenshots of the free A1 Trading Show livestream on 2026-08-24, where hosts had a paid seat and scrolled the real Top Setups table on screen. This is the first time this repo has seen real per-cell Top Setups data instead of the two locked single-symbol Scorecard cards. Do NOT merge this into fixtures/a1-board.json's dated captures -- those are transcribed from a different UI (the symbol-dropdown board) and mixing sources silently was the mistake flagged in memory 'parity-total-abs-gap-baseline'. Symbol/Bias/Score columns are large, high-contrast text and read with high confidence. Full 18-cell rows were attempted for every visible row; only EURCHF (a single isolated row with no other rows competing for pixels) passed both a checksum (cells sum to the printed total) and cross-checked exactly against the independently-derived Forex Scorecard badges already on file from round three -- so only EURCHF's cell row below is asserted as reliable. Attempts at other rows' cells did not pass the checksum and are NOT included; fabricating precise-looking numbers we can't verify would violate the explicit 'do not guess' instruction this round was run under.",
+  "captures": [
+    {
+      "id": "A",
+      "source": "A1 Trading Show livestream, hosts Marko and Alan Perez (simulcast/re-stream of the same broadcast moment -- identical row set and scores in both clips)",
+      "date": "2026-08-24",
+      "timeKnown": false,
+      "provenance": "Top Setups page, two overlapping screenshots (Marko unfiltered top rows; Alan Perez same moment, badge 'EdgeFinder Code: ALAN', clock reads 8:10:32 AM but this is likely a later re-check of the same still-unchanged top-of-board rows)",
+      "totals": {
+        "EURUSD": 13, "SILVER": 10, "GBPUSD": 10, "GOLD": 8, "NZDUSD": 7, "GBPJPY": 7, "EURO": 7,
+        "CA-DOLLAR": 6, "GBPAUD": 5, "EURAUD": 5, "CHFJPY": 5, "CADJPY": 5, "US10T": 4, "EURJPY": 4,
+        "EURGBP": 4, "AUDUSD": 4, "NZ-DOLLAR": 3, "CH-FRANC": 3, "NZDJPY": 2, "GBPCHF": 2, "GBPNZD": 1,
+        "USOIL": 0, "NIKKEI": 0, "JP-YEN": 0, "GB-POUND": 0
+      }
+    },
+    {
+      "id": "B",
+      "source": "A1 Trading Show livestream, host Alan Perez",
+      "date": "2026-08-24",
+      "timeKnown": true,
+      "timeLocal": "07:07:14",
+      "timezoneKnown": false,
+      "provenance": "Top Setups page, filter 'Bias: Exclude Neutral (2)', system clock visible bottom-right of screen",
+      "totals": {
+        "EURUSD": 13, "SILVER": 10, "GBPUSD": 10, "GOLD": 8, "NZDUSD": 7, "GBPJPY": 7, "EURO": 7,
+        "CA-DOLLAR": 6, "CHFJPY": 5, "CADJPY": 5, "US10T": 4, "EURJPY": 4, "AUDUSD": 4,
+        "RUSSELL": -4, "DOW": -4, "COPPER": -4, "USDZAR": -5, "AUDNZD": -5,
+        "US-DOLLAR": -6, "AUDCHF": -6, "AUDCAD": -6, "USDCAD": -12
+      }
+    },
+    {
+      "id": "C",
+      "source": "A1 Trading Show livestream, host Tiger Berry",
+      "date": "2026-08-24",
+      "timeKnown": false,
+      "provenance": "Top Setups page, unfiltered, scrolled to the bearish section; video scrubber position suggests this is later in the same multi-hour broadcast than capture B, not a different day",
+      "totals": {
+        "GBPAUD": 5, "EURAUD": 5, "CHFJPY": 5, "CADJPY": 5, "US10T": 4, "EURJPY": 4, "EURGBP": 4, "AUDUSD": 4,
+        "RUSSELL": -4, "DOW": -4, "USDZAR": -5, "NZDCHF": -5, "NZDCAD": -5,
+        "US-DOLLAR": -6, "AUDCHF": -6, "AUDCAD": -9, "USDCHF": -11, "USDCAD": -11
+      }
+    }
+  ],
+  "drift": [
+    { "symbol": "AUDCAD", "captureB": -6, "captureC": -9, "delta": -3 },
+    { "symbol": "USDCAD", "captureB": -12, "captureC": -11, "delta": 1 }
+  ],
+  "stableAcrossCaptures": ["RUSSELL", "DOW", "US-DOLLAR", "AUDCHF", "USDZAR"],
+  "_cellsReadme": "Every row below was transcribed cell by cell and then CHECKSUMMED against its own printed Score column before being admitted. Rows whose 18 cells did not sum to the printed total were discarded, not corrected by guesswork -- NZDUSD (read 5, printed 7), GBPJPY (read 6, printed 7), RUSSELL (read -6, printed -4) and US-DOLLAR (read -4, printed -6) all failed and are therefore absent. Two independent internal consistency checks passed on the admitted set: (1) GOLD and SILVER differ in exactly one cell (COT 0 vs 2), matching their 8 vs 10 totals; (2) solving EURUSD and GBPUSD against their shared USD quote leg yields EUR mPMI +1, which is exactly the mPMI cell printed on the standalone EURO index row -- an over-determined check that could not pass by accident.",
+  "cells": {
+    "EURUSD": { "total": 13, "bias": "Very Bullish", "trend": 2, "seasonality": 1, "cot": 2, "crowd": 1, "gdp": 1, "mpmi": 0, "spmi": 2, "retail-sales": 0, "consumer-confidence": 2, "cpi": 0, "ppi": 1, "pce": 0, "rates": 1, "employment": 1, "unemployment": -2, "claims": -1, "adp": 1, "jolts": 1 },
+    "XAGUSD": { "total": 10, "bias": "Very Bullish", "trend": 2, "seasonality": 1, "cot": 2, "crowd": -1, "gdp": 1, "mpmi": -1, "spmi": 1, "retail-sales": 1, "consumer-confidence": 1, "cpi": 0, "ppi": 1, "pce": 0, "rates": 1, "employment": 1, "unemployment": -1, "claims": -1, "adp": 1, "jolts": 1 },
+    "GBPUSD": { "total": 10, "bias": "Very Bullish", "trend": 2, "seasonality": -1, "cot": 2, "crowd": 1, "gdp": 1, "mpmi": -2, "spmi": 2, "retail-sales": 0, "consumer-confidence": 2, "cpi": 0, "ppi": 2, "pce": 0, "rates": 1, "employment": 1, "unemployment": -2, "claims": -1, "adp": 1, "jolts": 1 },
+    "XAUUSD": { "total": 8, "bias": "Very Bullish", "trend": 2, "seasonality": 1, "cot": 0, "crowd": -1, "gdp": 1, "mpmi": -1, "spmi": 1, "retail-sales": 1, "consumer-confidence": 1, "cpi": 0, "ppi": 1, "pce": 0, "rates": 1, "employment": 1, "unemployment": -1, "claims": -1, "adp": 1, "jolts": 1 },
+    "EURX": { "total": 7, "bias": "Very Bullish", "trend": 2, "seasonality": 1, "cot": 1, "crowd": 1, "gdp": 0, "mpmi": 1, "spmi": 1, "retail-sales": -1, "consumer-confidence": 1, "cpi": 0, "ppi": 0, "pce": 0, "rates": 0, "employment": 0, "unemployment": 0, "claims": 0, "adp": 0, "jolts": 0 },
+    "EURCHF": { "total": -1, "bias": "Neutral", "trend": -1, "seasonality": -1, "cot": 0, "crowd": 1, "gdp": -1, "mpmi": 0, "spmi": 0, "retail-sales": 0, "consumer-confidence": 0, "cpi": 0, "ppi": 0, "pce": 0, "rates": 1, "employment": 0, "unemployment": 0, "claims": 0, "adp": 0, "jolts": 0 }
+  },
+  "derivedLegs": {
+    "_note": "Solved algebraically from the checksummed rows above, NOT read off any card. mPMI is over-determined and consistent three ways; recorded because it names which leg to inspect.",
+    "mpmi": { "USD": 1, "EUR": 1, "GBP": -1, "CHF": 1, "evidence": "EURX mPMI=+1 read directly; EURUSD mPMI 0 = EUR(+1)-USD(+1); GBPUSD mPMI -2 = GBP(-1)-USD(+1); XAUUSD mPMI -1 = USD(+1) inverted for a haven; EURCHF mPMI 0 = EUR(+1)-CHF(+1)" },
+    "rates": { "USD": -1, "EUR": 0, "GBP": 0, "CHF": -1, "evidence": "EURX rates=0 read directly => EUR=0; EURUSD rates +1 = EUR(0)-USD(-1); GBPUSD rates +1 = GBP(0)-USD(-1); EURCHF rates +1 = EUR(0)-CHF(-1). USD=-1 independently matches their US-DOLLAR card's published label '2 Yr Yield (21 day SMA)' reading 'falling (dovish)' => Bearish USD." }
+  },
+  "eurchfFullRow": {
+    "source": "A1 Trading Show livestream, host Marko",
+    "date": "2026-08-24",
+    "provenance": "Top Setups page, Symbol search filtered to 'EURCHF' -- single isolated row, all 18 cells visible with no adjacent-row pixel crowding",
+    "symbol": "EURCHF",
+    "bias": "Neutral",
+    "total": -1,
+    "cells": {
+      "trend": -1,
+      "seasonality": -1,
+      "cot": 0,
+      "crowd": 1,
+      "gdp": -1,
+      "mpmi": 0,
+      "spmi": 0,
+      "retail-sales": 0,
+      "consumer-confidence": 0,
+      "cpi": 0,
+      "ppi": 0,
+      "pce": 0,
+      "rates": 1,
+      "employment": 0,
+      "unemployment": 0,
+      "claims": 0,
+      "adp": 0,
+      "jolts": 0
+    },
+    "checksum": "cells sum to -1, matches printed total exactly",
+    "crossCheck": "identical, sign for sign, to EURCHF_CARD in scripts/live-matrix.ts, derived independently from Forex Scorecard badges on a separate page of the same demo -- the two interfaces agree exactly, no staleness or dataset divergence found"
+  }
+}

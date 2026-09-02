@@ -1,0 +1,167 @@
+{
+  "_readme": [
+    "A1 Trading Show livestream, 2026-08-25 -- a SEPARATE dated capture from",
+    "a1-top-setups-2026-08-24.json. Do not merge the two; compare them.",
+    "",
+    "CELL-LEVEL DATA WAS ATTEMPTED AND DISCARDED. Both screenshots are dense",
+    "full-table captures -- the capture shape memory already flags as the one that",
+    "fails checksum roughly a third of the time (a1-top-setups-cells-captured.md).",
+    "The EURUSD row, the largest and clearest in the table, was transcribed cell by",
+    "cell and summed to 14 against a printed Score of 13. Per the checksum rule --",
+    "'never modify a cell just to make the total match' -- that row's 18 cells were",
+    "discarded rather than adjusted. No cell-level row from this capture is trusted.",
+    "",
+    "WHAT SURVIVED: the Output column (Symbol / Bias / Score) is large, bold,",
+    "high-contrast text, distinct from the small numeric grid that failed. Two",
+    "independent screenshots, different hosts, agree exactly on all 13 rows they",
+    "share (EURUSD through AUDUSD), which is the corroboration that makes the",
+    "totals trustworthy even though the cells are not.",
+    "",
+    "So this fixture carries totals only. `cells: {}` is deliberate, not an",
+    "oversight -- it says the checksum was attempted and failed, not that it was",
+    "skipped."
+  ],
+
+  "captures": [
+    {
+      "id": "D",
+      "source": "A1 Trading Show livestream, host Marko",
+      "date": "2026-08-25",
+      "timeKnown": false,
+      "provenance": "Top Setups page, unfiltered, full board from Very Bullish through the visible Neutral rows",
+      "totals": {
+        "EURUSD": 13,
+        "GBPUSD": 10,
+        "SILVER": 8,
+        "GBPJPY": 7,
+        "EURO": 7,
+        "GOLD": 6,
+        "GBPAUD": 6,
+        "NZDUSD": 5,
+        "CHFJPY": 5,
+        "CADJPY": 5,
+        "CA-DOLLAR": 5,
+        "EURJPY": 4,
+        "AUDUSD": 4,
+        "GBPNZD": 3,
+        "EURGBP": 3,
+        "CH-FRANC": 3,
+        "US10T": 2,
+        "GBPCHF": 2,
+        "EURAUD": 2,
+        "NZ-DOLLAR": 1,
+        "GBPCAD": 1,
+        "USDJPY": 0,
+        "NZDJPY": 0,
+        "GB-POUND": 0
+      }
+    },
+    {
+      "id": "E",
+      "source": "A1 Trading Show livestream, host James LNE (badge 'EdgeFinder Code: ELITE')",
+      "date": "2026-08-25",
+      "timeKnown": false,
+      "provenance": "Top Setups page, filter 'Bias: Exclude Neutral (1)', scrolled to show bullish top rows through the bearish section",
+      "totals": {
+        "EURUSD": 13,
+        "GBPUSD": 10,
+        "SILVER": 8,
+        "GBPJPY": 7,
+        "EURO": 7,
+        "GOLD": 6,
+        "GBPAUD": 6,
+        "NZDUSD": 5,
+        "CHFJPY": 5,
+        "CADJPY": 5,
+        "CA-DOLLAR": 5,
+        "EURJPY": 4,
+        "AUDUSD": 4,
+        "USOIL": -4,
+        "US-DOLLAR": -4,
+        "PLATINUM": -4,
+        "USDZAR": -5,
+        "SPX500": -5,
+        "ETHEREUM": -5,
+        "DOW": -5,
+        "RUSSELL": -6,
+        "NZDCAD": -6,
+        "AUDCHF": -6,
+        "AUDCAD": -6,
+        "USDCHF": -11,
+        "USDCAD": -11
+      }
+    }
+  ],
+
+  "_consistencyCheck": "Captures D and E agree exactly on all 13 rows they share (EURUSD..AUDUSD), zero drift. That is the evidence the totals are real, independent of the discarded cell data.",
+
+  "_cellsReadme": [
+    "Capture F is a DIFFERENT screenshot from D/E -- a proper multi-row table crop with",
+    "visible per-cell coloring, not a squished single-line video-frame strip -- and its",
+    "cells succeeded where D/E's attempt on EURUSD failed. No timestamp is visible in",
+    "this specific crop, so the date below is INFERRED, not read directly: the legible",
+    "rows' printed totals (NZ-DOLLAR=1, GB-POUND=0, EURJPY=4, CH-FRANC=3) match capture",
+    "D's totals for this date EXACTLY, which is the same cross-validation standard D/E's",
+    "own totals were trusted on.",
+    "",
+    "TWO ROWS WERE ADMITTED AND LATER WITHDRAWN. GB-POUND and EURJPY passed the row-sum",
+    "checksum AND the total cross-check against capture D, and were written here as",
+    "trusted cells. They were wrong, and the reason is worth recording because it",
+    "invalidates BOTH of those checks as a sufficient test:",
+    "",
+    "  A SUM IS INVARIANT UNDER PERMUTATION. These crops have to be partitioned into",
+    "  six header groups by eye (2|2|5|3|1|5 = 18). A partition that shifts a value",
+    "  from one column to its neighbour adds to exactly the same total, so the",
+    "  checksum passes and the printed-total cross-check passes with it.",
+    "",
+    "`checkStructuralZeros` in lib/scoring/a1-legs.ts is the check that does catch it:",
+    "PCE, NFP, initial claims, ADP and JOLTS are US series and nothing else, so a row",
+    "with no dollar leg cannot carry a value in them and A1 prints 0. GB-POUND was",
+    "transcribed with pce -1, NFP +1 and claims -1; EURJPY with pce -1. Those are not",
+    "disagreements about the economy, they are arithmetic that cannot happen.",
+    "",
+    "Both rows are therefore discarded ENTIRELY, not repaired -- a breach says the",
+    "partition is wrong somewhere, not where, so there is no honest way to move the",
+    "misplaced values back. Withdrawing them also retracts what they were used to",
+    "conclude: that GBPX's gap decomposes into nine economic mismatches, and that A1's",
+    "columns are not leg-differenced after all (the leg solve's self-contradicting",
+    "column count went 2 -> 8 when these two rows were admitted, and returns to 2",
+    "without them -- the 'structural finding' was these five misread cells).",
+    "",
+    "EURGBP checksums correctly on its own (cells sum to 1) but that total conflicts",
+    "with capture D's EURGBP=3 for this date. Given this fixture already documents",
+    "same-day intraday drift of this size elsewhere (see the 2026-08-24 fixture's",
+    "AUDCAD: -6 -> -9 between captures B and C), it reads as probable intraday movement",
+    "rather than a transcription error -- but per the 'never silently pick a number'",
+    "rule it is not written into cells. GBPCAD is excluded on the same ground.",
+    "",
+    "UK100 could not be confidently partitioned into 18 distinguishable cells from this",
+    "crop and was discarded rather than guessed."
+  ],
+
+  "cellsCapture": {
+    "id": "F",
+    "source": "Screenshot supplied by the user, presented as EdgeFinder/A1 Trading Show evidence",
+    "date": "2026-08-25",
+    "dateConfidence": "INFERRED from matching capture D totals on the legible rows -- no timestamp visible in any of these crops",
+    "provenance": "Top Setups page, three crops: (1) a multi-row table crop (NZ-DOLLAR, EURGBP, GB-POUND, UK100), (2) a two-row crop (GBPCAD, CH-FRANC), (3) a crop showing the column headers plus one row (EURJPY). Seven rows attempted, two admitted -- see rejected."
+  },
+
+  "cells": {
+    "NZDX": { "total": 1, "bias": "Neutral", "trend": 2, "seasonality": -1, "cot": 0, "crowd": 1, "gdp": 0, "mpmi": -1, "spmi": -1, "retail-sales": -1, "consumer-confidence": 0, "cpi": 1, "ppi": 1, "pce": 0, "rates": 1, "employment": 0, "unemployment": -1, "claims": 0, "adp": 0, "jolts": 0 },
+    "CHFX": { "total": 3, "bias": "Neutral", "trend": 2, "seasonality": 1, "cot": 0, "crowd": 1, "gdp": 1, "mpmi": -1, "spmi": 1, "retail-sales": -1, "consumer-confidence": 0, "cpi": 0, "ppi": 0, "pce": 0, "rates": 0, "employment": 0, "unemployment": -1, "claims": 0, "adp": 0, "jolts": 0 }
+  },
+
+  "_cellsConfidence": {
+    "NZDX": "Passes all three checks -- row-sum (1), bounds, and checkStructuralZeros (all five US-only columns read 0) -- and its printed total matches capture D's independently recorded NZ-DOLLAR=1.",
+    "CHFX": "Passes all three checks -- row-sum (3), bounds, structural zeros -- and its printed total matches capture D's independently recorded CH-FRANC=3. LOWER CONFIDENCE THAN NZDX FOR A PROVENANCE REASON, not a checks reason: it came from the second crop of the same batch that produced the two withdrawn rows, and that crop is no longer available to re-inspect. Treat any conclusion resting on CHFX ALONE as needing a re-capture. In particular its rates cell of 0 does not agree with the 2026-08-24 solve's CHF = -1 (via EURCHF); those are different dates so it is not a contradiction, but it is not a confirmation either."
+  },
+
+  "rejected": {
+    "GBPX": "WITHDRAWN after admission. Sums to its printed total of 0 and that total matches capture D's GB-POUND=0, but checkStructuralZeros finds pce -1, NFP +1 and claims -1 -- three US-only series on a row with no dollar leg. Discarded entirely, not repaired: see _cellsReadme.",
+    "EURJPY": "WITHDRAWN after admission. Sums to its printed total of 4 and matches capture D's EURJPY=4, but carries pce -1 on a row with no dollar leg. Same treatment as GBPX.",
+    "EURGBP": "cells sum to 1 (checksums against itself) but conflicts with capture D's printed total of 3 for this date -- not written to cells, see _cellsReadme",
+    "GBPCAD": "cells sum to 3 and pass the structural check, but that total conflicts with capture D's printed GBPCAD=1 for this date -- excluded on the same ground as EURGBP",
+    "UK100": "could not confidently partition into 18 distinguishable cells from this crop -- discarded, not guessed"
+  }
+}

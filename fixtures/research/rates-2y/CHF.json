@@ -1,0 +1,103 @@
+{
+  "currency": "CHF",
+  "source": "SNB Data Portal",
+  "seriesId": "rendeiduebd, D0(CHF), D1(2J)",
+  "url": "https://data.snb.ch/api/cube/rendeiduebd/data/csv/en?dimSel=D0(CHF),D1(2J)",
+  "fetchedAtUtc": "2026-08-26T05:31:37.275Z",
+  "seriesDefinition": "Spot interest rate, CHF Swiss Confederation bond issues, 2-year maturity (post-Sep-2025 methodology)",
+  "knownIssue": "Series has no observations after 2026-07-31 as of this fetch (2026-08-25) -- a roughly 3.5 week publication gap versus the other five currencies.",
+  "observations": [
+    {
+      "date": "2026-07-01",
+      "value": -0.008
+    },
+    {
+      "date": "2026-07-02",
+      "value": 0.01
+    },
+    {
+      "date": "2026-07-03",
+      "value": 0.016
+    },
+    {
+      "date": "2026-07-06",
+      "value": 0.015
+    },
+    {
+      "date": "2026-07-07",
+      "value": 0.015
+    },
+    {
+      "date": "2026-07-08",
+      "value": 0.034
+    },
+    {
+      "date": "2026-07-09",
+      "value": 0.044
+    },
+    {
+      "date": "2026-07-10",
+      "value": 0.053
+    },
+    {
+      "date": "2026-07-13",
+      "value": 0.061
+    },
+    {
+      "date": "2026-07-14",
+      "value": 0.08
+    },
+    {
+      "date": "2026-07-15",
+      "value": 0.074
+    },
+    {
+      "date": "2026-07-16",
+      "value": 0.087
+    },
+    {
+      "date": "2026-07-17",
+      "value": 0.087
+    },
+    {
+      "date": "2026-07-20",
+      "value": 0.151
+    },
+    {
+      "date": "2026-07-21",
+      "value": 0.112
+    },
+    {
+      "date": "2026-07-22",
+      "value": 0.161
+    },
+    {
+      "date": "2026-07-23",
+      "value": 0.193
+    },
+    {
+      "date": "2026-07-24",
+      "value": 0.229
+    },
+    {
+      "date": "2026-07-27",
+      "value": 0.164
+    },
+    {
+      "date": "2026-07-28",
+      "value": 0.108
+    },
+    {
+      "date": "2026-07-29",
+      "value": 0.082
+    },
+    {
+      "date": "2026-07-30",
+      "value": 0.145
+    },
+    {
+      "date": "2026-07-31",
+      "value": 0.089
+    }
+  ]
+}

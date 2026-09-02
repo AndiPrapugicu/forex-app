@@ -10,11 +10,39 @@
  *   npm run parity
  *
  * Reads `fixtures/a1-board.json` — evidence transcribed from their screen, not
- * configuration. Nothing in the app reads it.
+ * configuration. Nothing in the app reads it. That file holds a LIST of captures
+ * because their board is only reachable as livestream frames and a capture can
+ * never be re-taken; this scores against the most recent one that has a date.
  *
  * Live network, deliberately. The point is to measure what the page actually
  * renders, so this runs the same `runSetupsPipeline` the page runs rather than a
  * fixture of our own output, which could only ever agree with itself.
+ *
+ * THERE IS A NOISE FLOOR OF ABOUT ±1, AND IT IS NOT OPTIONAL TO KNOW THIS.
+ *
+ * Macro releases are rewound to the capture date below, but technicals are left
+ * live — they are a snapshot with no history to rewind. Trend is ±2 per symbol
+ * and turns on a 3-day against a 14-day average, so a few hours of ordinary
+ * price movement flips a row and moves TOTAL ABS GAP by a point or two with no
+ * code change at all. Measured directly: two consecutive runs of an unmodified
+ * tree reported 48 and then 47.
+ *
+ * So a single run cannot judge a small change. Run it two or three times before
+ * and after, and treat anything inside ±1 as unmeasured rather than as an
+ * improvement — the whole reason this script exists is that changes were being
+ * kept on evidence weaker than the thing being measured.
+ *
+ * AND THE NUMBER IS NOT COMPARABLE ACROSS CAPTURES. TOTAL ABS GAP is a sum over
+ * whichever symbols that capture published, so it moves when the capture changes
+ * even though no code did. Measured: 63 against the 26-symbol 2026-08-19
+ * capture, 80 against the 29-symbol 2026-08-21 one, same tree — the four index
+ * rows the newer capture adds (JP225, GER40, JPYX, NAS100) carry large gaps on
+ * their own. Compare runs against the SAME capture, or compare `exact` and
+ * `within 1` as shares instead.
+ *
+ * Baseline on the 2026-08-21 capture, three runs each: HEAD (dd30468) 80/80/80,
+ * working tree 80/80/80. The uncommitted scoring work is parity-neutral, which
+ * is worth knowing before anyone bisects it looking for a regression.
  */
 
 import board from '@/fixtures/a1-board.json';
@@ -22,13 +50,134 @@ import { SCORING_SLOTS } from '@/config/setups.config';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import { asOf } from '@/lib/scoring/backtest';
 import { buildSetupsMatrix, type SymbolRow } from '@/lib/scoring/setups';
+import {
+  checkBounds,
+  checkRowSum,
+  checkStructuralZeros,
+  explainGaps,
+  solveA1Legs,
+} from '@/lib/scoring/a1-legs';
 
-const totals = board.totals as Record<string, number>;
-const cells = board.cells as Record<string, Record<string, number>>;
+interface Capture {
+  /** null when the capture's date could not be established. */
+  capturedUtc: string | null;
+  provenance: string;
+  totals: Record<string, number>;
+  cells: Record<string, Record<string, number>>;
+}
+
+const captures = board.captures as unknown as Capture[];
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const pad = (s: string | number, n: number) => String(s).padEnd(n);
 const padStart = (s: string | number, n: number) => String(s).padStart(n);
+
+/**
+ * The capture to score against: the most recent one that HAS a date.
+ *
+ * An undated capture is not a lesser capture, it is an unusable one. `asOf`
+ * rewinds our board to the instant theirs was taken, and without that instant
+ * the comparison measures how much the calendar moved rather than how our
+ * scoring reads. Those captures stay in the fixture for the date-independent
+ * structure they pin — see the file's own comment — and are skipped here.
+ */
+function selectCapture(): Capture {
+  const dated = captures.filter((c) => c.capturedUtc !== null);
+  if (dated.length === 0) {
+    throw new Error('fixtures/a1-board.json has no dated capture — nothing can be scored against');
+  }
+  return dated.sort((a, b) => b.capturedUtc!.localeCompare(a.capturedUtc!))[0];
+}
+
+/**
+ * Every transcribed row must sum to the total printed beside it.
+ *
+ * The cells are read off a compressed video frame where a 1 and a 2 differ by a
+ * few pixels, so a misread is the normal case, not the exceptional one. Their
+ * board publishes the check for free: the score column IS the sum of the 18
+ * cells, so a row that does not add up was transcribed wrong.
+ *
+ * Rows that fail are DROPPED rather than reported, because the whole purpose of
+ * per-slot attribution is to say which column is at fault, and a misread row
+ * says so confidently and wrongly. This runs before the network does, so a bad
+ * transcription is caught in a second rather than after a full pipeline run.
+ *
+ * IT IS NOT SUFFICIENT, AND A ROW THAT PASSES HAS NOT BEEN VERIFIED. Two misread
+ * cells that cancel sum correctly, and 18 cells leave ample room for that. It
+ * has already happened once: a GBPUSD row read PPI as 0 instead of +2 and
+ * something else two points high, passed here, and sent a change into the GBP
+ * producer-price series that moved TOTAL ABS GAP from 80 to 90 — see the
+ * 2026-08-21 note in the fixture.
+ *
+ * The check that caught it is the run itself. A correctly-read cell implies a
+ * rule change that moves ONE row toward their board; a misread one moves every
+ * pair sharing that leg the wrong way. So treat a transcribed cell as a
+ * hypothesis, change the rule it implies, and let TOTAL ABS GAP judge it.
+ */
+function validateCells(capture: Capture): { cells: Record<string, Record<string, number>>; rejected: string[] } {
+  const good: Record<string, Record<string, number>> = {};
+  const rejected: string[] = [];
+
+  for (const [symbol, row] of Object.entries(capture.cells)) {
+    const published = capture.totals[symbol];
+
+    if (published === undefined) {
+      rejected.push(`${pad(symbol, 9)} has cells but no published total`);
+      continue;
+    }
+
+    const check = checkRowSum(row, published);
+    if (!check.ok) {
+      rejected.push(`${pad(symbol, 9)} ${check.detail}`);
+      continue;
+    }
+    good[symbol] = row;
+  }
+
+  for (const breach of checkBounds(good)) {
+    rejected.push(`${pad(breach.symbol, 9)} ${breach.slotKey} = ${signed(breach.value)} — ${breach.detail}`);
+    delete good[breach.symbol];
+  }
+
+  /**
+   * And the check the sum is blind to BY CONSTRUCTION, because addition does not
+   * care about order. See `checkStructuralZeros`: a row read with its columns
+   * shifted still adds to the printed total.
+   */
+  for (const breach of checkStructuralZeros(good)) {
+    rejected.push(`${pad(breach.symbol, 9)} ${breach.slotKey} = ${signed(breach.value)} — ${breach.detail}`);
+    delete good[breach.symbol];
+  }
+
+  return { cells: good, rejected };
+}
+
+/**
+ * The SECOND check on the captured cells, and the one the sum cannot perform.
+ *
+ * `validateCells` above asks whether each row adds up. That is necessary and not
+ * sufficient: it is blind to two misreads that cancel, and this file's own
+ * history records a row that passed it, was believed, and drove TOTAL ABS GAP
+ * from 80 to 90. `solveA1Legs` asks whether the rows can all be true AT ONCE,
+ * which is a much harder thing to pass by accident.
+ *
+ * Rows are NOT dropped on a contradiction. It implicates at least two of them
+ * and usually cannot say which, so dropping both would discard good evidence
+ * along with bad. Instead the contradicted COLUMNS are returned and the
+ * attribution below marks them, so nobody reads a fix out of a cell that is
+ * known to be in dispute.
+ */
+function contradictedColumns(cells: Record<string, Record<string, number>>) {
+  const solved = solveA1Legs(cells);
+  return {
+    solved,
+    disputed: new Set(solved.contradicted.map((c) => c.slotKey)),
+  };
+}
+
+const CAPTURE = selectCapture();
+const totals = CAPTURE.totals;
+const { cells, rejected } = validateCells(CAPTURE);
 
 function summarise(rows: SymbolRow[]) {
   const compared = Object.keys(totals)
@@ -53,7 +202,7 @@ function summarise(rows: SymbolRow[]) {
  * The per-symbol total says a row moved; this says why. Without it a regression
  * is a number that got worse, and the next change is another guess.
  */
-function attribute(row: SymbolRow, expected: Record<string, number>) {
+function attribute(row: SymbolRow, expected: Record<string, number>, disputed: Set<string>) {
   const lines: string[] = [];
   let accounted = 0;
 
@@ -66,9 +215,17 @@ function attribute(row: SymbolRow, expected: Record<string, number>) {
     if (diff === 0) continue;
 
     accounted += diff;
+    /**
+     * A DISPUTED column is one the leg solver proved cannot hold across every
+     * captured row at once. The number is still printed, because the total has
+     * to reconcile — but it must not be read as a target. An unmarked line here
+     * is exactly how a misread cell becomes a config change, which this file's
+     * own history records happening once already.
+     */
+    const flag = disputed.has(slot.key) ? '   !! disputed — do not fix from this' : '';
     lines.push(
       `      ${pad(slot.label, 18)} ours ${padStart(signed(ours), 3)}   A1 ${padStart(signed(theirs), 3)}   ` +
-        `${signed(diff)}`,
+        `${signed(diff)}${flag}`,
     );
   }
 
@@ -89,12 +246,57 @@ function attribute(row: SymbolRow, expected: Record<string, number>) {
  * look-ahead guard, and every comparison is like for like. Once the drift is
  * wide enough that the fixture no longer describes a reachable state, the answer
  * is a fresh capture, not a code change.
+ *
+ * A SAME-DAY capture cannot be rewound, and pretending otherwise lets look-ahead
+ * back in. `T23:59:59` on today's date is in the future, so the cutoff would trim
+ * nothing and our board would be scored against releases that landed after their
+ * frame was taken — the very error the rewind exists to prevent, running silently
+ * and in the direction that flatters us. The cutoff is therefore clamped to now,
+ * and the intra-day risk is reported rather than hidden.
  */
-const CAPTURED_AT = new Date(`${board.capturedUtc}T23:59:59.000Z`);
+const HAS_TIME = CAPTURE.capturedUtc!.includes('T');
+const CAPTURED_END_OF_DAY = new Date(HAS_TIME ? CAPTURE.capturedUtc! : `${CAPTURE.capturedUtc}T23:59:59.000Z`);
+const SAME_DAY = !HAS_TIME && CAPTURED_END_OF_DAY.getTime() > Date.now();
+const CAPTURED_AT = new Date(Math.min(CAPTURED_END_OF_DAY.getTime(), Date.now()));
+
+/**
+ * How far THEIR board moved between the two most recent captures.
+ *
+ * This is the honest noise floor for the whole comparison, and it is far larger
+ * than the ±1 the technicals contribute. Two frames from the same day's stream
+ * differed by 29 points across 22 shared symbols — 16 of them moved, CADJPY by
+ * 3 and GBPUSD by 2 — against a TOTAL ABS GAP of 80. About a third of what looks
+ * like a scoring gap is the hour the frame was grabbed.
+ *
+ * Printed on every run so nobody reads a 2-point row gap as a defect again.
+ */
+function boardDrift() {
+  const dated = captures.filter((c) => c.capturedUtc !== null);
+  const [current, previous] = dated;
+  if (!previous) return null;
+
+  const shared = Object.keys(current.totals).filter((s) => previous.totals[s] !== undefined);
+  if (shared.length === 0) return null;
+
+  const moves = shared.map((s) => current.totals[s] - previous.totals[s]);
+  return {
+    from: previous.capturedUtc!,
+    shared: shared.length,
+    moved: moves.filter((m) => m !== 0).length,
+    total: moves.reduce((t, m) => t + Math.abs(m), 0),
+    biggest: Math.max(...moves.map(Math.abs)),
+  };
+}
 
 async function main() {
   const started = Date.now();
-  const payload = await runSetupsPipeline();
+  /**
+   * `pricesAsOf`, not `now`. The price series behind the trend cell is cut at
+   * the capture — it was computed live until 2026-08-30, no matter what date
+   * this script claimed to reproduce. `now` stays live on purpose: rewinding it
+   * narrows the calendar fetch and loses scheduled events the frame could see.
+   */
+  const payload = await runSetupsPipeline(new Date(), { pricesAsOf: CAPTURED_AT });
 
   const driftHours = (Date.now() - CAPTURED_AT.getTime()) / 3_600_000;
   const trimmed = asOf({ events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() }, CAPTURED_AT);
@@ -111,14 +313,41 @@ async function main() {
     cot: trimmed.cot,
     technicals: payload.technicals,
     sovereignYields: payload.sovereignYields,
+    /**
+     * NOT OPTIONAL, THOUGH THE TYPE SAYS IT IS. Omitting it does not blank one
+     * cell — it blanks the rate column on DXY and all fourteen non-FX rows, so
+     * this script scored a board the app never rendered and reported DXY at -7
+     * where /scorecard showed -8. The value now rides on the payload for exactly
+     * this reason; see `SetupsPayload.yield2y`.
+     */
+    yield2y: payload.yield2y,
     now: CAPTURED_AT,
   });
   const health = payload.health;
 
   console.log(
-    `scored as of ${board.capturedUtc} (${driftHours.toFixed(0)}h ago) — ` +
+    `scored as of ${CAPTURE.capturedUtc} (${SAME_DAY ? 'today' : `${driftHours.toFixed(0)}h ago`}, ` +
+      `${CAPTURE.provenance}) — ` +
       `${dropped} release${dropped === 1 ? '' : 's'} published since then held back\n`,
   );
+  if (SAME_DAY) {
+    console.log('  no time on this capture, so the cutoff is now: anything they had seen by their');
+    console.log('  frame but that we fetched later in the day is still in. Record an ISO datetime');
+    console.log('  in `capturedUtc` when the stream shows one and this rewinds to the hour.\n');
+  }
+
+  const drift = boardDrift();
+  if (drift) {
+    console.log(
+      `  THEIR BOARD MOVED ${drift.total} points across ${drift.shared} shared symbols since the ` +
+        `${drift.from} capture`,
+    );
+    console.log(
+      `  (${drift.moved} of ${drift.shared} symbols moved, biggest ${drift.biggest}) — that is the ` +
+        'floor under every gap below.',
+    );
+    console.log('  A row inside it is not evidence. Chase patterns across a currency, not single rows.\n');
+  }
   if (driftHours > 96) {
     console.log('  the capture is over four days old; refresh the fixture rather than trusting a gap below\n');
   }
@@ -132,7 +361,30 @@ async function main() {
     console.log('');
   }
 
-  console.log(`PARITY vs A1's board captured ${board.capturedUtc}\n`);
+  /**
+   * Healthy sources with something to say — kept apart from the block above so
+   * a routine number never reads as a warning. The backfill's yield lives here:
+   * it is the figure that lets "reachable but useless" be told apart from
+   * "working", which is the failure that hid a broken merge for a fortnight.
+   */
+  const notes = health.filter((h) => h.note);
+  if (notes.length > 0) {
+    for (const h of notes) console.log(`  note  ${h.source}: ${h.note}`);
+    console.log('');
+  }
+
+  /**
+   * A rejected row is a transcription error, not a scoring error, and saying so
+   * loudly is the point — it is the one failure that would otherwise be silent
+   * and would then be explained as a bug in the code.
+   */
+  if (rejected.length > 0) {
+    console.log('CAPTURED ROWS REJECTED — these do not sum to their own published total\n');
+    for (const r of rejected) console.log(`  ${r}`);
+    console.log('\n  re-read them off the frame; they are excluded from attribution below\n');
+  }
+
+  console.log(`PARITY vs A1's board captured ${CAPTURE.capturedUtc}\n`);
   console.log(`  ${pad('symbol', 9)}${padStart('ours', 5)}${padStart('A1', 5)}${padStart('gap', 6)}`);
   console.log(`  ${'-'.repeat(24)}`);
 
@@ -147,7 +399,81 @@ async function main() {
   console.log(`  within 2        ${within2}`);
   console.log(`  TOTAL ABS GAP   ${totalAbsGap}    <- the number to drive down`);
 
-  console.log('\nPER-SLOT ATTRIBUTION (rows captured cell by cell)');
+  /**
+   * WHICH LEG, from the score column alone.
+   *
+   * Each currency has a single-economy row on their board, so its gap measures
+   * that currency's macro error directly — no cell transcription, which is the
+   * step this codebase has repeatedly failed at. Every pair gap then becomes a
+   * PREDICTION, and the residual separates the two kinds of problem: a pair
+   * landing on its prediction is explained by legs it shares with seven other
+   * rows, and a pair missing it has something local going on.
+   */
+  const ourTotals = Object.fromEntries(matrix.rows.map((r) => [r.symbol, r.totalScore]));
+  const analysis = explainGaps(ourTotals, totals);
+
+  console.log('\nWHICH LEG — each currency read off its own single-economy row\n');
+  console.log(`  ${pad('cur', 5)}${pad('via', 7)}${padStart('ours', 6)}${padStart('A1', 5)}${padStart('delta', 7)}`);
+  console.log(`  ${'-'.repeat(30)}`);
+  for (const leg of analysis.legErrors) {
+    console.log(
+      `  ${pad(leg.currency, 5)}${pad(leg.via, 7)}${padStart(signed(leg.ours), 6)}` +
+        `${padStart(signed(leg.theirs), 5)}${padStart(signed(leg.delta), 7)}`,
+    );
+  }
+  console.log('\n  delta > 0 means we score that currency too HIGH. It carries into every');
+  console.log('  pair it appears in, positively as base and negatively as quote.');
+
+  const unexplained = analysis.pairs.filter((p) => p.residual !== 0);
+  console.log(
+    `\n  PAIRS THE LEGS DO NOT EXPLAIN — ${unexplained.length} of ${analysis.pairs.length}\n`,
+  );
+  console.log(
+    `  ${pad('symbol', 9)}${padStart('gap', 5)}${padStart('legs', 6)}${padStart('left', 6)}`,
+  );
+  console.log(`  ${'-'.repeat(26)}`);
+  for (const p of unexplained.slice(0, 12)) {
+    console.log(
+      `  ${pad(p.symbol, 9)}${padStart(signed(p.gap), 5)}${padStart(signed(p.predicted), 6)}` +
+        `${padStart(signed(p.residual), 6)}`,
+    );
+  }
+  console.log('\n  `legs` is what the two currencies predict; `left` is what they do not.');
+  console.log('  This reads dP = 0 — that our trend, seasonality, COT and crowd cells match');
+  console.log('  theirs. They do not always, so a residual is a POINTER, not a verdict.');
+
+  /**
+   * The captured cells, checked against EACH OTHER rather than against
+   * themselves. See `contradictedColumns`.
+   */
+  const { solved, disputed } = contradictedColumns(cells);
+  if (solved.contradicted.length > 0) {
+    console.log('\nCAPTURED CELLS CONTRADICT EACH OTHER — the check the row sum cannot do\n');
+    for (const column of solved.contradicted) {
+      console.log(
+        `  ${pad(column.label, 20)} only ${column.satisfied} of ${column.equations} rows can hold at once`,
+      );
+      console.log(
+        `  ${' '.repeat(20)} re-read ${column.suspects.join(' or ') || 'these rows — no single one rescues the column'}`,
+      );
+    }
+    console.log('\n  A pair cell is base minus quote over legs of -1, 0 or +1, so the captured');
+    console.log('  rows are equations over the same eight unknowns. These columns have no');
+    console.log('  solution: at least one cell in each is misread. Every row still sums to its');
+    console.log('  own published total, which is why this needed a second check.');
+    console.log('  The rows are NOT dropped — a contradiction implicates two and rarely says');
+    console.log('  which — but the columns are marked in the attribution below.\n');
+  }
+
+  const captured = Object.keys(cells).length;
+  console.log(`\nPER-SLOT ATTRIBUTION — ${captured} of ${compared.length} rows captured cell by cell`);
+  if (captured === 0) {
+    console.log('\n  NO ROWS CAPTURED CELL BY CELL. The table above says WHICH rows disagree');
+    console.log('  and by how much; nothing here can say WHICH COLUMN caused it, so any fix');
+    console.log('  made from this run alone is a guess. Transcribe a few rows into the');
+    console.log(`  ${CAPTURE.capturedUtc} capture in fixtures/a1-board.json — each is checked`);
+    console.log('  against its own published total as you add it.');
+  }
   for (const [symbol, expected] of Object.entries(cells)) {
     const row = matrix.rows.find((r) => r.symbol === symbol);
     if (!row) continue;
@@ -155,7 +481,7 @@ async function main() {
     const gap = row.totalScore - totals[symbol];
     console.log(`\n  ${symbol}  ours ${signed(row.totalScore)}  A1 ${signed(totals[symbol])}  gap ${signed(gap)}`);
 
-    const { lines, accounted } = attribute(row, expected);
+    const { lines, accounted } = attribute(row, expected, disputed);
     if (lines.length === 0) console.log('      every column agrees');
     else console.log(lines.join('\n'));
 

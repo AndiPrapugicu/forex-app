@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { FAIRECONOMY } from '@/config/sources.config';
 import { fetchJson, parseNumeric, stableId, fixturesEnabled } from '@/lib/connectors/base';
+import { normalizeSeriesName, type TvForecast } from '@/lib/connectors/tradingview';
 import { isMajor, ok, type Impact, type NormalizedEvent, type Result } from '@/lib/types';
 
 const FfEvent = z.object({
@@ -121,3 +122,95 @@ export async function fetchFairEconomyCalendar(): Promise<Result<NormalizedEvent
   if (!res.ok) return res as Result<NormalizedEvent[]>;
   return parsePayload(res.data, FAIRECONOMY.name);
 }
+
+/**
+ * The forecast column, reshaped so `backfillConsensus` can lend it out.
+ *
+ * This feed has published a usable forecast all along — `parsePayload` above
+ * puts it straight into `consensus` — and none of it ever reached the
+ * scorecard. It is wired only into the news pipeline, where `resolveCalendar`
+ * de-duplicates WHOLE ROWS and FXStreet is inserted first, so on exactly the
+ * releases where FXStreet has an actual and no consensus the ForexFactory row
+ * is dropped and takes its forecast with it. Two feeds, one of them holding the
+ * missing number, and the merge threw it away.
+ *
+ * A THIRD VOCABULARY, so it needs its own aliases. FXStreet names a series
+ * after the statistical title, TradingView after the measure, and ForexFactory
+ * after neither — "National Core CPI y/y", "Retail Sales m/m", "Flash
+ * Manufacturing PMI". The pairs below were read off the live payload.
+ *
+ * EXPECT THIS TO LEND VERY LITTLE, AND KNOW WHY BEFORE DELETING IT.
+ *
+ * Measured on the day it was wired in: 69 forecasts offered, 0 lent. That is
+ * not a matching bug, it is the shape of the feed. Only
+ * `ff_calendar_thisweek` exists — today, tomorrow, nextweek and lastweek all
+ * 404 — so it carries forecasts for releases that have NOT HAPPENED YET, while
+ * `backfillConsensus` deliberately only fills events that already have an
+ * actual. The two windows barely overlap: by the time a print has an actual to
+ * score, the forecast that preceded it has rolled out of the week.
+ *
+ * The overlap it does catch is real but narrow — a release earlier in the same
+ * week that FXStreet published without a consensus. That is worth one cached
+ * fetch, and the health note reports the yield every run so "reachable but
+ * useless" can be told from "working" without anyone having to guess.
+ *
+ * WHAT WOULD ACTUALLY FIX THIS is capturing forecasts prospectively: snapshot
+ * this feed weekly and keep the numbers, so a release meets the forecast that
+ * was published before it. Consensus is only ever available in advance, and
+ * nothing here stores it. That is a storage change, not a connector change.
+ */
+export const FF_SERIES_ALIASES: Record<string, string> = {
+  'national cpi ex fresh food yoy': 'national core cpi y y',
+  'consumer price index yoy': 'cpi y y',
+  'consumer price index mom': 'cpi m m',
+  'retail sales mom': 'retail sales m m',
+  'industrial product price mom': 'ippi m m',
+  'producer price index output qoq': 'ppi output q q',
+  'unemployment rate': 'unemployment rate',
+};
+
+/** Their currency code in the country vocabulary `backfillConsensus` matches on. */
+const CURRENCY_TO_COUNTRY: Record<string, string> = {
+  USD: 'US', EUR: 'EMU', GBP: 'UK', JPY: 'JP',
+  AUD: 'AU', NZD: 'NZ', CAD: 'CA', CHF: 'CH',
+};
+
+export function toForecastRows(events: NormalizedEvent[]): TvForecast[] {
+  const rows: TvForecast[] = [];
+
+  for (const e of events) {
+    if (e.consensus === null) continue;
+
+    /**
+     * The feed keys by CURRENCY and leaves `countryCode` null, but the backfill
+     * matches on country — deliberately, because German and euro-area HICP
+     * share a currency, a name and often a week, and pairing those would put a
+     * member state's forecast against the aggregate's actual.
+     */
+    const countryCode = CURRENCY_TO_COUNTRY[e.currency];
+    if (!countryCode) continue;
+
+    const normalized = normalizeSeriesName(e.name);
+    rows.push({
+      countryCode,
+      currency: e.currency,
+      day: e.dateUtc.slice(0, 10),
+      /**
+       * Aliased in REVERSE of the TradingView table. There the key is the
+       * FXStreet name and the value is theirs, because their rows are the ones
+       * being looked up. Here the ForexFactory row is the one carrying the
+       * forecast, so it must be rewritten into the name the FXStreet event will
+       * normalize to — otherwise the two never meet.
+       */
+      normalizedName: FF_TO_FXSTREET[normalized] ?? normalized,
+      forecast: e.consensus,
+    });
+  }
+
+  return rows;
+}
+
+/** `FF_SERIES_ALIASES` inverted, built once. See `toForecastRows`. */
+const FF_TO_FXSTREET: Record<string, string> = Object.fromEntries(
+  Object.entries(FF_SERIES_ALIASES).map(([fxstreet, ff]) => [ff, fxstreet]),
+);

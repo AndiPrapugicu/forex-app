@@ -8,7 +8,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveRateProjection, scoreRateExpectation } from '@/lib/scoring/rates';
+import {
+  resolveNextRateDecision,
+  resolveRateProjection,
+  scoreRateExpectation,
+} from '@/lib/scoring/rates';
 import type { Currency, NormalizedEvent } from '@/lib/types';
 
 const NOW = new Date('2026-08-11T12:00:00Z');
@@ -95,15 +99,167 @@ describe('scoreRateExpectation', () => {
    * bank that published a projection of no change.
    */
   it('scores 0 with basis "none" where no bank projection exists', () => {
-    const scored = scoreRateExpectation('GBP', yields, [], NOW);
+    // A POPULATED calendar that simply carries nothing forward-looking for this
+    // currency. That is the ordinary case for seven of the eight majors, and 0
+    // is the honest reading of it.
+    const scored = scoreRateExpectation('GBP', yields, projection('USD', 3.9, 3.9), NOW);
     expect(scored.cell).toBe(0);
     expect(scored.basis).toBe('none');
+  });
+
+  /**
+   * An empty calendar is not a neutral view. This is the one place in the
+   * scoring engine where a provider outage could arrive as a confident number,
+   * and 0 is a claim: "no change expected". Null is "we could not look".
+   */
+  it('returns null, not 0, when there is no calendar at all', () => {
+    const scored = scoreRateExpectation('GBP', yields, [], NOW);
+    expect(scored.cell).toBeNull();
+    expect(scored.basis).toBe('none');
+    expect(scored.explanation).toMatch(/unknown rather than neutral/i);
   });
 
   it('scores 0 with basis "projection" where the bank projects no change', () => {
     const scored = scoreRateExpectation('USD', yields, projection('USD', 3.9, 3.9), NOW);
     expect(scored.cell).toBe(0);
     expect(scored.basis).toBe('projection');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The scheduled-decision fallback, pinned to the row that justifies it
+// ---------------------------------------------------------------------------
+
+/**
+ * RECONSTRUCTED 2026-08-30 after this file was reverted to HEAD by mistake,
+ * destroying the uncommitted originals. The behaviour asserted is unchanged and
+ * every case still passes against untouched production code, but the wording is
+ * a rewrite rather than the text that was lost.
+ */
+describe('the next scheduled decision, where no bank projection exists', () => {
+  const yields = new Map();
+  const AT = new Date('2026-08-25T00:00:00Z');
+
+  /**
+   * One scheduled, not-yet-released central bank decision.
+   *
+   * `actual: null` is the whole point — it is what separates a meeting that has
+   * not happened from a print that has landed, both of which can carry a future
+   * date in a feed snapshot.
+   */
+  function scheduled(
+    currency: Currency,
+    name: string,
+    dateUtc: string,
+    consensus: number | null,
+    previous: number | null,
+  ): NormalizedEvent {
+    return {
+      id: `sched-${dateUtc}`,
+      seriesId: null,
+      name,
+      currency,
+      countryCode: currency === 'NZD' ? 'NZ' : currency === 'CAD' ? 'CA' : 'US',
+      dateUtc,
+      impact: 'HIGH',
+      actual: null,
+      consensus,
+      previous,
+      revised: null,
+      unit: '%',
+      ratioDeviation: null,
+      isBetterThanExpected: null,
+      isSpeech: false,
+      isPreliminary: false,
+      source: 'fxstreet',
+      actualSource: 'fxstreet',
+      sourceUrl: null,
+      lastUpdated: null,
+    };
+  }
+
+  /**
+   * THE ROW THIS RULE RESTS ON. A1's 2026-08-25 Top Setups NZDX row —
+   * checksummed, bounds-clean and structural-zero-clean — prints Interest Rates
+   * +1, the only non-zero non-USD rates leg on that board. The RBNZ publishes no
+   * dot plot; its 2026-09-02 decision carried a consensus of 2.75% against a
+   * standing 2.50%. If a future change makes this 0 again it has to explain that
+   * cell first.
+   */
+  it("reproduces A1's NZDX rates cell from the next RBNZ decision", () => {
+    const events = [scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-09-02T02:00:00Z', 2.75, 2.5)];
+    const scored = scoreRateExpectation('NZD', yields, events, AT);
+
+    expect(scored.cell).toBe(1);
+    expect(scored.basis).toBe('consensus');
+  });
+
+  /** The contrapositive: a hold forecast at the standing rate is not a signal. */
+  it('scores a forecast hold as 0, not as a move', () => {
+    const events = [scheduled('CAD', 'BoC Interest Rate Decision', '2026-09-02T14:00:00Z', 2.25, 2.25)];
+    const scored = scoreRateExpectation('CAD', yields, events, AT);
+
+    expect(scored.cell).toBe(0);
+    expect(scored.basis).toBe('consensus');
+  });
+
+  it('reads the SOONEST scheduled decision, not whichever the feed lists first', () => {
+    const events = [
+      scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-11-25T02:00:00Z', 2.0, 2.5),
+      scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-09-02T02:00:00Z', 2.75, 2.5),
+    ];
+    const next = resolveNextRateDecision('NZD', events, AT);
+
+    expect(next?.dateUtc).toBe('2026-09-02T02:00:00Z');
+    expect(next?.consensus).toBe(2.75);
+    // The far meeting projects cuts and the near one a hike, so the sign proves
+    // which was read.
+    expect(scoreRateExpectation('NZD', yields, events, AT).cell).toBe(1);
+  });
+
+  it('takes the standing rate off the scheduled row own previous', () => {
+    const events = [scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-09-02T02:00:00Z', 2.75, 2.5)];
+    expect(resolveNextRateDecision('NZD', events, AT)?.standing).toBe(2.5);
+  });
+
+  it('ignores a decision that has already happened', () => {
+    const events = [scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-08-01T02:00:00Z', 2.75, 2.5)];
+    expect(resolveNextRateDecision('NZD', events, AT)).toBeNull();
+    expect(scoreRateExpectation('NZD', yields, events, AT).basis).toBe('none');
+  });
+
+  /**
+   * A future-dated row carrying an actual is a print that already landed in the
+   * snapshot, not a meeting still to come. Scoring against it would be reading
+   * the answer.
+   */
+  it('ignores a future-dated row that already carries an actual', () => {
+    const leaked = {
+      ...scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-09-02T02:00:00Z', 2.75, 2.5),
+      actual: 2.75,
+    };
+    expect(scoreRateExpectation('NZD', yields, [leaked], AT).basis).toBe('none');
+  });
+
+  it('ignores a scheduled decision with no forecast — there is nothing to compare', () => {
+    const events = [scheduled('NZD', 'RBNZ Interest Rate Decision', '2026-09-02T02:00:00Z', null, 2.5)];
+    expect(scoreRateExpectation('NZD', yields, events, AT).basis).toBe('none');
+  });
+
+  /**
+   * PRECEDENCE. The Fed publishes both a dot plot and a schedule; the dots are
+   * the number A1's own page names, and the two answer different questions — a
+   * year out versus a fortnight out. A consensus must never displace them.
+   */
+  it('keeps the dot plot ahead of the calendar consensus for the dollar', () => {
+    const events = [
+      ...projection('USD', 3.9, 3.4),
+      scheduled('USD', 'Fed Interest Rate Decision', '2026-09-16T18:00:00Z', 4.0, 3.75),
+    ];
+    const scored = scoreRateExpectation('USD', yields, events, AT);
+
+    expect(scored.basis).toBe('projection');
+    expect(scored.cell).toBe(-1);
   });
 });
 

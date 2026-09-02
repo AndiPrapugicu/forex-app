@@ -35,6 +35,27 @@ export interface SeasonalityScore {
   winRatePct: number;
   years: number;
   explanation: string;
+  /**
+   * The PREVIOUS calendar month's cell, when it differs from this one.
+   *
+   * CONTEXT ONLY. It is never summed, never in `totalScore`, and exists for a
+   * single measured reason: A1 does not roll this column at the month turn.
+   * Scoring their 2026-09-01 board against our August signs matches 45 of 51
+   * (88.2%) where September matches 25 (49.0%, chance), and on the 26 rows
+   * where our two months disagree they sided with August 23 times.
+   *
+   * That 88% is the evidence our monthly averages agree with theirs, so the
+   * divergence is a refresh cadence rather than a defect on either side — and
+   * chasing it would mean deliberately scoring a month that has ended. Showing
+   * it is the honest middle: the user sees why our cell differs from the one on
+   * their screen without us pretending August is still current.
+   *
+   * Null when the two months agree, or when the previous month has too few
+   * observations to score. Null is not "no lag" — it is "nothing to say".
+   */
+  previousMonthCell: number | null;
+  /** The previous month's name, for the tooltip. Null whenever the cell is. */
+  previousMonthName: string | null;
 }
 
 const MONTH_NAMES = [
@@ -78,7 +99,41 @@ export function scoreTrend(tech: Technicals | undefined): TrendScore | null {
   const slope = tech.smaSlow > tech.smaSlowPrior ? 1 : -1;
 
   const conflicted = Math.sign(crossover) !== Math.sign(slope);
-  // Agreement leaves the crossover untouched; disagreement costs exactly one.
+
+  /**
+   * THE CONFLICTED STATES COST A POINT. The crossover is the baseline; a slow
+   * average pointing the other way docks one, and never flips the sign.
+   *
+   * THIS WAS CHANGED AND CHANGED BACK ON 2026-09-01, and the round trip is the
+   * most useful thing in this comment.
+   *
+   * Cross-tabulating A1's printed cell against this same (crossover, slope)
+   * state over 51 symbols and TWO captures made the `cross -, slope +` quadrant
+   * look like +2 at 67% (n=18), so it was adopted. A THIRD capture, taken five
+   * hours after the second on the same day, pulled that quadrant to a coin flip
+   * and put -1 back in front. Pooled over all three:
+   *
+   *     cross +, slope +   n=71   +2 in 96%
+   *     cross -, slope -   n=35   -2 in 89%
+   *     cross +, slope -   n=20   +1 in 70%
+   *     cross -, slope +   n=27   -1 in 56%,  +2 in 44%   <- UNDECIDED
+   *
+   * The docked rule matches the majority in three quadrants and the plurality in
+   * the fourth, which is every quadrant it can claim. It also wins the candidate
+   * race outright once the third frame is in: 129 exact against 126, absolute
+   * error 61 against 70, and a churn of 14 against A1's own 14 where the
+   * challenger moved 7.
+   *
+   * THE LESSON IS NOT "USE THREE CAPTURES". The first two were a day apart and
+   * both taken in the same market state; a third from the SAME DAY overturned
+   * them, so the count was never the problem. A 67% majority over n=18 was not
+   * enough evidence to overturn a rule read off their own published description,
+   * and it should not have been treated as if it were.
+   *
+   * Their page describes a crossover with a slope modifier, and this is that,
+   * literally. WHERE THE MEASUREMENT IS UNDECIDED, THE PUBLISHED DESCRIPTION
+   * WINS. Reproduce with `npm run trend-solver`, which prints the table above.
+   */
   const cell = conflicted ? crossover - Math.sign(crossover) : crossover;
 
   const { fast, slow } = TREND_SMA;
@@ -90,7 +145,11 @@ export function scoreTrend(tech: Technicals | undefined): TrendScore | null {
     explanation:
       `${fast}-day average is ${crossover > 0 ? 'above' : 'below'} the ${slow}-day, ` +
       `and the ${slow}-day is ${slope > 0 ? 'rising' : 'flat or falling'}` +
-      (conflicted ? ' — they disagree, so the crossover is docked a point.' : '.'),
+      (conflicted
+        ? slope > 0
+          ? ' — the dip is against a rising average, so it scores mildly.'
+          : ' — the rally is against a falling average, so it scores mildly.'
+        : '.'),
   };
 }
 
@@ -123,7 +182,19 @@ export function scoreSeasonality(
 
   const { meanPct, winRatePct } = stats;
   const magnitude = SEASONALITY_CELL_MAX_BY_KIND[kind];
-  const cell = meanPct > 0 ? magnitude : meanPct < 0 ? -magnitude : 0;
+  const score = (mean: number) => (mean > 0 ? magnitude : mean < 0 ? -magnitude : 0);
+  const cell = score(meanPct);
+
+  /**
+   * The month before this one, scored by the same rule and reported only when
+   * it disagrees. See `SeasonalityScore.previousMonthCell` for why it is here
+   * and why it must never be summed.
+   */
+  const previousMonth = month === 1 ? 12 : month - 1;
+  const previous = tech.seasonality[previousMonth];
+  const previousCell =
+    previous && previous.years >= SEASONALITY_MIN_YEARS ? score(previous.meanPct) : null;
+  const lagged = previousCell !== null && previousCell !== cell;
 
   return {
     cell,
@@ -131,9 +202,15 @@ export function scoreSeasonality(
     meanPct,
     winRatePct,
     years: stats.years,
+    previousMonthCell: lagged ? previousCell : null,
+    previousMonthName: lagged ? MONTH_NAMES[previousMonth - 1] : null,
     explanation:
       `${MONTH_NAMES[month - 1]} has averaged ${meanPct > 0 ? '+' : ''}${meanPct}% over ` +
-      `${stats.years} years, higher ${winRatePct}% of the time.`,
+      `${stats.years} years, higher ${winRatePct}% of the time.` +
+      (lagged
+        ? ` ${MONTH_NAMES[previousMonth - 1]} scored ${previousCell > 0 ? '+' : ''}${previousCell}` +
+          ' — A1 has not always rolled this column by now.'
+        : ''),
   };
 }
 

@@ -13,7 +13,7 @@ import {
   asOf, byScore, independentWindows, runBacktest, spreadByDate, summarise, technicalsAsOf,
 } from '@/lib/scoring/backtest';
 import type { Observation } from '@/lib/scoring/backtest';
-import type { CotReport, CotSeries } from '@/lib/connectors/cftc';
+import { publicationDate, type CotReport, type CotSeries } from '@/lib/connectors/cftc';
 import type { NormalizedEvent } from '@/lib/types';
 
 function makeEvent(dateUtc: string, name = 'Consumer Price Index (YoY)'): NormalizedEvent {
@@ -93,6 +93,48 @@ describe('asOf — the look-ahead guard', () => {
     expect(cot.get('GOLD')!.reports.map((r) => r.reportDate)).toEqual(['2026-01-06']);
   });
 
+  /**
+   * THE SURVEY DATE IS NOT THE KNOWABLE DATE.
+   *
+   * A report surveyed on a Tuesday is released the following Friday, so for the
+   * three days in between it exists in our downloaded series and did not exist
+   * on the board being reproduced. Cutting on `reportDate` admitted it, and the
+   * comment on that line asserted the opposite was true.
+   *
+   * The dates below are the real ones this was measured on: replaying Tuesday
+   * 2026-08-25 pulled in the report surveyed that same day and published Friday
+   * 2026-08-28, moving fifteen cells — among them NZDX's Crowd cell, which
+   * A1's board for that date prints as +1 and which we scored 0.
+   */
+  it('excludes a report surveyed on the replay date itself, which publishes three days later', () => {
+    const tuesdays = { ...input, cot: makeCot(['2026-08-25', '2026-08-18']) };
+
+    const onTheDay = asOf(tuesdays, new Date('2026-08-25T23:59:59.000Z'));
+    expect(onTheDay.cot.get('GOLD')!.reports.map((r) => r.reportDate)).toEqual(['2026-08-18']);
+
+    // Thursday: still one day early.
+    const thursday = asOf(tuesdays, new Date('2026-08-27T23:59:59.000Z'));
+    expect(thursday.cot.get('GOLD')!.reports.map((r) => r.reportDate)).toEqual(['2026-08-18']);
+
+    // Friday: released, and admitted.
+    const friday = asOf(tuesdays, new Date('2026-08-28T00:00:00.000Z'));
+    expect(friday.cot.get('GOLD')!.reports.map((r) => r.reportDate)).toEqual([
+      '2026-08-25',
+      '2026-08-18',
+    ]);
+  });
+
+  it('still admits the previous week on a Monday replay', () => {
+    // The guard must not over-correct: 2026-08-18 was published Friday
+    // 2026-08-21 and IS knowable on Monday 2026-08-24. The 08-24 board depends
+    // on this — all six of its checksummed rows score COT off that report.
+    const { cot } = asOf(
+      { ...input, cot: makeCot(['2026-08-25', '2026-08-18']) },
+      new Date('2026-08-24T23:59:59.000Z'),
+    );
+    expect(cot.get('GOLD')!.reports.map((r) => r.reportDate)).toEqual(['2026-08-18']);
+  });
+
   it('drops a contract entirely when nothing had been published yet', () => {
     const { cot } = asOf(input, new Date('2026-01-01T00:00:00.000Z'));
     expect(cot.has('GOLD')).toBe(false);
@@ -102,6 +144,17 @@ describe('asOf — the look-ahead guard', () => {
     const { events, cot } = asOf(input, new Date('2026-08-01T00:00:00.000Z'));
     expect(events).toHaveLength(2);
     expect(cot.get('GOLD')!.reports).toHaveLength(2);
+  });
+});
+
+describe('publicationDate', () => {
+  it('maps the Tuesday survey onto the Friday release', () => {
+    expect(publicationDate('2026-08-25')).toBe('2026-08-28');
+    expect(publicationDate('2026-08-18')).toBe('2026-08-21');
+  });
+
+  it('crosses a month boundary without drifting', () => {
+    expect(publicationDate('2026-09-29')).toBe('2026-10-02');
   });
 });
 

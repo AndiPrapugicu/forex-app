@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CROWD_LONG_PCT_BUCKETS,
   SCORING_SLOTS,
+  SLOTS,
   SEASONALITY_YEARS,
   TREND_SMA,
   biasFromScore,
@@ -33,7 +34,7 @@ import {
   INDUSTRIAL_POLARITY,
   RISK_ASSET_POLARITY,
 } from '@/config/symbols.config';
-import { normalizeZero, resolveSeries, ternarySign } from '@/lib/scoring/discrete';
+import { compareFor, normalizeZero, resolveSeries, scoreSlot, ternarySign } from '@/lib/scoring/discrete';
 import { scoreCot, scoreCrowd } from '@/lib/scoring/cot';
 import { buildSetupsMatrix } from '@/lib/scoring/setups';
 import { buildProfile } from '@/lib/scoring/seasonality';
@@ -41,9 +42,51 @@ import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/techni
 import { computeSeasonality } from '@/lib/connectors/technicals';
 import type { CotReport, CotSeries } from '@/lib/connectors/cftc';
 import type { Technicals } from '@/lib/connectors/technicals';
+import type { NormalizedEvent } from '@/lib/types';
+import board from '@/fixtures/a1-board.json';
 
 /** Mid-August, so "the month in progress" is a case every seasonality test hits. */
 const NOW = new Date('2026-08-17T12:00:00Z');
+
+/**
+ * One capture of A1's board. Their board is only reachable as livestream frames,
+ * so `fixtures/a1-board.json` keeps every capture ever taken rather than one —
+ * see that file's comment. `capturedUtc` is null when the date was not
+ * recoverable, which excludes the capture from parity but not from the
+ * date-independent structure asserted below.
+ */
+interface Capture {
+  capturedUtc: string | null;
+  provenance: string;
+  totals: Record<string, number>;
+  cells: Record<string, Record<string, number>>;
+}
+
+function makeParityEvent(overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
+  return {
+    id: Math.random().toString(36).slice(2),
+    seriesId: null,
+    name: 'Consumer Price Index (YoY)',
+    currency: 'USD',
+    countryCode: 'US',
+    dateUtc: '2026-08-15T12:00:00Z',
+    impact: 'HIGH',
+    actual: 3.4,
+    consensus: 3.1,
+    previous: 3.1,
+    revised: null,
+    unit: null,
+    ratioDeviation: null,
+    isBetterThanExpected: null,
+    isSpeech: false,
+    isPreliminary: false,
+    source: 'fxstreet',
+    actualSource: 'fxstreet',
+    sourceUrl: null,
+    lastUpdated: null,
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -112,14 +155,30 @@ describe('trend: 3-day vs 14-day SMA, range +/-2', () => {
   });
 
   /**
-   * THE CROSSOVER IS THE SCORE, the slope is only a modifier.
+   * THE CROSSOVER IS THE SCORE, the slope is only a modifier — and the two
+   * conflicted states are NOT symmetric.
    *
    * We first read their "Slope Upward: +1" line as an addend and produced +/-3,
    * which put Gold on Trend +3 — a value their model cannot output. Their
    * combination rule only makes sense if the crossover alone is the baseline,
    * otherwise stating the adjustment separately would be redundant with adding.
    *
+   * "Dip against a rising average" was changed to +2 on 2026-09-01 and changed
+   * BACK the same day. Two captures made that quadrant look like +2 at 67%
+   * (n=18); a third, taken five hours after the second, pulled it to 15 against
+   * 12 and put -1 back in front. Pooled over all three captures:
+   *
+   *     cross +, slope +   n=71   +2 in 96%
+   *     cross -, slope -   n=35   -2 in 89%
+   *     cross +, slope -   n=20   +1 in 70%
+   *     cross -, slope +   n=27   -1 in 56%   <- UNDECIDED, and this is the one
+   *
+   * So three quadrants are decided by measurement and the fourth is not. Where
+   * the measurement is undecided the published description wins, and docking the
+   * crossover by one is exactly what their wording says.
+   *
    * All four combinations are enumerated because that is the whole rule.
+   * `npm run trend-solver` regenerates the table above.
    */
   it.each([
     { name: 'clean uptrend', fast: 105, slow: 100, prior: 99, cell: 2, conflicted: false },
@@ -130,6 +189,31 @@ describe('trend: 3-day vs 14-day SMA, range +/-2', () => {
     const score = scoreTrend(technicals({ smaFast: fast, smaSlow: slow, smaSlowPrior: prior }))!;
     expect(score.cell).toBe(cell);
     expect(score.conflicted).toBe(conflicted);
+  });
+
+  it('docks a point in both conflicted states and never flips the sign', () => {
+    // The property, stated once rather than as two rows: a conflicted state
+    // moves one step toward zero from the crossover and stops there. It is what
+    // makes the range {-2,-1,+1,+2} with no 0 and no +/-3.
+    const dip = scoreTrend(technicals({ smaFast: 95, smaSlow: 100, smaSlowPrior: 99 }))!;
+    const rally = scoreTrend(technicals({ smaFast: 105, smaSlow: 100, smaSlowPrior: 101 }))!;
+    expect(dip.conflicted && rally.conflicted).toBe(true);
+    expect(dip.cell).toBe(-1);
+    expect(rally.cell).toBe(1);
+    expect(Math.sign(dip.cell)).toBe(Math.sign(dip.crossover));
+    expect(Math.sign(rally.cell)).toBe(Math.sign(rally.crossover));
+  });
+
+  it('lets the crossover, not the slope, decide the sign', () => {
+    // The rule from the other side, and the assertion that fails first if the
+    // 2026-09-01 experiment is ever re-applied without new evidence: the slope
+    // modulates magnitude only.
+    for (const prior of [99, 101]) {
+      expect(scoreTrend(technicals({ smaFast: 105, smaSlow: 100, smaSlowPrior: prior }))!.cell)
+        .toBeGreaterThan(0);
+      expect(scoreTrend(technicals({ smaFast: 95, smaSlow: 100, smaSlowPrior: prior }))!.cell)
+        .toBeLessThan(0);
+    }
   });
 
   it('adds NOTHING when crossover and slope agree', () => {
@@ -475,17 +559,27 @@ describe('resolution picks the most recent SCOREABLE print', () => {
     expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-08-01T00:00:00Z');
   });
 
-  it('reaches past a confirming REVISION to the flash that carried the surprise', () => {
+  it('scores the CONFIRMING REVISION, not the flash behind it', () => {
     /**
-     * The live euro-area case. Both prints describe the same quarter:
+     * REGRESSION: the euro-area GDP case, and the reason EURUSD's Economic
+     * Growth block read 6 against their published 5.
+     *
+     * Both prints describe the same quarter:
      *
      *   30 Jul  flash      actual 0.4 against a 0.2 forecast — a beat
      *   14 Aug  revision   actual 0.4 against a 0.4 forecast — says nothing
      *
-     * A consensus equal to the previous print is a survey that was never taken,
-     * so scoring the revision reported "no news" about a quarter that had in
-     * fact beaten forecast. 31% of EUR releases carry consensus === actual
-     * against 7% for CAD, and all of it landed on the euro leg of every pair.
+     * `resolveSeries` used to reach back to the flash, on the reasoning that a
+     * consensus equal to the previous print is a survey that was never taken and
+     * the revision therefore reports "no news" about a quarter that did beat.
+     * Sound analysis, wrong model of A1: their 2026-08-23 EURUSD card publishes
+     * an Economic Growth subtotal of 5, and with the dollar legs known exactly
+     * from their US-DOLLAR card that only reconciles at a euro GDP leg of 0 —
+     * the REVISION. Measured board-wide, removing the reach-back moved TOTAL ABS
+     * GAP 96 -> 92 and exact rows 7 -> 9.
+     *
+     * This test is the guard on that: if it starts failing, someone has restored
+     * the reach-back and EUR's growth block has silently gained a point.
      */
     const events = [
       { ...base, name: 'Test Series', dateUtc: '2026-08-14T00:00:00Z', actual: 0.4, consensus: 0.4, previous: 0.4 },
@@ -493,8 +587,8 @@ describe('resolution picks the most recent SCOREABLE print', () => {
     ] as never[];
 
     const picked = resolveSeries(matcher, 'GBP', events)!;
-    expect(picked.dateUtc).toBe('2026-07-30T00:00:00Z');
-    expect(ternarySign(picked.actual!, picked.consensus!)).toBe(1); // the beat survives
+    expect(picked.dateUtc).toBe('2026-08-14T00:00:00Z');
+    expect(ternarySign(picked.actual!, picked.consensus!)).toBe(0); // the revision says nothing
   });
 
   it('does NOT reach into an older month for a series the feed never forecasts', () => {
@@ -512,6 +606,157 @@ describe('resolution picks the most recent SCOREABLE print', () => {
 
     // 33 days apart: a different month, not a revision. Keep the current print.
     expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-08-03T00:00:00Z');
+  });
+
+  /**
+   * Choosing BETWEEN patterns, which the tests above deliberately do not touch —
+   * every one of them uses a single-pattern matcher.
+   *
+   * The loop used to advance to the next pattern only when a pattern matched
+   * NOTHING, so a pattern that matched and then produced an unusable print
+   * returned it and stopped. New Zealand retail sales is the live case:
+   * `Electronic Card Retail Sales (MoM)` leads the list and has carried no
+   * consensus on any of its prints, which made the quarterly behind it
+   * unreachable and killed the column for every kiwi pair.
+   */
+  describe('resolveSeries across several patterns', () => {
+    const twoPatterns = { match: [/^Card Sales$/i, /^Quarterly Sales$/i] };
+
+    it('reaches a later pattern when the first can only offer an unscoreable print', () => {
+      const events = [
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: -1.4 },
+        { ...base, name: 'Quarterly Sales', dateUtc: '2026-08-15T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
+      ] as never[];
+
+      const picked = resolveSeries(twoPatterns, 'GBP', events, 'forecast', {
+        now: new Date('2026-08-19T00:00:00Z'),
+        maxAgeDays: 75,
+      })!;
+      expect(picked.name).toBe('Quarterly Sales');
+    });
+
+    it('keeps the earlier pattern when both offer equally good prints', () => {
+      // Pattern order is a preference list. It must still mean something.
+      const events = [
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: 1.0, previous: -1.4 },
+        { ...base, name: 'Quarterly Sales', dateUtc: '2026-08-18T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
+      ] as never[];
+
+      const picked = resolveSeries(twoPatterns, 'GBP', events, 'forecast', {
+        now: new Date('2026-08-19T00:00:00Z'),
+        maxAgeDays: 75,
+      })!;
+      expect(picked.name).toBe('Card Sales');
+    });
+
+    it('prefers a FRESH unscoreable print over a STALE scoreable one', () => {
+      /**
+       * The ordering that makes the fix safe rather than merely different.
+       *
+       * Preferring the stale-but-scoreable quarterly hands `scoreSlot` a print
+       * it must then reject as beyond its window — so the column stays blank AND
+       * the fresher reading is thrown away. Freshness outranks scoreability
+       * because the staleness windows exist to say a number that old no longer
+       * describes anything.
+       */
+      const events = [
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: -1.4 },
+        { ...base, name: 'Quarterly Sales', dateUtc: '2026-05-21T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
+      ] as never[];
+
+      const picked = resolveSeries(twoPatterns, 'GBP', events, 'forecast', {
+        now: new Date('2026-08-19T00:00:00Z'),
+        maxAgeDays: 75, // the quarterly is 90 days old
+      })!;
+      expect(picked.name).toBe('Card Sales');
+    });
+
+    it('without a freshness window, behaves exactly as it did before', () => {
+      // Callers that do not pass one must not be handed a different answer.
+      const events = [
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: -1.4 },
+        { ...base, name: 'Quarterly Sales', dateUtc: '2026-05-21T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
+      ] as never[];
+
+      // Both count as fresh, so the scoreable one wins on the second key.
+      expect(resolveSeries(twoPatterns, 'GBP', events)!.name).toBe('Quarterly Sales');
+    });
+  });
+});
+
+/**
+ * The GBP producer-price slot, pinned against A1's published UK card.
+ *
+ * Their card names the row `PPI YoY`, dated Jan 21 26, with Actual 3.4,
+ * Forecast BLANK, Previous 3.4 and Surprise 0. Three facts fall out of one row,
+ * and this slot had all three wrong:
+ *
+ *   YoY, not MoM        the label says so outright
+ *   headline, not core  UK core output YoY runs near 2.8 and input near 4.9, so
+ *                       3.4 can only be the headline output series
+ *   vs PREVIOUS         actual minus previous is the only arithmetic that gives
+ *                       a Surprise of 0 from 3.4 against a blank forecast
+ *
+ * The old order asked for core output MoM against a FORECAST, and UK core
+ * carries no consensus on any recent print — so `resolveSeries` reached past
+ * every fresh release to 2026-06-17, sixty-eight days before the 2026-08-23
+ * capture, and scored +1 off it. The print it walked over, 2026-08-19, reads
+ * 3.1 against a 3.5 previous: -1. Two points on the GBP leg of every sterling
+ * pair, and it moved GBPUSD and GBPCAD onto their numbers exactly.
+ */
+describe("GBP producer prices: the series their card names", () => {
+  const slot = SLOTS.find((s) => s.key === 'ppi')!;
+
+  it('asks for headline OUTPUT prices year on year, not core month on month', () => {
+    const patterns = slot.matchByCurrency!.GBP!;
+    expect(patterns[0].source).toMatch(/Output.*YoY/);
+    // Core is what this used to lead with. It must not be reachable at all now:
+    // a fallback to core would resurrect the 68-day print by another route.
+    expect(patterns.some((p) => /Core/i.test(p.source))).toBe(false);
+  });
+
+  it('reads it against the PREVIOUS print, like their blank-forecast CH and AU cards', () => {
+    expect(compareFor(slot, 'GBP')).toBe('previous');
+    // The currencies whose cards DO publish a forecast keep reading one.
+    expect(compareFor(slot, 'USD')).toBe('forecast');
+    expect(compareFor(slot, 'EUR')).toBe('forecast');
+  });
+
+  it('scores the fresh print instead of reaching two cycles back for a forecast', () => {
+    /**
+     * The live feed on 2026-08-23, trimmed to the three releases that decided
+     * it. Note that BOTH August entries carry `consensus: null` — under a
+     * forecast basis neither is scoreable and the resolver keeps walking, which
+     * is exactly how a June print ended up filling an August cell.
+     */
+    const base = {
+      id: 'x', seriesId: null, currency: 'GBP' as const, countryCode: 'UK',
+      impact: 'MEDIUM' as const, revised: null, unit: '%',
+      ratioDeviation: null, isBetterThanExpected: null, isSpeech: false,
+      isPreliminary: false, source: 'fxstreet' as const, actualSource: null,
+      sourceUrl: null, lastUpdated: null, consensusSource: null,
+    };
+    const events = [
+      { ...base, name: 'Producer Price Index - Output (YoY) n.s.a', dateUtc: '2026-08-19T09:00:00Z', actual: 3.1, consensus: 3.2, previous: 3.5 },
+      { ...base, name: 'PPI Core Output (MoM) n.s.a', dateUtc: '2026-08-19T09:00:00Z', actual: 0.6, consensus: null, previous: 0.5 },
+      { ...base, name: 'PPI Core Output (MoM) n.s.a', dateUtc: '2026-06-17T09:00:00Z', actual: 0.8, consensus: 0.4, previous: 0.7 },
+    ] as never[];
+
+    const result = scoreSlot(slot, 'GBP', events, new Date('2026-08-23T15:11:37Z'));
+
+    expect(result.event!.name).toBe('Producer Price Index - Output (YoY) n.s.a');
+    expect(result.event!.dateUtc).toBe('2026-08-19T09:00:00Z');
+    expect(result.referenceLabel).toBe('previous');
+    expect(result.cell).toBe(-1); // 3.1 against a 3.5 previous: producer inflation cooling
+    expect(result.ageDays!).toBeLessThan(10); // not the 68 the old order scored
+  });
+
+  it('would still read -1 if the forecast basis came back, which is why today looks quiet', () => {
+    // 3.1 against a 3.2 consensus is also a miss. The two bases agree on this
+    // print and disagree in general - do not read the agreement as a licence to
+    // revert the basis.
+    expect(ternarySign(3.1, 3.2)).toBe(-1);
+    expect(ternarySign(3.1, 3.5)).toBe(-1);
   });
 });
 
@@ -610,14 +855,41 @@ describe('the rate column routes by asset class', () => {
   it('does not read the US 2-year for a non-dollar currency index', () => {
     /**
      * A pound index scoring off US financial conditions is not a rule A1 has.
-     * GBP's own rate expectation is 0 today — the BoE publishes no numeric
-     * projection — and an honest 0 beats a US number wearing a GBP label.
+     * GBP's own rate expectation is 0 with a calendar present — the BoE
+     * publishes no numeric projection — and an honest 0 beats a US number
+     * wearing a GBP label.
+     *
+     * The calendar has to be non-empty for that 0 to be the honest one: with no
+     * calendar at all the cell is null, because an outage is not a neutral view.
      */
-    const gbpx = row('GBPX').cells.rates;
+    const withCalendar = buildSetupsMatrix({
+      events: [
+        makeParityEvent({
+          currency: 'USD',
+          countryCode: 'US',
+          name: 'Nonfarm Payrolls',
+          actual: 200,
+          consensus: 100,
+        }),
+      ],
+      cot: new Map(),
+      technicals: new Map(),
+      yield2y: fallingYield,
+      now: NOW,
+    });
+    const gbpx = withCalendar.rows.find((r) => r.symbol === 'GBPX')!.cells.rates;
     expect(gbpx.cell).toBe(0);
     expect(gbpx.explanation).toMatch(/GBP/);
     // The risk-asset yield wording is the tell that it read the US 2-year.
     expect(gbpx.explanation).not.toMatch(/tailwind|headwind/);
+  });
+
+  it('reads null for that index when there is no calendar at all', () => {
+    // The distinction the null exists for: a missing provider must not arrive
+    // as "no change expected".
+    expect(row('GBPX').cells.rates.cell).toBeNull();
+    // The US-2-year rows are unaffected — they never depended on the calendar.
+    expect(row('XAUUSD').cells.rates.cell).toBe(1);
   });
 
   it('still reads the US 2-year for indices and crypto', () => {
@@ -752,47 +1024,136 @@ describe('the scoring column set is pinned', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * The strongest parity evidence we have: seven rows read straight off an
- * EdgeFinder Top Setups screenshot, each summing to the total they display.
+ * Rows read straight off A1's board, and what they are and are not evidence of.
  *
- * This pins the COMPOSITION rule — a plain unweighted sum of all 18 columns,
- * with no normalisation, no scaling and no cap. If someone later adds a weight
- * or a clamp, these break.
+ * These used to be a hard-coded copy inside this file under a comment claiming
+ * "if someone later adds a weight or a clamp, these break". THEY DID NOT. Every
+ * assertion was about A1's own arithmetic — that THEIR cells sum to THEIR total
+ * — and `buildSetupsMatrix` was never called, so a weight added to our own
+ * summation would have sailed through a green suite. The composition rule this
+ * block was named after is now actually tested, at the bottom.
+ *
+ * The rows themselves now live in `fixtures/a1-board.json` alongside the totals
+ * `npm run parity` scores against, rather than in a second copy here that could
+ * drift from it. Reading them from the fixture also means this suite validates
+ * the transcriptions that the parity script depends on being right.
  */
-describe('A1 totals are a plain sum of the 18 columns', () => {
-  const ROWS: Record<string, { cells: number[]; total: number; bias: string }> = {
-    //         trend seas cot crowd gdp mpmi spmi rtl conf cpi ppi pce rate nfp unemp clm adp jolts
-    GBPUSD: { cells: [2, -1, 0, 1, 1, -2, 2, 1, 2, 0, 2, 0, 1, 1, 0, -1, 1, 1], total: 11, bias: 'Very Bullish' },
-    GBPCHF: { cells: [2, -1, 0, 1, -1, 2, 0, 2, 0, -1, 2, 0, 1, 0, 2, 0, 0, 0], total: 9, bias: 'Very Bullish' },
-    EURUSD: { cells: [2, 1, 0, 1, 2, -2, 2, -1, 1, 1, 1, 0, 1, 1, -2, -1, 1, 1], total: 9, bias: 'Very Bullish' },
-    GOLD: { cells: [2, 1, 2, -1, 1, -1, 1, 0, 1, 1, 1, 0, -1, 1, -1, -1, 1, 1], total: 8, bias: 'Very Bullish' },
-    AUDUSD: { cells: [2, -1, 0, 1, 0, 0, 2, 0, 2, 0, 0, 0, 0, 1, -1, -1, 1, 1], total: 7, bias: 'Very Bullish' },
-    SILVER: { cells: [2, 1, 0, -1, 1, -1, 1, 0, 1, 1, 1, 0, -1, 1, -1, -1, 1, 1], total: 6, bias: 'Bullish' },
-    NZDUSD: { cells: [2, -1, -2, 1, 1, 0, 0, 1, 0, 2, 0, 0, 1, 1, -2, -1, 1, 1], total: 5, bias: 'Bullish' },
-  };
+describe("A1's captured board", () => {
+  const CAPTURES = board.captures as unknown as Capture[];
+  const ROWS = CAPTURES.flatMap((capture) =>
+    Object.entries(capture.cells).map(([symbol, cells]) => ({
+      label: `${capture.capturedUtc ?? 'undated'} ${symbol}`,
+      symbol,
+      cells,
+      total: capture.totals[symbol],
+    })),
+  );
 
-  it.each(Object.entries(ROWS))('%s sums to its published total', (_sym, { cells, total }) => {
-    expect(cells).toHaveLength(18);
-    expect(cells.reduce((a, b) => a + b, 0)).toBe(total);
+  it('has at least one row captured cell by cell', () => {
+    /**
+     * Guards the failure this whole investigation started from: the fixture's
+     * `cells` was `{}`, so parity's per-slot attribution printed nothing and
+     * every fix after that was a guess. An empty fixture is a silent one.
+     */
+    expect(ROWS.length).toBeGreaterThan(0);
   });
 
-  it('agrees with our bias bands on every one of them', () => {
-    for (const [sym, { total, bias }] of Object.entries(ROWS)) {
-      expect(biasFromScore(total), sym).toBe(bias);
+  it.each(ROWS)('$label sums to its published total', ({ cells, total }) => {
+    /**
+     * The transcription check, not a scoring check. Their score column IS the
+     * sum of the 18 cells, so a row that does not add up was misread off a
+     * compressed video frame — which is the normal failure, not a rare one.
+     */
+    expect(Object.keys(cells)).toHaveLength(SCORING_SLOTS.length);
+    expect(Object.values(cells).reduce((a, b) => a + b, 0)).toBe(total);
+  });
+
+  it('uses exactly the slot keys we score', () => {
+    for (const { label, cells } of ROWS) {
+      expect(Object.keys(cells).sort(), label).toEqual(SCORING_SLOTS.map((s) => s.key).sort());
     }
+  });
+
+  it('agrees with our bias bands on every published total', () => {
+    const BANDS: [number, string][] = [
+      [13, 'Very Bullish'], [11, 'Very Bullish'], [9, 'Very Bullish'],
+      [8, 'Very Bullish'], [7, 'Very Bullish'], [6, 'Bullish'], [5, 'Bullish'],
+    ];
+    for (const [total, bias] of BANDS) expect(biasFromScore(total), String(total)).toBe(bias);
   });
 
   it('confirms trend never exceeds +/-2 in the live product', () => {
     // Independent confirmation of the trend fix, from their own output rather
     // than from re-reading their prose.
-    for (const { cells } of Object.values(ROWS)) {
-      expect(Math.abs(cells[0])).toBeLessThanOrEqual(2);
+    for (const { label, cells } of ROWS) {
+      expect(Math.abs(cells.trend), label).toBeLessThanOrEqual(2);
     }
   });
 
   it('confirms seasonality never exceeds +/-1, including on GOLD and SILVER', () => {
-    for (const [sym, { cells }] of Object.entries(ROWS)) {
-      expect(Math.abs(cells[1]), sym).toBeLessThanOrEqual(1);
+    for (const { label, cells } of ROWS) {
+      expect(Math.abs(cells.seasonality), label).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('never exceeds +/-1 on a macro cell for a single-economy asset', () => {
+    /**
+     * XAUUSD and XAGUSD take the single-economy path, where a macro cell is one
+     * currency's reading rather than base-minus-quote, so it cannot reach the
+     * +/-2 an FX pair can. Their board agrees, which is what makes this a real
+     * check on our composition rather than a restatement of our own config.
+     */
+    const macro = SCORING_SLOTS.filter((s) => s.kind === 'economic').map((s) => s.key);
+    for (const { label, symbol, cells } of ROWS) {
+      if (symbol !== 'XAUUSD' && symbol !== 'XAGUSD') continue;
+      for (const key of macro) {
+        expect(Math.abs(cells[key]), `${label} ${key}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
+/**
+ * THE COMPOSITION RULE, tested against our own matrix rather than against A1's.
+ *
+ * A row's score is a plain unweighted sum of its scoring cells — no weighting,
+ * no normalisation, no scaling, no cap. This is the assertion the block above
+ * claimed to make for months without making it.
+ */
+describe('our own total is a plain unweighted sum of the scored cells', () => {
+  const scoringKeys = new Set(SCORING_SLOTS.map((s) => s.key));
+
+  const matrix = buildSetupsMatrix({
+    events: [
+      makeParityEvent({ currency: 'USD', countryCode: 'US', name: 'Nonfarm Payrolls', actual: 200, consensus: 100 }),
+      makeParityEvent({ currency: 'GBP', countryCode: 'GB', name: 'Consumer Price Index (YoY)', actual: 3.4, consensus: 3.1 }),
+      makeParityEvent({ currency: 'JPY', countryCode: 'JP', name: 'Unemployment Rate', actual: 2.8, consensus: 2.5 }),
+    ],
+    cot: new Map(),
+    technicals: new Map(),
+    now: NOW,
+  });
+
+  it('reproduces every row total by re-adding its own cells', () => {
+    for (const row of matrix.rows) {
+      const sum = Object.entries(row.cells)
+        .filter(([key, cell]) => scoringKeys.has(key) && cell.cell !== null)
+        .reduce((t, [, cell]) => t + cell.cell!, 0);
+
+      expect(sum, row.symbol).toBe(row.totalScore);
+    }
+  });
+
+  it('scores at least one row non-zero, so the check above has something to prove', () => {
+    // Without this, an all-blank board would satisfy the sum test trivially and
+    // the suite would stay green through a total rewrite of the scoring.
+    expect(matrix.rows.some((r) => r.totalScore !== 0)).toBe(true);
+  });
+
+  it('counts a cell exactly once, in one category', () => {
+    for (const row of matrix.rows) {
+      const sum = Object.values(row.categoryScores).reduce((a, b) => a + b, 0);
+      expect(sum, row.symbol).toBe(row.totalScore);
     }
   });
 });

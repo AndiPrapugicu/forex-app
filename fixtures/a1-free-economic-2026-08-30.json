@@ -1,0 +1,155 @@
+{
+  "_readme": [
+    "A1'S OWN ECONOMIC AND RATE INPUTS, read 2026-08-30 off their free",
+    "'EdgeFinder - Free Economic Data' report by driving its filters and reading",
+    "the rendered charts' own accessible data tables and tooltips.",
+    "",
+    "WHY THIS FIXTURE IS DIFFERENT FROM EVERY OTHER ONE HERE. The others record",
+    "A1's OUTPUT -- cells off a scorecard. This records their INPUT: the actual",
+    "and forecast numbers a cell is computed from. That turns 'our cell differs",
+    "from theirs' into an answerable question, because the two models can now be",
+    "compared at the point where they take their data in rather than at the point",
+    "where they print a number.",
+    "",
+    "IT IS EVIDENCE, NOT A FEED. Looker Studio embeds over A1's proprietary",
+    "'EdgeFinder Pro' data, no documented API. Nothing in this repo fetches them",
+    "at runtime and nothing should."
+  ],
+
+  "source": {
+    "report": "a1trading.com -> lookerstudio.google.com/embed/reporting/3653e7d4-e20d-4fd2-9853-c0a425b25973 ('EdgeFinder - Free Economic Data')",
+    "readAtUtc": "2026-08-30",
+    "method": "Per page: set the currency/country control, then read the chart's own <table> data representation and, where a chart publishes no table, its hover tooltips. No value here was estimated from pixel geometry.",
+    "attribution": "Every chart footers 'Source: A1 EdgeFinder Pro | www.a1trading.com'."
+  },
+
+  "freeSurfaceMap": {
+    "_note": "The complete page list of this report, read off its own navigation tree.",
+    "Economic Growth Data": ["GDP Growth", "GDP Growth Forecast", "Services PMI", "Manufacturing PMI", "Retail Sales", "Consumer Confidence", "Balance of Trade"],
+    "Inflation Data": ["CPI YoY", "PPI YoY", "PCE YoY (USA)"],
+    "Labor Market Data": ["NFP (USA)", "ADP (USA)", "Unemployment Rate", "Unemployment Claims", "Job Openings (USA)", "Wage Growth (USA)"],
+    "Interest Rates Data": ["Interest Rates", "Interest Rate Projections", "US Treasury Yield Curve"],
+    "other": ["US Housing Data", "Data Updates Log", "Help"],
+    "_whatIsExposed": "Most pages publish ACTUAL and FORECAST per country with real release dates and a date-range control, back to 2024 -- so they are historical AND date-addressable. Three exceptions matter: Unemployment Rate publishes the ACTUAL only (its second chart reads 'COMING SOON!' over a dataset error), Interest Rate Projections publishes no history at all, and no page carries currency-index rows."
+  },
+
+  "dataUpdatesLog": {
+    "_note": "A1's own list of their internal datasets and refresh cadences, read off the Data Updates Log page. It names the datasets, which is a map of their pipeline.",
+    "readAtUtc": "2026-08-30T05:24Z",
+    "datasets": {
+      "Retail sentiment": "30 Minutes (script interrupted every morning, returns 10:00h)",
+      "Price quotes (all symbols)": "15 minutes",
+      "Economic calendar": "30 minutes",
+      "CPI data": "Hourly",
+      "GDP data": "Hourly",
+      "Employment data": "Hourly",
+      "US GDP growth QoQ": "Daily",
+      "Retail sales": "Daily",
+      "PPI data": "Daily",
+      "PCE data": "Daily",
+      "Put-call ratio": "Daily",
+      "Central bank interest rates": "Daily",
+      "Seasonality scanners": "24h",
+      "Carry trade scanner": "3am, 8am, 2pm, 10pm",
+      "Scenario Backtests": "Daily (except weekends)",
+      "COT data": "Weekly, checks every 12h",
+      "AAII investor sentiment": "Weekly",
+      "AI news feed": "9am, 12 noon, 6pm EST"
+    },
+    "_twoFindings": [
+      "There is NO 'interest rate projections' dataset in the log. The rate-side datasets are 'Central bank interest rates' (daily) and a 'Carry trade scanner' that appears nowhere else in the free surface.",
+      "'Retail sentiment' refreshes every 30 minutes, which explains why the snapshot page and the daily history page disagree on the same day -- they are the live feed and its daily roll-up."
+    ]
+  },
+
+  "scoringRulesInA1sOwnWords": {
+    "gdp": "GDP growth scores are based on a per-currency basis. If there is a beat in the forecasted GDP, it will be bullish for that currency and their respective indices. So, higher-than-expected GDP in the US would be a +1 for both USD and the indices. It is also a positive score for metals and commodities such as Silver, Copper, Platinum and USOil. Gold is the exception. A miss in GDP growth expectations will result in a negative score for the currency and its respective indices and commodities. Meanwhile, gold will get a positive score in that category.",
+    "pmi": "A positive change in PMI suggests growth, or slower decline. So, if PMI in either category come in higher, it is considered optimistic for its currency (+1). However, this would impact other assets such as gold, in a negative way.",
+    "unemployment": "The unemployment rate is the number of actively searching unemployed persons expressed as a percentage of the labor force. A higher percentage usually causes weakness in the dollar and US indices.",
+    "gdpSeriesByCountry": { "US": "GDP QoQ", "UK": "GDP MoM", "EU": "GDP MoM", "JP": "GDP MoM", "CA": "GDP MoM", "AU": "(blank on their page)", "NZ": "(blank)", "CH": "(blank)" },
+    "_silverContradictsTheirOwnText": "Their GDP text says silver, copper, platinum and USOil score WITH the currency and only gold inverts. Their own cells disagree: on 2026-08-24 XAUUSD and XAGUSD carry identical gdp (+1), mpmi (-1) and consumer-confidence (+1) cells, which only works if silver inverts too. This repo follows their DATA (GOLD_POLARITY on both) and not their prose. Do not 'fix' it to match the text."
+  },
+
+  "ppiClassificationIsThreeState": {
+    "_note": "The PPI YoY chart labels each release Met / Lower than expected / Higher than expected as separate series. That is A1's comparison made visible: three states with no tolerance band, an exact match being its own category.",
+    "example": "GBP 2025-08 printed 4.00% against a 4.00% forecast and lands in the 'Met' series, not in either tail.",
+    "consequence": "It corroborates this repo's `scoreTernary`, which is a raw sign of (actual - forecast) with only a float-noise epsilon. An earlier +/-0.25 sigma deadband was removed for the same reason and must not come back."
+  },
+
+  "series": {
+    "_note": "actual/forecast pairs as A1 publishes them, most recent release first where several are recorded. `date` is A1's own release date.",
+
+    "consumerConfidence": {
+      "USD": [{ "date": "2026-08-25", "actual": 89.4, "forecast": 90.3 }],
+      "CHF": [
+        { "date": "2026-08-07", "actual": -33, "forecast": -34 },
+        { "date": "2026-07-10", "actual": -36, "forecast": -35 },
+        { "date": "2026-06-15", "actual": -38, "forecast": -38 },
+        { "date": "2026-05-08", "actual": -40, "forecast": -46 },
+        { "date": "2026-04-10", "actual": -43, "forecast": -32 }
+      ]
+    },
+
+    "manufacturingPmi": {
+      "USD": [{ "date": "2026-08-03", "actual": 55.6, "forecast": 54.0 }],
+      "EUR": [
+        { "date": "2026-08-21", "actual": 52.8, "forecast": 51.8 },
+        { "date": "2026-08-03", "actual": 51.9, "forecast": 52.0 }
+      ],
+      "GBP": [
+        { "date": "2026-08-21", "actual": 51.5, "forecast": 51.6 },
+        { "date": "2026-08-03", "actual": 51.9, "forecast": 52.8 }
+      ],
+      "CHF": [
+        { "date": "2026-08-03", "actual": 53.2, "forecast": 54.5 },
+        { "date": "2026-07-01", "actual": 54.3, "forecast": 56.4 }
+      ]
+    },
+
+    "ppiYoY": {
+      "GBP": [
+        { "date": "2026-08", "actual": 3.1, "forecast": 3.2, "a1Label": "Lower than expected" },
+        { "date": "2026-07", "actual": 3.5, "forecast": null, "a1Label": "Higher than expected" }
+      ]
+    },
+
+    "unemploymentRateActualOnly": {
+      "_note": "This page publishes no forecast, so it cannot settle the comparison basis for the unemployment column.",
+      "EUR": { "2026-07": 6.3, "2026-06": 6.3, "2026-05": 6.3, "2026-04": 6.2, "2026-03": 6.2 },
+      "USD": { "2026-07": 4.2, "2026-06": 4.3, "2026-05": 4.3, "2026-04": 4.3 }
+    }
+  },
+
+  "rateInputs": {
+    "_note": "The two halves of A1's Interest Rates comparison, from two of their free pages on the same day.",
+    "policyRateFromInterestRatesPage": { "USD": 3.75, "EUR": 2.4, "GBP": 3.75, "CHF": 0.0, "NZD": 2.25 },
+    "projectionsFromProjectionsPage": {
+      "_quarters": ["2026Q3", "2026Q4", "2027Q1", "2027Q2"],
+      "AUD": [4.4, 4.4, 4.4, 4.4],
+      "GBP": [4.0, 4.0, 4.3, 4.3],
+      "USD": [3.8, 4.0, 4.0, 4.3],
+      "NZD": [2.8, 3.0, 3.5, 3.8],
+      "EUR": [2.7, 2.7, 2.9, 2.9],
+      "CAD": [2.3, 2.3, 2.3, 2.3],
+      "JPY": [1.3, 1.5, 1.5, 1.5],
+      "CHF": [0.0, 0.0, 0.0, 0.0],
+      "_precision": "Tooltips round to one decimal, so USD 3.8 is the 3.75 the Interest Rates page carries and EUR 2.7 is 2.65."
+    },
+    "derivedLegs": {
+      "_rule": "cell = sign(current quarter's projected rate - standing policy rate), flat band 0.10pp",
+      "USD": 0, "EUR": 1, "GBP": 1, "CHF": 0, "NZD": 1,
+      "_reproduces": [
+        "EURUSD +1 = EUR(+1) - USD(0)      2026-08-24 Top Setups, checksummed",
+        "GBPUSD +1 = GBP(+1) - USD(0)      2026-08-24 Top Setups, checksummed",
+        "EURCHF +1 = EUR(+1) - CHF(0)      2026-08-24 Top Setups, checksummed",
+        "CHFX     0 = CHF(0)               2026-08-25 Top Setups",
+        "NZDX    +1 = NZD(+1)              2026-08-25 Top Setups",
+        "EURCHF Bullish = EUR(+1) - CHF(0) 2026-08-29 free Forex Scorecard"
+      ],
+      "_theOneException": "EURX's 2026-08-24 rates cell reads 0 where this rule says +1. It is one cell from a crowded multi-row crop, and the projections chart has no history, so a revision between 08-24 and 08-30 cannot be ruled out either.",
+      "_rivalAssignmentRejected": "Taking EURX at face value gives EUR 0, USD -1, GBP 0, CHF -1, which satisfies the same three pair equations. It matches A1's own published rate inputs for NOT ONE of those four currencies and needs CHF -1 while A1's pages put the Swiss policy rate and every projected quarter at 0.00%.",
+      "_whyItIsNOTIMPLEMENTED": "Implemented, measured and reverted on 2026-08-30. The Fed is the only bank whose projection this repo holds, so adopting the rule moves USD's leg alone while EUR and GBP stay at a placeholder 0. Cell parity went 84/98 -> 82/98 and the rates column 5/6 -> 3/6 exact, with no cell gained. A1's rates column is a DIFFERENCE: it cannot be adopted one currency at a time."
+    },
+    "_ecbRateChoiceDiffers": "A1's Interest Rates page carries EUR at 2.40%; this repo reads the ECB deposit facility and gets 2.25%. Their series steps 2.15 -> 2.40, which is the shape of the Main Refinancing Operations Rate rather than the depo. It does not change the sign of the leg against a 2.65 projection, but a future implementation has to pick A1's rate, not ours."
+  }
+}

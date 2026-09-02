@@ -190,15 +190,25 @@ describe('surprise index', () => {
     expect(buildSurpriseIndex('USD', events).index).toBe(0);
   });
 
-  it('counts an on-forecast print as half a beat, not as nothing', () => {
-    // Dropping it would let one lucky beat alongside four exact prints read 100%.
+  it('EXCLUDES an on-forecast print from the percentage, but still reports it', () => {
+    /**
+     * A1's arithmetic, transcribed from seven of their published cards in
+     * heatmap.test.ts: the percentage is bullish / (bullish + bearish). This
+     * used to count an on-forecast print as half a beat and read 75%, which is
+     * a third formula for a question the app already answered two other ways.
+     *
+     * The count survives in `inline` and is shown beside the bar, which is the
+     * honest place for "expectations were correct" — it is information about
+     * the sample, not about the direction.
+     */
     const events = [
       makeEvent({ name: 'Consumer Price Index (YoY)', actual: 3.0, consensus: 3.0 }),
       makeEvent({ name: 'Producer Price Index (YoY)', actual: 5.5, consensus: 5.0 }),
     ];
     const index = buildSurpriseIndex('USD', events);
     expect(index.inline).toBe(1);
-    expect(index.index).toBe(75); // (1 beat + 0.5) / 2
+    expect(index.beats).toBe(1);
+    expect(index.index).toBe(100); // 1 bullish of 1 directional
   });
 
   it('respects polarity — a LOWER unemployment print is a beat', () => {
@@ -208,9 +218,11 @@ describe('surprise index', () => {
     expect(index.index).toBe(100);
   });
 
-  it('returns a neutral 50 with nothing to measure, and says the sample is empty', () => {
+  it('returns null with nothing to measure, and says the sample is empty', () => {
+    // Not 50. "We have no releases" and "the economy is exactly average" are
+    // different claims, and a gauge parked at the midpoint asserts the second.
     const index = buildSurpriseIndex('USD', []);
-    expect(index.index).toBe(50);
+    expect(index.index).toBeNull();
     expect(index.sampled).toBe(0);
   });
 });

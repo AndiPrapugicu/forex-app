@@ -1,0 +1,241 @@
+{
+  "_readme": [
+    "ROUND FOURTEEN. A1's RATE INPUTS AND THEIR ONE SAME-DAY SCORECARD, captured 2026-08-30.",
+    "",
+    "This file exists because the round's primary evidence target -- a Top Setups capture holding",
+    "the EURO, US-DOLLAR, GB-POUND and CH-FRANC index rows -- IS NOT OBTAINABLE. That was checked,",
+    "not assumed; see `demoCaps` below. What IS free turned out to be worth more: A1 publishes both",
+    "halves of their rates comparison, publishes their own GDP CLASSIFICATION per release, and their",
+    "one unlocked Forex Scorecard prints a full signed row.",
+    "",
+    "ORACLE ONLY. Nothing here is a production feed and nothing here is read by the scorer.",
+    "Every number was read from a page A1 serves to anyone; no login, no paywall, no private",
+    "endpoint. Values are recorded as displayed, including where A1 contradicts itself."
+  ],
+
+  "capturedUtc": "2026-08-30",
+
+  "demoCaps": {
+    "_note": "Checked directly this round. The index-row capture the round was built around cannot be taken.",
+    "assetScorecard": "Locked to PLATINUM. Banner: 'Showing platinum only. To unlock all symbols, please upgrade to premium to see gold, nasdaq, oil, etc.' The US-DOLLAR Asset Scorecard that produced the checksummed DXY row in a1-board.json is behind that cap.",
+    "forexScorecard": "Locked to EUR/CHF. Banner: 'Showing EUR/CHF only. To unlock all currency pairs, please upgrade to premium to see EURUSD, GBPUSD, USDJPY, etc'.",
+    "topSetups": "Paywalled in full, unchanged.",
+    "currencyIndexRows": "NO free surface carries one. The Forex Scorecard is pairs only; the Asset Scorecard would carry US-DOLLAR but is capped to platinum. There is no page anywhere in either report that lists EURX/GBPX/CHFX/DXY as a scored row.",
+    "_consequence": "EURX, GBPX and CHFX cannot be re-captured. They must be reasoned about from the rows already on file, which is what lib/scoring/index-rows.test.ts does."
+  },
+
+  "freeSurfaceAdditions": {
+    "_note": "Pages found this round that round thirteen's map did not list. All under Macro Scanners in the EdgeFinder Free Demo report (cfd37bd1-45ce-459a-8d11-b6b7eac72b0d).",
+    "macroScanners": [
+      "Eco Surprise Index",
+      "Eco Strength Index",
+      "Risk on/off Ratios (has its own submenu)",
+      "Real Yield History",
+      "Carry Trade Scanner"
+    ],
+    "_whyItMatters": "The `Carry trade scanner` named in A1's Data Updates Log -- the one dataset round thirteen could not locate -- is one of these, and it is fully readable."
+  },
+
+  "carryTradeScanner": {
+    "_whatItIs": "A ranked table of pairs, columns: Symbol | Base Currency Rate | Quote Currency Rate | Interest Rate Divergence | Carry Direction. It is the `Central bank interest rates` dataset rendered pairwise. It is NOT a projections dataset.",
+    "_controls": "A symbol contains-filter only. NO date dimension, NO history, NO as-of. Confirmed by reading the page's interactive tree.",
+    "_answersToTheRoundsQuestions": {
+      "isItFeedingTheProjections": "NO. It carries the STANDING policy rate per currency and nothing forward-looking. The projections page is a separate series.",
+      "policyRatesOrConsensus": "Policy rates.",
+      "historicalSnapshots": "None on this page. The same underlying series IS date-addressable on the Interest Rates page (monthly, back to Jan 2024).",
+      "availableForCHF": "Yes, 0.00%.",
+      "reproducibleFromPublicSources": "Yes -- these are published central-bank policy rates. Nothing proprietary."
+    },
+    "policyRatesAsDisplayed": {
+      "AUD": 4.35,
+      "USD": 3.75,
+      "GBP": 3.75,
+      "CAD": 2.25,
+      "NZD": 2.25,
+      "EUR": 2.15,
+      "JPY": 0.75,
+      "CHF": 0.0,
+      "ZAR": 6.75,
+      "TRY": 37.0
+    },
+    "_sampleRows": [
+      "3.  USDCHF  3,75 %  0,00 %  +3.75%  Buy",
+      "12. EURCHF  2,15 %  0,00 %  +2.15%  Buy",
+      "15. EURUSD  2,15 %  3,75 %  +1.60%  Sell"
+    ]
+  },
+
+  "interestRatesPage": {
+    "_whatItIs": "'Interest Rates - Historical Data'. Monthly bar per currency with the value printed on each bar. Currency filter is single-select; date range control spans 1 Jan 2024 - 31 Aug 2026.",
+    "_reproducibility": "HISTORICAL. This is the one rate-side surface that is date-addressable.",
+    "latestAug2026": { "USD": 3.75, "GBP": 3.75, "EUR": 2.4, "NZD": 2.25, "CHF": 0.0 },
+    "eurSeriesIsTheMRO": {
+      "_claim": "A1's EUR series is the ECB Main Refinancing Operations rate, not the deposit facility this repo reads.",
+      "_evidence": "Their printed path is 4.5 -> 4.25 -> 3.65 -> 3.4 -> 3.15 -> 2.9 -> 2.65 -> 2.4 -> 2.15, which is the MRO step for step. The deposit facility over the same span is 4.0 -> 3.75 -> 3.5 -> 3.25 -> 3.0 -> 2.75 -> 2.5 -> 2.25 -> 2.0.",
+      "_thenAHike": "Their series steps back UP to 2.4% for jul. 2026 and aug. 2026."
+    },
+    "nzdSeriesTail": "nov. 2025 2.5%, then 2.25% from dec. 2025 through aug. 2026 (one gap month, mai 2026)."
+  },
+
+  "a1InternalRateInconsistency": {
+    "_finding": "A1's own two rate surfaces disagree on EUR, today, and agree on every other currency checked.",
+    "EUR": { "interestRatesPage": 2.4, "carryTradeScanner": 2.15, "delta": 0.25 },
+    "USD": { "interestRatesPage": 3.75, "carryTradeScanner": 3.75, "delta": 0 },
+    "GBP": { "interestRatesPage": 3.75, "carryTradeScanner": 3.75, "delta": 0 },
+    "NZD": { "interestRatesPage": 2.25, "carryTradeScanner": 2.25, "delta": 0 },
+    "_likelyCause": "The carry scanner has not picked up the ECB move their own Interest Rates page shows in jul. 2026. Their Data Updates Log refreshes `Central bank interest rates` daily and the `Carry trade scanner` four times a day, so this is a stale join on their side, not a different definition.",
+    "_doesItChangeTheLeg": "No. Against a 2.65 Q3 projection, EUR is +1 from either 2.15 or 2.40. Recorded so a future implementation does not silently pick the wrong one."
+  },
+
+  "interestRateProjections": {
+    "_whatItIs": "'market consensus estimates on future projected interest rates for the selected currencies/economies'. Grouped bar chart plus a line chart, both by calendar quarter.",
+    "_controls": "A multi-select Currency filter (AUD, CAD, CHF, CNY, EUR, GBP, INR, JPY, NZD, USD, ZAR) and NOTHING ELSE. No date control, no as-of, no revision history. Re-confirmed this round.",
+    "_reproducibility": "LIVE_ONLY. A projection read today cannot be rewound to a past board date, which is the whole reason the rule below is not implemented.",
+    "_precision": "Quarters 2026Q2/Q3/Q4 are TOOLTIP-CONFIRMED (one decimal) and cross-read against the bar chart's quarter-point gridlines. The 2027 quarters are bar-chart reads only and are marked approximate.",
+    "byQuarter": {
+      "2026Q2": { "GBP": 3.75, "USD": 3.75, "NZD": 2.5, "EUR": 2.4, "CHF": 0.0, "_source": "tooltip: GBP 3,8% USD 3,8% NZD 2,5% EUR 2,4% CHF 0,0%" },
+      "2026Q3": { "GBP": 4.0, "USD": 3.75, "NZD": 2.75, "EUR": 2.65, "CHF": 0.0, "_source": "tooltip: GBP 4,0% USD 3,8% NZD 2,8% EUR 2,7% CHF 0,0%" },
+      "2026Q4": { "GBP": 4.0, "USD": 4.0, "NZD": 3.0, "EUR": 2.65, "CHF": 0.0, "_source": "tooltip: GBP 4,0% USD 4,0% NZD 3,0% EUR 2,7% CHF 0,0%" },
+      "2027Q1": { "GBP": 4.15, "USD": 4.0, "NZD": 3.45, "EUR": 2.9, "CHF": 0.0, "_approximate": true },
+      "2027Q2": { "GBP": 4.2, "USD": 4.2, "NZD": 3.75, "EUR": 2.9, "CHF": 0.0, "_approximate": true }
+    },
+    "_chfRendersNothing": "CHF is in the legend but draws no visible bar in any quarter, because every value is 0.00%. Do not read the missing bar as missing data.",
+    "_firstBarIsNotTheCurrentRate": "The leftmost bar is labelled 2026Q2 -- a PAST quarter as of this capture -- and it does not equal the standing policy rate for every currency. EUR 2.40 matches today's Interest Rates page value; NZD 2.50 does not (their policy rate was 2.25 throughout Q2 2026 and still is). So the first bar is a projection, not an actual."
+  },
+
+  "sameDayRatesTest": {
+    "_why": "Round thirteen found the rule but could only test it against boards captured on other days. This is the first test where A1's cell and A1's rate inputs come from the same day.",
+    "a1Cell": {
+      "symbol": "EURCHF",
+      "date": "2026-08-29",
+      "component": "Interest Rates",
+      "label": "Bullish",
+      "cell": 1,
+      "source": "Free demo Forex Scorecard, the one unlocked pair, read 2026-08-30"
+    },
+    "candidates": [
+      {
+        "rule": "sign(current quarter's projection - standing policy rate)",
+        "quarter": "2026Q3",
+        "legs": { "EUR": 1, "CHF": 0, "USD": 0, "GBP": 1, "NZD": 1 },
+        "predictsEURCHF": 1,
+        "verdict": "CONFIRMED same-day"
+      },
+      {
+        "rule": "sign(next quarter's projection - current quarter's projection)",
+        "quarter": "2026Q3 -> 2026Q4",
+        "legs": { "EUR": 0, "CHF": 0, "USD": 1, "GBP": 0, "NZD": 1 },
+        "predictsEURCHF": 0,
+        "verdict": "FALSIFIED same-day -- it predicts Neutral where A1 printed Bullish"
+      },
+      {
+        "rule": "sign(2026Q3 projection - 2026Q2 projection)",
+        "legs": { "EUR": 1, "CHF": 0, "USD": 0, "GBP": 1, "NZD": 1 },
+        "predictsEURCHF": 1,
+        "verdict": "CONFIRMED, and INDISTINGUISHABLE from the first rule on all five currencies. Both give the same leg set, so the leg assignment does not depend on which is right."
+      }
+    ],
+    "_netEffect": "One rival rule eliminated on same-day evidence. The surviving leg set is unchanged from round thirteen: USD 0, EUR +1, GBP +1, CHF 0, NZD +1."
+  },
+
+  "forexScorecardEURCHF": {
+    "_whatIsNew": "Round thirteen recorded that the Forex Scorecard 'publishes six category gauges and a Bullish/Bearish/Neutral label per row, but never the signed cell'. That is now superseded. The gauges print signed INTEGERS, and the AI summary states the decomposition in words.",
+    "date": "2026-08-29",
+    "aiSummaryVerbatim": "Overall Outlook: EURCHF exhibits a modest bullish edge (Main Score: +1), primarily driven by resilient technicals, while sentiment offers secondary support and fundamentals exert downward pressure. Technical: Technical score (+1) reflects a positive trend reading (+2) offset by negative seasonality (-1), indicating underlying momentum but limited conviction. Sentiment: Sentiment score (+1) supported by bullish retail sentiment reading, though COT data shows mixed positioning with net short dominance in both EUR and CHF contracts. Fundamental: ECO score (-1) driven by negative GDP momentum, partially offset by positive interest rate divergence, reflecting a defensive fundamental backdrop for EURCHF.",
+    "gaugesAsPrinted": {
+      "EdgeFinderBias": 1,
+      "TechnicalSignal": 1,
+      "InstitutionalActivityCOT": 0,
+      "SentimentBias": 1,
+      "EcoGrowthComparison": -2,
+      "JobsMarketComparison": 0,
+      "InflationDataComparison": 1
+    },
+    "rowLabels": {
+      "4H/Daily Chart Trend": "Bullish",
+      "Current month's 10yr seasonality": "Bearish",
+      "COT Net Positioning": "Neutral",
+      "COT Weekly Change": "Bullish",
+      "Retail sentiment": "Bullish",
+      "Crowd Bias": "Crowd is bearish",
+      "GDP vs. forecast": "Bearish",
+      "ISM mPMI vs. forecast": "Neutral",
+      "ISM sPMI vs. forecast": "Neutral",
+      "Retail sales vs. forecast": "Neutral",
+      "Consumer Conf. vs forec.": "Bearish",
+      "Employment change vs. forecast": "Neutral",
+      "Unemployment rate vs forecast": "Neutral",
+      "Weekly unemp. claims vs. forec.": "Neutral",
+      "JOLTS vs. forecast": "Neutral",
+      "ADP vs. forecast": "Neutral",
+      "CPI YoY vs. forecast": "Neutral",
+      "PPI YoY vs. forecast": "Neutral",
+      "PCE YoY vs. forecast": "Neutral",
+      "Interest rates": "Bullish"
+    },
+    "cells": {
+      "trend": 2, "seasonality": -1, "cot": 0, "crowd": 1,
+      "gdp": -1, "mpmi": 0, "spmi": 0, "retail-sales": 0, "consumer-confidence": -1,
+      "cpi": 0, "ppi": 0, "pce": 0, "rates": 1,
+      "employment": 0, "unemployment": 0, "claims": 0, "adp": 0, "jolts": 0
+    },
+    "checksum": {
+      "sumOf18Cells": 1,
+      "printedMainScore": 1,
+      "passes": true,
+      "structuralZeros": "pce, employment(NFP), claims, adp, jolts all read 0 on a row with no dollar leg -- passes checkStructuralZeros",
+      "subtotals": "technical 2 + (-1) = +1 matches the printed +1; eco growth -1 + 0 + 0 + 0 + (-1) = -2 matches the printed -2; jobs all zero matches 0; inflation 0+0+0+1 = +1 matches +1"
+    },
+    "_howMagnitudeWasRecovered": "Only trend and COT can exceed 1. The AI summary states trend explicitly (+2), and the printed COT gauge is 0. Every other cell is ternary, so its Bullish/Neutral/Bearish label IS the cell."
+  },
+
+  "gbpInputsFromA1sOwnPages": {
+    "_why": "Three of GBPX's economic cells disagree with ours. A1 publishes the inputs for two of them.",
+    "gdp": {
+      "series": "GBP: GDP MoM (per A1's own 'UK: GDP MoM' note)",
+      "release": "2026-08-13",
+      "a1Actual": 0.4,
+      "a1Forecast": 0.4,
+      "a1Classification": "As expected",
+      "a1Cell": 0,
+      "oursActual": 0.3,
+      "oursForecast": 0.0,
+      "oursCell": 1,
+      "_tooltipVerbatim": "13 aug. 2026 | As expected: 0,4% | Forecast: 0,4% | Missed Forecast: 0,0% | Beat Forecast: 0,0% | Referenced Quarter: 2",
+      "_note": "BOTH the actual and the forecast differ. Their cell agrees with the GBP gdp leg derived from their own board."
+    },
+    "retailSales": {
+      "series": "Retail Sales MoM",
+      "release": "2026-08-21",
+      "a1Actual": -0.5,
+      "a1Forecast": -0.4,
+      "a1Cell": -1,
+      "oursActual": -0.5,
+      "oursForecast": -0.5,
+      "oursCell": 0,
+      "_tooltipVerbatim": "21 aug. 2026 | Retail Sales MoM: -0,50% | Forecast: -0,40% | Revisions: 0,00%",
+      "_note": "Same actual, forecast differs by 0.1 -- the same shape as GBP mPMI. Their cell agrees with the GBP retail leg derived from their own board."
+    },
+    "ppi": {
+      "series": "PPI YoY",
+      "release": "2026-08",
+      "a1Actual": 3.1,
+      "a1Forecast": 3.2,
+      "a1ClassificationOnTheirPage": "Lower than expected",
+      "a1CellImpliedByTheirPage": -1,
+      "a1LegImpliedByTheirBoard": 1,
+      "_contradiction": "Their published PPI page gives GBP -1. Their board's GBPUSD PPI cell of +2, against a USD PPI leg of -1 that is corroborated three ways, forces GBP = +1. A1's two surfaces cannot both be right."
+    }
+  },
+
+  "gdpPageClassificationIsPublished": {
+    "_finding": "The GDP Growth page colours each release bar by A1's OWN classification -- white 'As expected', blue 'Beat Forecast', red 'Missed Forecast' -- so for this series their cell needs no inference at all.",
+    "_timingCheck": "USD's 2026-08-26 release is white (as expected, 0) while 2026-07-30 is red (missed, -1). The 2026-08-24 board carries USD gdp = -1, which is the July release. Their board uses the latest release BEFORE the capture, exactly as ours does."
+  },
+
+  "realYieldHistory": {
+    "_whatItIs": "A separate Macro Scanners page carrying a monthly Interest rate / CPI YoY / Real Yield series with a date-range control (9 sept. 2024 - 25 aug. 2026), plus an 'Eco Strength' table (Currency, Bias, Total Score, GDP Score, Unemployment Score, CPI Score, InterestRate Score).",
+    "_demoCap": "Currency filter locked to USD.",
+    "_note": "The Eco Strength scores (USD Bullish, total 131, GDP 50, unemployment 28, CPI 9, interest rate 44) are a DIFFERENT scoring system from the Top Setups ternary board. Do not mix them in."
+  }
+}

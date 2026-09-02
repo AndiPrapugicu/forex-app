@@ -1,0 +1,21 @@
+symbol,longPct,shortPct,contrarianSignal
+DAX,100.00,0.00,Bearish
+DOW,91.04,8.96,Bearish
+Iron Ore,89.69,10.31,Bearish
+COPPER,88.00,12.00,Bearish
+SPX500,76.35,23.65,Bearish
+RUSSELL,70.14,29.86,Bearish
+UK100,65.42,34.58,Bearish
+USDCHF,61.00,39.00,Bearish
+SILVER,54.67,45.33,Neutral
+NZDUSD,51.00,49.00,Neutral
+GBPUSD,51.00,49.00,Neutral
+USDJPY,50.00,50.00,Neutral
+USDCAD,49.00,51.00,Neutral
+NASDAQ,46.68,53.32,Neutral
+EURUSD,43.00,57.00,Neutral
+AUDUSD,29.00,71.00,Bullish
+GOLD,10.84,89.16,Bullish
+USOIL,9.96,90.04,Bullish
+CHINA50,9.69,90.31,Bullish
+NIKKEI,7.69,92.31,Bullish

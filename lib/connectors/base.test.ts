@@ -7,7 +7,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, extractDomain, fetchJson, parseNumeric, stableId } from '@/lib/connectors/base';
+import {
+  clearCache,
+  extractDomain,
+  fetchJson,
+  fixturesEnabled,
+  parseNumeric,
+  resetFixtureWarning,
+  stableId,
+} from '@/lib/connectors/base';
 
 describe('parseNumeric', () => {
   it('parses plain numbers and numeric strings', () => {
@@ -239,5 +247,123 @@ describe('fetchJson resilience', () => {
     const res = await fetchJson('test', 'https://broken.example/a', { retries: 0 });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/ECONNRESET/);
+  });
+});
+
+/**
+ * The fixture switch, which is the one env var that can make the whole product
+ * confidently wrong without failing.
+ *
+ * A fixture-backed deploy serves captured prices, a captured calendar and a
+ * captured COT report as though they were today's. Nothing errors, no banner
+ * appears, and every score downstream is wrong. `USE_FIXTURES` left set after a
+ * debugging session is a realistic way to get there, so production ignores it
+ * unless a second, deliberately-named variable says otherwise.
+ */
+describe('fixturesEnabled', () => {
+  const original = { ...process.env };
+
+  beforeEach(() => {
+    resetFixtureWarning();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.env = { ...original };
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('is off unless explicitly asked for', () => {
+    delete process.env.USE_FIXTURES;
+    expect(fixturesEnabled()).toBe(false);
+    process.env.USE_FIXTURES = 'false';
+    expect(fixturesEnabled()).toBe(false);
+    // Only the exact string. 'TRUE' or '1' left over from another tool must not
+    // silently arm it.
+    process.env.USE_FIXTURES = '1';
+    expect(fixturesEnabled()).toBe(false);
+  });
+
+  it('honours the offline workflow outside production', () => {
+    process.env.USE_FIXTURES = 'true';
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(fixturesEnabled()).toBe(true);
+  });
+
+  it('refuses in production, and says so once rather than per call', () => {
+    process.env.USE_FIXTURES = 'true';
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(fixturesEnabled()).toBe(false);
+    expect(fixturesEnabled()).toBe(false);
+    expect(fixturesEnabled()).toBe(false);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a deliberate fixture-backed deployment', () => {
+    process.env.USE_FIXTURES = 'true';
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.ALLOW_FIXTURES_IN_PRODUCTION = 'true';
+    expect(fixturesEnabled()).toBe(true);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Cache-hit provenance.
+ *
+ * The failure this protects against is silent and specifically about
+ * OBSERVABILITY rather than correctness: a cached payload served with a
+ * freshly-stamped `fetchedAtUtc` makes the health table report an hour-old
+ * calendar as just-fetched. Every score built on it is still whatever the data
+ * says — but the question 'am I looking at current data?' becomes
+ * unanswerable from the dashboard, which is exactly when it gets asked.
+ */
+describe('fetchedAtUtc dates the DATA, not the lookup', () => {
+  beforeEach(() => clearCache());
+
+  it('reports the original fetch time when serving from cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ v: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await fetchJson('test', 'https://example.test/x', { cacheTtlSeconds: 600 });
+    expect(first.ok).toBe(true);
+    const firstStamp = first.fetchedAtUtc;
+
+    // Enough wall time that a re-stamp would be visibly different.
+    await new Promise((r) => setTimeout(r, 25));
+
+    const second = await fetchJson('test', 'https://example.test/x', { cacheTtlSeconds: 600 });
+    expect(second.ok).toBe(true);
+    // Served from cache: one network call, and the SAME timestamp.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second.fetchedAtUtc).toBe(firstStamp);
+  });
+
+  it('dates a stale fallback by its store time too, and says it is stale', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ v: 1 }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      )
+      .mockRejectedValue(new Error('upstream down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // TTL of zero seconds means the next read is past expiry but inside grace.
+    const first = await fetchJson('test', 'https://example.test/y', { cacheTtlSeconds: 1 });
+    const firstStamp = first.fetchedAtUtc;
+    await new Promise((r) => setTimeout(r, 1100));
+
+    const second = await fetchJson('test', 'https://example.test/y', {
+      cacheTtlSeconds: 1,
+      retries: 0,
+    });
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.degraded).toMatch(/showing data from/);
+      expect(second.fetchedAtUtc).toBe(firstStamp);
+    }
   });
 });

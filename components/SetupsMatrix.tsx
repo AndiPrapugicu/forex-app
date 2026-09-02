@@ -17,7 +17,9 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { SCORING_SLOTS, SLOTS, SLOT_CATEGORIES, type SlotCategory } from '@/config/setups.config';
+import { MATRIX_SLOTS, SCORING_SLOTS, SLOT_CATEGORIES, type SlotCategory } from '@/config/setups.config';
+import type { Bias } from '@/config/setups.config';
+import type { MirrorOverlay } from '@/lib/scoring/a1-mirror';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
 
 const BIAS_STYLE: Record<string, string> = {
@@ -27,6 +29,55 @@ const BIAS_STYLE: Record<string, string> = {
   Bearish: 'text-[var(--color-bear)]',
   'Very Bearish': 'text-[var(--color-bear)] font-semibold',
 };
+
+/**
+ * The hover text for one cell: what it means, then where the numbers came from.
+ *
+ * Provenance is appended rather than folded in, because it answers a different
+ * question. "Beat forecast" invites "whose forecast?", and the answer was being
+ * recorded on every borrowed consensus and read by nothing in the app. A cell
+ * scored against a forecast this calendar never published, or built on an
+ * actual FXStreet does not carry, has to be able to say so on hover.
+ *
+ * A blank cell gets the opposite treatment: it names the series that was looked
+ * for, so "not published for that currency" reads as a checked absence rather
+ * than as something the app forgot to fetch.
+ */
+function cellTooltip(label: string, cell: MatrixCell, mirrorWhy?: string): string {
+  const lines = [`${label}: ${cell.explanation}`];
+
+  /**
+   * The mirror note goes FIRST after the explanation, because when the toggle
+   * is on the number on screen is not ours, and that is the single most
+   * important thing to say about it.
+   */
+  if (mirrorWhy) lines.push(`A1 MIRROR - ${mirrorWhy}`);
+
+  const borrowed = new Set(
+    (cell.legs ?? []).map((l) => l.consensusSource).filter((s): s is string => Boolean(s)),
+  );
+  if (borrowed.size > 0) {
+    lines.push(`Forecast supplied by ${[...borrowed].join(', ')} — FXStreet published none.`);
+  }
+
+  const foreign = new Set(
+    (cell.legs ?? [])
+      .filter((l) => l.actualSource && l.actualSource !== 'fxstreet')
+      .map((l) => `${l.seriesName ?? 'series'} via ${l.actualSource}`),
+  );
+  if (foreign.size > 0) {
+    lines.push(`Not on FXStreet: ${[...foreign].join(', ')}.`);
+  }
+
+  if (cell.cell === null && cell.status !== 'stale') {
+    const looked = (cell.legs ?? [])
+      .filter((l) => l.seriesName)
+      .map((l) => `${l.currency} ${l.seriesName}`);
+    if (looked.length > 0) lines.push(`Looked for: ${looked.join('; ')}.`);
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Cell background.
@@ -83,6 +134,38 @@ function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProp
 type SortKey = 'score' | 'symbol';
 
 /**
+ * Apply the mirror overlay to a board.
+ *
+ * The overlay carries only cells that MOVED and only totals that changed, so
+ * this is a shallow patch rather than a second board — see `buildMirrorOverlay`
+ * for why the wire format is a diff. A cell where A1's convention happens to
+ * land on the same value as ours is absent from it, and so is never marked:
+ * nothing about that cell differs.
+ */
+function applyMirror(rows: SymbolRow[], overlay: MirrorOverlay): SymbolRow[] {
+  return rows
+    .map((row) => {
+      const patch = overlay.cells[row.symbol];
+      const total = overlay.totals[row.symbol];
+      if (!patch && !total) return row;
+
+      const cells = { ...row.cells };
+      for (const [key, value] of Object.entries(patch ?? {})) {
+        const existing = cells[key];
+        if (!existing) continue;
+        cells[key] = { ...existing, cell: value, status: value === null ? existing.status : 'scored' };
+      }
+      return {
+        ...row,
+        cells,
+        totalScore: total?.score ?? row.totalScore,
+        bias: (total?.bias as Bias) ?? row.bias,
+      };
+    })
+    .sort((a, b) => b.totalScore - a.totalScore);
+}
+
+/**
  * Column presets, mirroring the variants A1 offers.
  *
  *   full    every column, scoring and context
@@ -125,15 +208,29 @@ const STICKY_LEFT = {
 export function SetupsMatrix({
   rows,
   cotReportDate,
+  mirror,
 }: {
   rows: SymbolRow[];
   cotReportDate: string | null;
+  /** Null when no capture of A1's board is on disk — the toggle then hides. */
+  mirror?: MirrorOverlay | null;
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<SlotCategory | 'all'>('all');
   const [sort, setSort] = useState<SortKey>('score');
   const [hideNeutral, setHideNeutral] = useState(false);
   const [view, setView] = useState<ViewKey>('full');
+  const [mirrorOn, setMirrorOn] = useState(false);
+
+  /**
+   * Mirror mode is PRESENTATION. It rewrites what this table shows and reaches
+   * nothing else — not the change log, not the stored history, not any parity
+   * script. `rows` is left untouched and a patched copy is rendered.
+   */
+  const board = useMemo(
+    () => (mirrorOn && mirror ? applyMirror(rows, mirror) : rows),
+    [rows, mirror, mirrorOn],
+  );
 
   /**
    * View and category compose: Macro-Only narrowed to Inflation shows the
@@ -144,10 +241,10 @@ export function SetupsMatrix({
   const visibleSlots = useMemo(() => {
     const byView =
       view === 'macro'
-        ? SLOTS.filter((s) => s.scoring && s.kind !== 'technical' && s.kind !== 'sentiment')
+        ? MATRIX_SLOTS.filter((s) => s.scoring && s.kind !== 'technical' && s.kind !== 'sentiment')
         : view === 'simple'
           ? []
-          : SLOTS;
+          : MATRIX_SLOTS;
 
     return category === 'all' ? byView : byView.filter((s) => s.category === category);
   }, [view, category]);
@@ -163,7 +260,7 @@ export function SetupsMatrix({
   );
 
   const filtered = useMemo(() => {
-    let out = rows;
+    let out = board;
     if (query.trim()) {
       const q = query.trim().toUpperCase();
       out = out.filter((r) => r.symbol.includes(q) || r.label.toUpperCase().includes(q));
@@ -171,7 +268,7 @@ export function SetupsMatrix({
     if (hideNeutral) out = out.filter((r) => r.bias !== 'Neutral');
     if (sort === 'symbol') out = [...out].sort((a, b) => a.symbol.localeCompare(b.symbol));
     return out;
-  }, [rows, query, hideNeutral, sort]);
+  }, [board, query, hideNeutral, sort]);
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -196,6 +293,45 @@ export function SetupsMatrix({
             </button>
           ))}
         </div>
+
+        {mirror && (
+          <div className="flex rounded border border-[var(--color-border)] p-0.5">
+            <button
+              type="button"
+              title={
+                'Our arithmetic: a pair cell is its base leg minus its quote leg, which is ' +
+                "what A1's own currency rows and country heatmaps publish."
+              }
+              onClick={() => setMirrorOn(false)}
+              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                !mirrorOn
+                  ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              Ours
+            </button>
+            <button
+              type="button"
+              title={
+                "A1 mirror: re-render the board under the conventions A1's PAIR rows use, " +
+                "where those contradict A1's own currency rows. " +
+                `Moves ${mirror.moved} cells.` +
+                (mirror.capturedFrom
+                  ? ` Captured cells read from their ${mirror.capturedFrom} board.`
+                  : '')
+              }
+              onClick={() => setMirrorOn(true)}
+              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                mirrorOn
+                  ? 'bg-[var(--color-uncertain)]/20 text-[var(--color-uncertain)]'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              A1 mirror
+            </button>
+          </div>
+        )}
 
         <input
           type="search"
@@ -377,11 +513,24 @@ export function SetupsMatrix({
                 {visibleSlots.map((slot) => {
                   const cell = row.cells[slot.key];
                   const s = cellStyle(cell);
+                  /*
+                    A mirrored cell is OUTLINED rather than recoloured. Its sign
+                    and magnitude still have to read at a glance, and swapping
+                    the hue would make "A1 says bearish" look like a different
+                    scale rather than a different source.
+                  */
+                  const swapped = mirrorOn && mirror?.cells[row.symbol]?.[slot.key] !== undefined;
                   return (
                     <td
                       key={slot.key}
-                      title={`${slot.label}: ${cell.explanation}`}
-                      className={`tnum border-b border-[var(--color-border)] px-0.5 py-0.5 text-center ${s.className}`}
+                      title={cellTooltip(
+                        slot.label,
+                        cell,
+                        swapped ? mirror?.conventions[slot.key]?.why : undefined,
+                      )}
+                      className={`tnum border-b border-[var(--color-border)] px-0.5 py-0.5 text-center ${s.className}${
+                        swapped ? ' outline outline-1 -outline-offset-1 outline-[var(--color-uncertain)]' : ''
+                      }`}
                       style={{ ...s.style, width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
                     >
                       {s.text}
@@ -436,9 +585,16 @@ export function SetupsMatrix({
         </span>
         <span>blank = not published for that currency</span>
         {/* Only meaningful while some column is carried but not scored. */}
-        {SLOTS.length > SCORING_SLOTS.length && (
+        {MATRIX_SLOTS.length > SCORING_SLOTS.length && (
           <span className="italic opacity-60">
-            ° {SLOTS.length - SCORING_SLOTS.length} context columns — shown, never counted
+            ° {MATRIX_SLOTS.length - SCORING_SLOTS.length} context columns — shown, never counted
+          </span>
+        )}
+        {mirrorOn && mirror && (
+          <span className="text-[var(--color-uncertain)]">
+            A1 mirror on — {mirror.moved} outlined cells re-derived under their pair-row
+            conventions{mirror.capturedFrom ? `, some read from their ${mirror.capturedFrom} board` : ''}.
+            Not our reading.
           </span>
         )}
         <span className="ml-auto">

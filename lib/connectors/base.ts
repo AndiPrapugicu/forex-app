@@ -34,20 +34,23 @@ const cache = new Map<string, CacheEntry>();
 /** How long a stale entry stays eligible as a failure fallback. */
 const STALE_GRACE_SECONDS = 6 * 3600;
 
-function cacheGet<T>(key: string): { value: T; stale: boolean; ageSeconds: number } | null {
+function cacheGet<T>(
+  key: string,
+): { value: T; stale: boolean; ageSeconds: number; storedAtUtc: string } | null {
   const hit = cache.get(key);
   if (!hit) return null;
 
   const now = Date.now();
   const ageSeconds = Math.round((now - hit.storedAt) / 1000);
+  const storedAtUtc = new Date(hit.storedAt).toISOString();
 
-  if (now <= hit.expiresAt) return { value: hit.value as T, stale: false, ageSeconds };
+  if (now <= hit.expiresAt) return { value: hit.value as T, stale: false, ageSeconds, storedAtUtc };
 
   if (ageSeconds > STALE_GRACE_SECONDS) {
     cache.delete(key);
     return null;
   }
-  return { value: hit.value as T, stale: true, ageSeconds };
+  return { value: hit.value as T, stale: true, ageSeconds, storedAtUtc };
 }
 
 /**
@@ -253,13 +256,27 @@ export async function fetchJson<T>(
   const ttl = opts.cacheTtlSeconds ?? DEFAULTS.cacheTtlSeconds;
 
   const cached = ttl > 0 ? cacheGet<T>(key) : null;
-  if (cached && !cached.stale) return ok(source, cached.value);
+  /**
+   * A CACHE HIT REPORTS WHEN THE DATA WAS FETCHED, NOT WHEN IT WAS READ.
+   *
+   * Stamping `new Date()` here made every source in the health table look
+   * freshly fetched on every render, so "is the board reading current data?"
+   * was unanswerable from the dashboard — which is the one question a stale
+   * feed makes urgent. The value is not stale enough to warn about, so there is
+   * no `degraded` note; the timestamp alone carries it.
+   */
+  if (cached && !cached.stale) return ok(source, cached.value, undefined, cached.storedAtUtc);
 
   const res = await fetchRaw(url, opts, 'json');
 
   if (!res.ok) {
     if (cached) {
-      return ok(source, cached.value, `${res.error} — showing data from ${describeAge(cached.ageSeconds)} ago`);
+      return ok(
+        source,
+        cached.value,
+        `${res.error} — showing data from ${describeAge(cached.ageSeconds)} ago`,
+        cached.storedAtUtc,
+      );
     }
     return fail<T>(source, res.error);
   }
@@ -278,13 +295,19 @@ export async function fetchText(
   const ttl = opts.cacheTtlSeconds ?? DEFAULTS.cacheTtlSeconds;
 
   const cached = ttl > 0 ? cacheGet<string>(key) : null;
-  if (cached && !cached.stale) return ok(source, cached.value);
+  // See fetchJson: a cache hit is dated by its STORE time, not its read time.
+  if (cached && !cached.stale) return ok(source, cached.value, undefined, cached.storedAtUtc);
 
   const res = await fetchRaw(url, opts, 'text');
 
   if (!res.ok) {
     if (cached) {
-      return ok(source, cached.value, `${res.error} — showing data from ${describeAge(cached.ageSeconds)} ago`);
+      return ok(
+        source,
+        cached.value,
+        `${res.error} — showing data from ${describeAge(cached.ageSeconds)} ago`,
+        cached.storedAtUtc,
+      );
     }
     return fail<string>(source, res.error);
   }
@@ -348,7 +371,49 @@ export function stableId(...parts: (string | number | null | undefined)[]): stri
   return (h1.toString(36) + h2.toString(36)).slice(0, 16);
 }
 
-/** True when the app should read fixtures instead of the network. */
+/**
+ * Whether a production process has already been told it is ignoring fixtures.
+ * Warned once, not once per connector call.
+ */
+let warnedAboutProductionFixtures = false;
+
+/**
+ * True when the app should read fixtures instead of the network.
+ *
+ * `USE_FIXTURES=true npm run dev` is the documented offline workflow and stays
+ * exactly as it was.
+ *
+ * IT IS REFUSED IN PRODUCTION, and that guard is the whole of this function's
+ * complexity. A fixture-backed deploy does not fail loudly — it serves captured
+ * prices, a captured calendar and a captured COT report as though they were
+ * today's, and every downstream number is confidently wrong with no symptom. An
+ * env var set once for a debugging session and left behind is a realistic way to
+ * get there, so the default in production is to ignore it and say so.
+ *
+ * `ALLOW_FIXTURES_IN_PRODUCTION` exists so a deliberate demo deployment is still
+ * possible. Its only job is to make the choice explicit: nobody sets that name by
+ * accident.
+ */
 export function fixturesEnabled(): boolean {
-  return process.env.USE_FIXTURES === 'true';
+  if (process.env.USE_FIXTURES !== 'true') return false;
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  const deliberate = process.env.ALLOW_FIXTURES_IN_PRODUCTION === 'true';
+  if (isProduction && !deliberate) {
+    if (!warnedAboutProductionFixtures) {
+      warnedAboutProductionFixtures = true;
+      console.warn(
+        '[connectors] USE_FIXTURES=true is IGNORED in production. Captured payloads would be ' +
+          'served as live data with no visible symptom. Set ALLOW_FIXTURES_IN_PRODUCTION=true ' +
+          'if a fixture-backed deployment is genuinely intended.',
+      );
+    }
+    return false;
+  }
+  return true;
+}
+
+/** Test-only: forget that the production warning has been emitted. */
+export function resetFixtureWarning() {
+  warnedAboutProductionFixtures = false;
 }

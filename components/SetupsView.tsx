@@ -13,7 +13,8 @@ import { ChangeLog } from '@/components/ChangeLog';
 import { SetupsMatrix } from '@/components/SetupsMatrix';
 import { SourceHealthBar } from '@/components/AlertPanel';
 import { Skeleton } from '@/components/ui';
-import { SCORING_SLOTS, SLOTS } from '@/config/setups.config';
+import { MATRIX_SLOTS, SCORING_SLOTS } from '@/config/setups.config';
+import type { MirrorOverlay } from '@/lib/scoring/a1-mirror';
 import type { ScoreChange } from '@/lib/scoring/history';
 import type { SetupsMatrix as Matrix } from '@/lib/scoring/setups';
 import type { SourceHealth } from '@/lib/types';
@@ -24,16 +25,20 @@ export function SetupsView({
   initial,
   initialHealth,
   initialChangeLog,
+  initialMirror,
   initialError,
 }: {
   initial: Matrix | null;
   initialHealth: SourceHealth[];
   initialChangeLog: ScoreChange[];
+  /** Built server-side from the newest captured A1 board; null when none is on disk. */
+  initialMirror: MirrorOverlay | null;
   initialError: string | null;
 }) {
   const [matrix, setMatrix] = useState<Matrix | null>(initial);
   const [health, setHealth] = useState<SourceHealth[]>(initialHealth);
   const [changeLog, setChangeLog] = useState<ScoreChange[]>(initialChangeLog);
+  const [mirror, setMirror] = useState<MirrorOverlay | null>(initialMirror);
   const [error, setError] = useState<string | null>(initialError);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
@@ -49,6 +54,7 @@ export function SetupsView({
       setMatrix(data);
       setHealth(data.health ?? []);
       setChangeLog(data.changeLog ?? []);
+      setMirror(data.mirror ?? null);
       setError(null);
     } catch (err) {
       // Keep the last good matrix on screen; a failed refresh is no reason to
@@ -83,8 +89,8 @@ export function SetupsView({
           <h1 className="text-lg font-bold">Top Setups</h1>
           <p className="text-xs text-[var(--color-faint)]">
             {rows.length} symbols scored across {SCORING_SLOTS.length} indicators
-            {SLOTS.length > SCORING_SLOTS.length &&
-              ` (+${SLOTS.length - SCORING_SLOTS.length} shown as context)`}
+            {MATRIX_SLOTS.length > SCORING_SLOTS.length &&
+              ` (+${MATRIX_SLOTS.length - SCORING_SLOTS.length} shown as context)`}
             {matrix?.cotReportDate && ` · COT as of ${matrix.cotReportDate}`}
           </p>
         </div>
@@ -132,7 +138,7 @@ export function SetupsView({
       ) : (
         <>
           <ChangeLog changes={changeLog} />
-          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} />
+          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} mirror={mirror} />
         </>
       )}
     </div>

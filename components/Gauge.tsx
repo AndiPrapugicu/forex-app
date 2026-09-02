@@ -257,3 +257,115 @@ export function ScoreBar({
     </svg>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Percent gauge — a 0..100 dial for the Economic Surprise Meter
+// ---------------------------------------------------------------------------
+
+/**
+ * A SIGNED score and a PERCENTAGE are different quantities, so this is a
+ * separate component rather than `ScoreGauge` with a wider range.
+ *
+ * ScoreGauge prints `formatScore` — "+11" — and labels its axis ±range. Both
+ * are right for a scorecard total and wrong for "61% of this economy's releases
+ * beat expectations", where there is no sign, no zero point in the middle, and
+ * the ends are 0 and 100. Forcing one component to do both would mean a prop
+ * that switches its meaning, which is how a chart starts lying.
+ *
+ * The arc helpers are shared, so there is still only one piece of trigonometry
+ * in the app.
+ *
+ * Colour follows the reading rather than a fixed track: the left half of the
+ * dial is the bearish side and the right half the bullish one, matching how the
+ * heatmap colours the same numbers.
+ */
+export function PercentGauge({
+  pct,
+  label,
+  size = 150,
+  sublabel,
+}: {
+  /** 0..100, or null when nothing directional resolved. */
+  pct: number | null;
+  /** Sits inside the arc — the currency, usually. */
+  label: string;
+  size?: number;
+  sublabel?: string;
+}) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 14;
+  const stroke = 11;
+
+  const known = pct !== null;
+  const angle = known ? (pct / 100) * 180 : 90;
+  const needle = polar(cx, cy, r - 2, angle);
+  const needleBase = polar(cx, cy, 5, angle);
+
+  const colour = !known
+    ? 'var(--color-neutral)'
+    : pct > 50
+      ? 'var(--color-bull)'
+      : pct < 50
+        ? 'var(--color-bear)'
+        : 'var(--color-neutral)';
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg
+        width={size}
+        height={size / 2 + 30}
+        viewBox={`0 0 ${size} ${size / 2 + 30}`}
+        role="img"
+        aria-label={
+          known
+            ? `${label}: ${pct}% of releases beat expectations`
+            : `${label}: no directional releases to measure`
+        }
+      >
+        {/* Bearish half, then bullish half. The track itself carries the
+            meaning, so a needle just left of centre reads as weak at a glance. */}
+        <path d={arcPath(cx, cy, r, 0, 90)} fill="none" stroke="var(--color-bear)" strokeWidth={stroke} opacity={0.32} />
+        <path d={arcPath(cx, cy, r, 90, 180)} fill="none" stroke="var(--color-bull)" strokeWidth={stroke} opacity={0.32} />
+
+        {/* Midpoint tick: half the releases beat, half missed. */}
+        <line
+          x1={cx} y1={cy - r - stroke / 2 - 2}
+          x2={cx} y2={cy - r + stroke / 2 + 2}
+          stroke="var(--color-border-bright)" strokeWidth={2}
+        />
+
+        {known && (
+          <>
+            <line
+              x1={needleBase.x} y1={needleBase.y}
+              x2={needle.x} y2={needle.y}
+              stroke={colour} strokeWidth={3} strokeLinecap="round"
+            />
+            <circle cx={cx} cy={cy} r={5} fill={colour} />
+          </>
+        )}
+
+        <text
+          x={cx} y={cy - 14}
+          textAnchor="middle"
+          fill="var(--color-muted)"
+          fontSize={13}
+          fontWeight={600}
+        >
+          {label}
+        </text>
+
+        <text x={12} y={cy + 16} fill="var(--color-faint)" fontSize={9} className="tnum">0</text>
+        <text x={size - 20} y={cy + 16} fill="var(--color-faint)" fontSize={9} className="tnum">100</text>
+      </svg>
+
+      <div className="-mt-2 text-center">
+        <div className="tnum text-xl font-bold" style={{ color: colour }}>
+          {known ? `${Math.round(pct)}%` : '—'}
+        </div>
+        {sublabel && <div className="text-[10px] text-[var(--color-faint)]">{sublabel}</div>}
+      </div>
+    </div>
+  );
+}

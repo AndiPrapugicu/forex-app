@@ -73,6 +73,13 @@ const NAV: NavItem[] = [
     icon: <Icon path="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
   },
   {
+    href: '/surprise',
+    label: 'Surprise Meter',
+    hint: 'Who is beating expectations',
+    // A dial: a semicircle with a needle.
+    icon: <Icon path="M3 15a9 9 0 0118 0M12 15l4-5" />,
+  },
+  {
     href: '/cot',
     label: 'COT',
     hint: 'Institutional positioning',

@@ -20,7 +20,7 @@
  */
 
 import type { Bias } from '@/config/setups.config';
-import type { CotSeries } from '@/lib/connectors/cftc';
+import { publicationDate, type CotSeries } from '@/lib/connectors/cftc';
 import type { DailyBars } from '@/lib/connectors/technicals';
 import type { Technicals } from '@/lib/connectors/technicals';
 import { TREND_SMA, TREND_SLOPE_LOOKBACK_DAYS } from '@/config/setups.config';
@@ -136,12 +136,47 @@ export function technicalsAsOf(
 export function asOf(input: BacktestInput, at: Date) {
   const iso = at.toISOString();
 
-  const events = input.events.filter((e) => e.dateUtc <= iso);
+  /**
+   * Released by `at` — OR still not released at all.
+   *
+   * The date test alone answers "had this printed yet", which is the right
+   * question for every column that scores an ACTUAL, and `resolveSeries` filters
+   * on `actual !== null` anyway so those columns cannot see a scheduled row
+   * either way. It is the wrong question for the one column that scores a
+   * FORECAST: at 2026-08-25 the RBNZ's 2026-09-02 decision had not happened, but
+   * it was on the calendar with a published consensus, and dropping it made the
+   * rewound board score a currency 0 for lack of an event that was public
+   * knowledge on the day.
+   *
+   * `actual === null` is what keeps this honest. A future-dated row that HAS an
+   * actual is a print that has since landed, and admitting it would be reading
+   * the answer; a row that still has none has not happened yet from any vantage
+   * point, this one included.
+   *
+   * ONE ANACHRONISM REMAINS AND IS NOT FIXABLE FROM THIS DATA: the consensus on
+   * such a row is TODAY's, not the one standing at `at`. The calendar publishes
+   * no history of its own forecast column. That is why `component-parity.ts`
+   * labels a consensus-based rates cell PARTIAL rather than HISTORICAL.
+   */
+  const events = input.events.filter((e) => e.dateUtc <= iso || e.actual === null);
 
+  /**
+   * CUT ON THE PUBLICATION DATE, NOT THE SURVEY DATE.
+   *
+   * `reportDate` is the Tuesday the positions were held, and the report does not
+   * exist until the CFTC releases it on the Friday. Filtering on the survey date
+   * — which this did until 2026-08-30, under a comment claiming "anything later
+   * was not public yet" — admits a report up to three days before anyone could
+   * have read it. The doc block above this function has described the lag since
+   * it was written; nothing acted on it.
+   *
+   * Measured: replaying Tuesday 2026-08-25 admitted the report surveyed that
+   * same day and published Friday 2026-08-28, moving fifteen cells. It is
+   * look-ahead in `runBacktest` and a false rewind in every parity script.
+   */
   const cot = new Map<string, CotSeries>();
   for (const [contract, series] of input.cot) {
-    // reportDate is the Tuesday surveyed; anything later was not public yet.
-    const reports = series.reports.filter((r) => r.reportDate <= iso.slice(0, 10));
+    const reports = series.reports.filter((r) => publicationDate(r.reportDate) <= iso.slice(0, 10));
     if (reports.length > 0) cot.set(contract, { contract, reports });
   }
 

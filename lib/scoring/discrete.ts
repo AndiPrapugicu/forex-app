@@ -15,7 +15,6 @@
 import {
   CELL_MAX,
   DEFAULT_MAX_AGE_DAYS,
-  REVISION_WINDOW_DAYS,
   PAIR_CELL_MAX,
   PAIR_CELL_MIN,
   PRIMARY_COUNTRY,
@@ -49,6 +48,13 @@ export interface SlotResult {
   sigma: number | null;
   ageDays: number | null;
   explanation: string;
+  /**
+   * What the cell was ACTUALLY measured against, which is not always what the
+   * slot asked for — see the fallback in `scoreSlot`. Callers must read this
+   * rather than re-deriving it from `slot.compare`, or a cell scored off the
+   * prior print will describe itself as a beat against forecast.
+   */
+  referenceLabel?: 'forecast' | 'previous';
   /** Per-sub-series detail for composite slots (PMI). Empty otherwise. */
   components?: ComponentResult[];
 }
@@ -103,8 +109,18 @@ function ageInDays(iso: string, now: Date): number {
  * name. Without the country filter the column would show whichever member state
  * printed last.
  *
- * Within the country, patterns are tried in order and the first with a released
- * value wins, so the canonical series is chosen deterministically.
+ * Within the country, patterns are tried in order, and the first one offering a
+ * candidate of the BEST AVAILABLE QUALITY wins — so the canonical series is
+ * still chosen deterministically, but a pattern that matches only prints nobody
+ * can score no longer blocks a sibling that has one.
+ *
+ * That last clause is a bug fix, not a refinement. The loop used to skip to the
+ * next pattern only when a pattern matched NOTHING, so a pattern that matched
+ * and then produced an unusable print returned it and stopped. New Zealand
+ * retail sales is where it showed: `Electronic Card Retail Sales (MoM)` is
+ * first in the list and carries no consensus on any of its four prints, so
+ * `Retail Sales (QoQ)` — which does carry one — was unreachable, and the column
+ * was dead for the entire NZD leg of every kiwi pair.
  */
 export function resolveSeries(
   matcher: SeriesMatcher,
@@ -112,6 +128,14 @@ export function resolveSeries(
   events: NormalizedEvent[],
   /** What the cell will be scored against, so an unscoreable print is skipped. */
   compare: 'forecast' | 'previous' = 'forecast',
+  /**
+   * The slot's freshness window, so quality can weigh age.
+   *
+   * Optional, and absent means "do not judge age" — which is exactly the old
+   * behaviour, so a caller that does not care is not silently given a different
+   * answer than before.
+   */
+  freshness?: { now: Date; maxAgeDays: number },
 ): NormalizedEvent | null {
   const patterns = matcher.matchByCurrency?.[currency] ?? matcher.match ?? [];
   if (patterns.length === 0) return null;
@@ -124,96 +148,171 @@ export function resolveSeries(
   const newest = (list: NormalizedEvent[]) =>
     list.reduce((best, e) => (e.dateUtc > best.dateUtc ? e : best));
 
-  const referenceOf = (e: NormalizedEvent) => (compare === 'previous' ? e.previous : e.consensus);
+  const referenceOf = (e: NormalizedEvent) => (compare === 'previous' ? priorPrint(e) : e.consensus);
 
   const hasReference = (e: NormalizedEvent) => referenceOf(e) !== null;
 
   /**
-   * A forecast that says something the previous print did not.
+   * The best print ONE pattern can offer: THE MOST RECENT SCOREABLE ONE, and
+   * failing that simply the most recent.
    *
-   * `consensus === previous` is a survey that was never taken: the feed carried
-   * the prior reading forward into the forecast column, so "beat the forecast"
-   * degenerates into "differed from last time" and a confirming revision scores
-   * a confident 0. It is the same emptiness as a null consensus, wearing a
-   * number — which is why it belongs next to `hasReference` rather than in a
-   * caller.
+   *  1. any non-null forecast — measurable;
+   *  2. anything released — unscoreable, but the card still shows the series and
+   *     says why it is blank rather than omitting the row.
    *
-   * The euro area is where this bites hardest, because it publishes a flash and
-   * then one or more revisions of the same reference period. Measured live:
+   * Tier 1 earned its place: UK core PPI's latest entry carries no consensus,
+   * and taking it dropped GBPUSD's PPI to a USD-only reading.
    *
-   *   30 Jul  GDP s.a. (QoQ)  actual 0.4  consensus 0.2  <- the real surprise
-   *   14 Aug  GDP s.a. (QoQ)  actual 0.4  consensus 0.4  <- a confirmation
+   * THERE USED TO BE A TIER ABOVE BOTH, AND IT WAS REMOVED ON EVIDENCE.
    *
-   * Taking the newest scoreable print meant scoring the confirmation and
-   * reporting "no news" about a quarter that had, in fact, beaten forecast.
-   * Across the feed 31% of EUR releases carry consensus === actual against 15%
-   * for USD and 7% for CAD, and that asymmetry was landing entirely on the euro
-   * legs of every pair.
+   * The rule was: prefer the most recent INFORMATIVE print — one whose forecast
+   * differs from the prior print — reaching back up to REVISION_WINDOW_DAYS to
+   * find it. The reasoning was good and is still worth reading, because it is
+   * the reasoning anyone will reconstruct before trying this again:
+   * `consensus === previous` is a survey that was never taken, so a confirming
+   * revision scores a confident 0 about a period that did in fact beat forecast.
+   * The euro area publishes a flash and then revisions of the same quarter, and
+   * 31% of EUR releases carry consensus === actual against 7% for CAD:
+   *
+   *   30 Jul  GDP s.a. (QoQ)  actual 0.4  consensus 0.2  <- the flash, a beat
+   *   14 Aug  GDP s.a. (QoQ)  actual 0.4  consensus 0.4  <- the revision, silent
+   *
+   * A1 SCORES THE REVISION. Their 2026-08-23 EURUSD card publishes an Economic
+   * Growth subtotal of 5 over five rows, and with the dollar's legs known
+   * exactly from their US-DOLLAR card that subtotal reconciles ONLY if the euro
+   * GDP leg is 0 — the 14 Aug reading. At +1, the flash reading, their own
+   * published subtotal would have to be 6.
+   *
+   * Measured against that capture, three runs each: TOTAL ABS GAP 96 -> 92,
+   * exact rows 7 -> 9. `npm run legs` confirms the change is confined to where
+   * the comment above always said it lived: EUR moves +2 -> +1 and every other
+   * currency's macro total is untouched, because the euro area is the only
+   * economy that revises inside three weeks.
+   *
+   * So the removed rule was a better read of the world and a worse model of
+   * theirs, which is the trade this codebase has already decided (see the
+   * `scoring` flag and the absolute bias bands). If a future capture shows them
+   * scoring a flash over its revision, this is the function to change and the
+   * measurement to re-run.
    */
-  const isInformative = (e: NormalizedEvent) => {
-    const ref = referenceOf(e);
-    return ref !== null && e.previous !== null && ref !== e.previous;
+  const pickWithin = (matches: NormalizedEvent[]): NormalizedEvent => {
+    const scoreable = matches.filter(hasReference);
+    return newest(scoreable.length > 0 ? scoreable : matches);
   };
 
+  const isFresh = (e: NormalizedEvent) =>
+    freshness === undefined || ageInDays(e.dateUtc, freshness.now) <= freshness.maxAgeDays;
+
+  /**
+   * How good a pattern's offering is, lower being better.
+   *
+   * FRESHNESS OUTRANKS SCOREABILITY, and the order is the whole design:
+   *
+   *   0  fresh and scoreable      what every column wants
+   *   1  fresh, no forecast       still describes the world as it is now, and
+   *                               `scoreSlot` can read it against its previous
+   *                               print rather than throwing it away
+   *   2  stale but scoreable      a real surprise, about a month that has ended
+   *   3  stale and unscoreable    kept only so the card can name the series
+   *
+   * Putting 2 above 1 was tried and is wrong. New Zealand retail sales offers a
+   * fresh Electronic Card print with no forecast against a quarterly Retail
+   * Sales print carrying one but 90 days old, past its 75-day window. Preferring
+   * the quarterly hands `scoreSlot` a print it must then reject as stale, so the
+   * column stays blank AND the fresher reading is discarded. The staleness
+   * windows exist to say a number that old no longer describes anything.
+   */
+  const rank = (e: NormalizedEvent) => (isFresh(e) ? 0 : 2) + (hasReference(e) ? 0 : 1);
+
+  let best: NormalizedEvent | null = null;
   for (const pattern of patterns) {
     const matches = pool.filter((e) => pattern.test(e.name));
     if (matches.length === 0) continue;
 
-    /**
-     * The most recent INFORMATIVE print, then the most recent scoreable one,
-     * then simply the most recent.
-     *
-     * Each tier drops a release that cannot say what the next one can:
-     *
-     *  1. a real forecast that differs from the prior print — a genuine surprise
-     *     is measurable against it;
-     *  2. any non-null forecast — measurable, though a consensus echoing the
-     *     previous reading makes the comparison weak;
-     *  3. anything released — unscoreable, but the card still shows the series
-     *     and says why it is blank rather than omitting the row.
-     *
-     * Tier 2 already earned its place: UK core PPI's latest entry carries no
-     * consensus, and taking it dropped GBPUSD's PPI to a USD-only reading.
-     * Tier 1 is the same argument one step further, and is what stops a euro-area
-     * revision overwriting the flash that carried the actual surprise.
-     */
-    const scoreable = matches.filter(hasReference);
-    const latest = newest(scoreable.length > 0 ? scoreable : matches);
-
-    /**
-     * Reach back for the informative print ONLY if it describes the same
-     * reference period — that is, only if the newest print is a revision of it.
-     *
-     * Without the window this rule reaches into a previous MONTH, which is the
-     * opposite of an improvement: Japan's PMIs carry a forecast equal to the
-     * prior reading every month, so every one of them looked uninformative and
-     * the fallback scored a stale month as though it were current. CHFJPY lost
-     * eight points that way.
-     *
-     * Three weeks separates the two cases cleanly. A euro-area GDP revision
-     * follows its flash by about a fortnight; consecutive months of any monthly
-     * series are at least four weeks apart.
-     */
-    const informative = matches.filter(isInformative);
-    if (informative.length > 0) {
-      const best = newest(informative);
-      const daysApart = ageInDays(best.dateUtc, new Date(latest.dateUtc));
-      if (daysApart <= REVISION_WINDOW_DAYS) return best;
-    }
-
-    return latest;
+    const candidate = pickWithin(matches);
+    // Strictly better only, so ties fall to the earlier pattern and the ordered
+    // preference list keeps meaning what it says.
+    if (best === null || rank(candidate) < rank(best)) best = candidate;
   }
 
-  return null;
+  return best;
+}
+
+/**
+ * The freshness window for one slot and one currency.
+ *
+ * Cadence is a property of the country, not the indicator — New Zealand's
+ * retail sales is quarterly where everyone else's is monthly — so the per-slot
+ * default can be overridden per currency. Everything that judges staleness must
+ * go through here, or `resolveSeries` picks a print that `scoreSlot` then
+ * rejects and the column goes blank for a reason neither of them reports.
+ */
+export function maxAgeFor(slot: SlotDefinition, currency: Currency): number {
+  return slot.maxAgeDaysByCurrency?.[currency] ?? slot.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+}
+
+/**
+ * The prior print, AS IT STANDS TODAY rather than as it was first announced.
+ *
+ * Every calendar release carries two versions of last period's number: the
+ * value originally published, and — where the agency has since restated it —
+ * the revision. FXStreet exposes both, `previous` and `revised`; TradingView
+ * exposes only one, and the one it exposes is the revised value. That is not a
+ * quirk of either vendor, it is what a revision MEANS: after it, last month's
+ * figure is the new number and the old one is history.
+ *
+ * BusinessNZ's PSI is the case that forced this, and it is a clean one because
+ * every other input agrees:
+ *
+ *   2026-08-16   actual 50.6   previous 50.6   revised 50.9
+ *
+ * Against the announced 50.6 the print is FLAT and scores 0. Against the
+ * restated 50.9 it FELL and scores -1. A1's 2026-08-25 board carries -1, and
+ * TradingView's `previous` column for that release reads 50.9.
+ *
+ * Only reachable where the comparison is against the prior print at all — a
+ * forecast-based comparison never touches this, and a revision cannot change a
+ * consensus that was published before it.
+ */
+export function priorPrint(event: NormalizedEvent): number | null {
+  return event.revised ?? event.previous;
+}
+
+/**
+ * What this slot is measured against FOR THIS CURRENCY.
+ *
+ * Defaults to the slot's own rule and therefore to `forecast`. The per-currency
+ * override exists because forecast coverage differs between calendars — see
+ * `compareByCurrency` in the slot config for the evidence and the warning that
+ * goes with it.
+ *
+ * Note this is the INTENDED basis, not necessarily the one used: where the
+ * intent is `forecast` and no consensus exists, `scoreSlot` still falls back to
+ * the prior print, which is A1's rule.
+ */
+export function compareFor(slot: SlotDefinition, currency: Currency): 'forecast' | 'previous' {
+  return slot.compareByCurrency?.[currency] ?? slot.compare ?? 'forecast';
 }
 
 export function resolveSlotEvent(
   slot: SlotDefinition,
   currency: Currency,
   events: NormalizedEvent[],
+  /**
+   * Omitted means age is not weighed when choosing between patterns, matching
+   * how this behaved before `resolveSeries` learned about freshness. `scoreSlot`
+   * always passes it; the tests that pin the tier rules deliberately do not.
+   */
+  now?: Date,
 ): NormalizedEvent | null {
   if (slot.kind !== 'economic') return null;
-  return resolveSeries(slot, currency, events, slot.compare ?? 'forecast');
+  return resolveSeries(
+    slot,
+    currency,
+    events,
+    compareFor(slot, currency),
+    now === undefined ? undefined : { now, maxAgeDays: maxAgeFor(slot, currency) },
+  );
 }
 
 /**
@@ -238,13 +337,13 @@ export function scoreSlot(
 
   if (slot.components) return scoreCompositeSlot(slot, currency, events, now);
 
-  const event = resolveSlotEvent(slot, currency, events);
+  const event = resolveSlotEvent(slot, currency, events, now);
   if (!event) {
     return { ...base, status: 'no-data', explanation: `No ${slot.label} data for ${currency}` };
   }
 
   const age = ageInDays(event.dateUtc, now);
-  const maxAge = slot.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const maxAge = maxAgeFor(slot, currency);
 
   if (age > maxAge) {
     return {
@@ -258,19 +357,70 @@ export function scoreSlot(
   }
 
   /**
-   * What the print is measured against.
+   * What the print is measured against, and what to do when that is missing.
    *
-   * `forecast` is the default and needs a consensus — without one there is no
-   * beat or miss to read, so the slot goes unscored rather than quietly falling
-   * back to the previous print. "Above last month" is a different claim from
-   * "above what the market expected".
+   * `forecast` is the default and wants a consensus. Where one exists nothing
+   * below changes: "above what the market expected" remains a strictly stronger
+   * claim than "above last month", and every column that can make it still does.
    *
-   * `previous` is PMI only, and there it is A1's actual rule rather than a
-   * fallback.
+   * WHERE NO FORECAST EXISTS, READ THE DIRECTION OFF THE PRIOR PRINT.
+   *
+   * This is A1's rule, not an approximation of it. Their per-country economic
+   * heatmaps publish a Surprise column beside Actual, Forecast and Previous, and
+   * wherever Forecast is blank the Surprise is exactly `actual − previous`:
+   *
+   *   NZ  Manufacturing PMI   56.1 − 51.4 = 4.7
+   *   NZ  Services PMI        51.5 − 46.9 = 4.6
+   *   JP  Services PMI        53.9 − 49.4 = 4.5
+   *   AU  PPI YoY              3.5 −  3.4 = 0.1
+   *
+   * The category it serves is permanent rather than a gap waiting to be filled:
+   * BusinessNZ's PMI and PSI carry a consensus on none of FXStreet, TradingView
+   * or ForexFactory, because no privately-run survey in New Zealand or Australia
+   * is polled ahead of time — only the official statistical agencies are.
+   * Holding out for a forecast that will never come left four of New Zealand's
+   * macro columns scoring nothing at all.
+   *
+   * IT WAS TRIED ONCE BEFORE AND REVERTED, on a measurement that moved parity
+   * from 48 to 54. That measurement was confounded, and the confound is now
+   * removed: the six rows that got worse were all NZD or AUD, and most of the
+   * damage came from two legs A1 does not have at all — Westpac and ANZ-Roy
+   * Morgan consumer confidence, which their heatmaps carry no row for. Those
+   * series are gone (see the consumer-confidence slot), and New Zealand's retail
+   * column now resolves to the quarterly Stats NZ series they actually use.
+   *
+   * REMOVING IT WAS TRIED AGAIN ON 2026-08-21 AND IS SETTLED. TOTAL ABS GAP fell
+   * 63 -> 57, which looks like a win until the rows are read: 9 improved and 5
+   * got worse, and they split perfectly along the line this comment draws.
+   * Everything that improved was a JPY row (JPYX, JP225, USDJPY, CHFJPY, AUDJPY,
+   * GBPJPY) and improved for the WRONG reason — A1 has a forecast for Jibun Bank
+   * Services PMI that our calendars do not carry, so blanking the cell moved us
+   * toward their -1 by accident, from +1 to 0 rather than to -1. Everything that
+   * got worse was NZD (GBPNZD, NZDCAD, NZDJPY), where A1 genuinely has no
+   * forecast and reads the prior print exactly as the cards above show.
+   *
+   * So the six points were bought by breaking the rule where it is right in order
+   * to paper over a data gap where it is not the problem. The gap to close is
+   * consensus coverage for the JP flash PMIs — the flash prints carry an actual
+   * and no forecast, while the following month's final carries a forecast and no
+   * actual, and ForexFactory's backfill lends 0 of the 69 rows it offers.
+   *
+   * Where a forecast DOES exist nothing here changes. "Above what the market
+   * expected" remains a strictly stronger claim than "above last month", and the
+   * cell records which basis it used so the card can say so rather than letting a
+   * reader assume.
+   *
+   * `previous` as a slot-level setting is a different thing: there it is the
+   * intended rule rather than a fallback, and it is left alone.
    */
-  const againstPrevious = slot.compare === 'previous';
-  const reference = againstPrevious ? event.previous : event.consensus;
-  const referenceLabel = againstPrevious ? 'previous' : 'forecast';
+  const againstPrevious = compareFor(slot, currency) === 'previous';
+  let reference = againstPrevious ? priorPrint(event) : event.consensus;
+  let referenceLabel: 'forecast' | 'previous' = againstPrevious ? 'previous' : 'forecast';
+
+  if ((reference === null || reference === undefined) && !againstPrevious) {
+    reference = priorPrint(event);
+    referenceLabel = 'previous';
+  }
 
   if (reference === null || reference === undefined || event.actual === null) {
     return {
@@ -278,13 +428,14 @@ export function scoreSlot(
       event,
       ageDays: Math.round(age),
       status: 'not-released',
-      explanation: `${event.name}: no ${referenceLabel} to compare against`,
+      // Nothing to compare against at all — no forecast AND no prior print.
+      explanation: `${event.name}: no forecast or previous print to compare against`,
     };
   }
 
   // Sigma no longer drives the cell, but it is still the most informative thing
   // to show a reader, so it is computed and carried through.
-  const surprise = computeSurprise(event);
+  const surprise = computeSurprise(event, reference);
 
   // Polarity converts "the number went up" into "the currency should go up".
   const polarity = slot.polarity ?? 1;
@@ -304,10 +455,16 @@ export function scoreSlot(
     event,
     sigma: surprise.sigma === null ? null : Math.round(surprise.sigma * 100) / 100,
     ageDays: Math.round(age),
+    referenceLabel,
     explanation:
       `${event.name}: ${event.actual}${event.unit ?? ''} vs ${reference}${event.unit ?? ''} ${referenceLabel}` +
       sigmaNote +
-      (polarity === -1 ? ', inverted — higher is bearish here' : ''),
+      (polarity === -1 ? ', inverted — higher is bearish here' : '') +
+      // A cell built on last month's print is a weaker claim than one built on a
+      // forecast, and must not read the same.
+      (referenceLabel === 'previous' && !againstPrevious
+        ? ' — no forecast is published for this series, so the direction is read against the prior print'
+        : ''),
   };
 }
 
@@ -329,15 +486,18 @@ function scoreCompositeSlot(
   now: Date,
 ): SlotResult {
   const base = { slotKey: slot.key, currency, cell: null, event: null, sigma: null, ageDays: null };
-  const maxAge = slot.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const maxAge = maxAgeFor(slot, currency);
   const polarity = slot.polarity ?? 1;
-  const againstPrevious = slot.compare === 'previous';
+  const againstPrevious = compareFor(slot, currency) === 'previous';
 
   const scored: ComponentResult[] = [];
   let sawStale = false;
 
   for (const component of slot.components ?? []) {
-    const event = resolveSeries(component, currency, events, slot.compare ?? 'forecast');
+    const event = resolveSeries(component, currency, events, compareFor(slot, currency), {
+      now,
+      maxAgeDays: maxAge,
+    });
     if (!event || event.actual === null) continue;
 
     if (ageInDays(event.dateUtc, now) > maxAge) {
@@ -345,7 +505,7 @@ function scoreCompositeSlot(
       continue;
     }
 
-    const reference = againstPrevious ? event.previous : event.consensus;
+    const reference = againstPrevious ? priorPrint(event) : event.consensus;
     if (reference === null || reference === undefined) continue;
 
     scored.push({

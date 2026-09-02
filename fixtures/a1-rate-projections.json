@@ -1,0 +1,147 @@
+{
+  "_readme": [
+    "DATED SNAPSHOTS OF A1'S INTEREST RATE PROJECTIONS PAGE. Append-only.",
+    "",
+    "Their page has a currency filter and nothing else -- no date control, no",
+    "history, no revision log -- so a projection read today cannot be rewound to a",
+    "past board. The only way this series ever becomes replayable is by reading it",
+    "again on a new day and appending. That is why this file exists separately from",
+    "the round fixtures: those record what was true on one day, this accumulates.",
+    "",
+    "ONE ENTRY PER READING. Never edit an existing entry to 'correct' it -- a",
+    "reading is a fact about a day, and a page that has since changed does not make",
+    "yesterday's reading wrong. Append a new one.",
+    "",
+    "`observedAt` is OUR reading date and is the only date used for replay.",
+    "",
+    "AS OF 2026-09-01 THIS IS A PRODUCTION INPUT. The 2026-09-01 reading is the first that",
+    "covers all eight majors, which is what unblocked the rule -- a differenced column cannot",
+    "be adopted one currency at a time. `resolveConsensusProjectionLegs` is all-or-nothing for",
+    "exactly that reason: a board where any major is uncovered uses none of this.",
+    "",
+    "`quarterValueStep` records how coarsely a reading was transcribed, and the resolver treats",
+    "anything within half a step of the standing rate as unreadable rather than as a move."
+  ],
+  "snapshots": [
+    {
+      "observedAt": "2026-08-30",
+      "sourceUpdatedAt": null,
+      "source": "a1trading.com EdgeFinder -> Interest Rate Projections, and Interest Rates - Historical Data (both free)",
+      "provenance": "Transcribed from fixtures/a1-rates-and-index-2026-08-30.json, which recorded the same reading in its round context. Quarter values are tooltip-confirmed to one decimal; policy rates are the Interest Rates page's Aug 2026 bar, NOT the carry-trade scanner (the two disagree on EUR by 0.25 -- see that fixture's a1InternalRateInconsistency).",
+      "policyRates": {
+        "USD": 3.75,
+        "GBP": 3.75,
+        "EUR": 2.4,
+        "NZD": 2.25,
+        "CHF": 0.0
+      },
+      "projectionsByQuarter": {
+        "2026Q2": {
+          "GBP": 3.75,
+          "USD": 3.75,
+          "NZD": 2.5,
+          "EUR": 2.4,
+          "CHF": 0.0
+        },
+        "2026Q3": {
+          "GBP": 4.0,
+          "USD": 3.75,
+          "NZD": 2.75,
+          "EUR": 2.65,
+          "CHF": 0.0
+        },
+        "2026Q4": {
+          "GBP": 4.0,
+          "USD": 4.0,
+          "NZD": 3.0,
+          "EUR": 2.65,
+          "CHF": 0.0
+        },
+        "2027Q1": {
+          "GBP": 4.15,
+          "USD": 4.0,
+          "NZD": 3.45,
+          "EUR": 2.9,
+          "CHF": 0.0
+        },
+        "2027Q2": {
+          "GBP": 4.2,
+          "USD": 4.2,
+          "NZD": 3.75,
+          "EUR": 2.9,
+          "CHF": 0.0
+        }
+      },
+      "quarterValueStep": 0.01
+    },
+    {
+      "observedAt": "2026-09-01",
+      "sourceUpdatedAt": null,
+      "source": "a1trading.com/interest-rates-data/ -> the embedded EdgeFinder \"Free Economic Data\" Looker report, page \"Interest Rate Projections\"; standing rates from fixtures/a1-policy-rates-2026-08-31.csv (their Interest Rates page, read 2026-08-31).",
+      "provenance": "Read from the bar chart's own hover tooltips, which print every selected currency for one quarter at once. Taken in two passes because the currency filter caps what is legible: AUD/CAD/CHF/NZD first, then AUD/CAD/CHF/EUR/GBP/JPY/USD, with AUD, CAD and CHF read in BOTH passes and identical in both -- that overlap is the only check available that the filter change did not move the series. THE TOOLTIP ROUNDS TO ONE DECIMAL, hence quarterValueStep 0.1: AUD 4.4 against a standing 4.35 and CAD 2.3 against 2.25 are each exactly half a step away and CANNOT be told from equality, which is why the resolver refuses to call them. A 25bp move would round clear of the band, so the rounding cannot hide a real decision.",
+      "quarterValueStep": 0.1,
+      "policyRates": {
+        "USD": 3.75,
+        "EUR": 2.15,
+        "GBP": 3.75,
+        "JPY": 0.75,
+        "AUD": 4.35,
+        "NZD": 2.25,
+        "CAD": 2.25,
+        "CHF": 0.0
+      },
+      "projectionsByQuarter": {
+        "2026Q2": {
+          "USD": 3.8,
+          "EUR": 2.4,
+          "GBP": 3.8,
+          "JPY": 1.0,
+          "AUD": 4.4,
+          "NZD": 2.5,
+          "CAD": 2.3,
+          "CHF": 0.0
+        },
+        "2026Q3": {
+          "USD": 4.0,
+          "EUR": 2.7,
+          "GBP": 4.0,
+          "JPY": 1.3,
+          "AUD": 4.4,
+          "NZD": 2.8,
+          "CAD": 2.3,
+          "CHF": 0.0
+        },
+        "2026Q4": {
+          "USD": 4.0,
+          "EUR": 2.7,
+          "GBP": 4.0,
+          "JPY": 1.5,
+          "AUD": 4.4,
+          "NZD": 3.0,
+          "CAD": 2.3,
+          "CHF": 0.0
+        },
+        "2027Q1": {
+          "USD": 4.0,
+          "EUR": 2.9,
+          "GBP": 4.3,
+          "JPY": 1.5,
+          "AUD": 4.4,
+          "NZD": 3.5,
+          "CAD": 2.3,
+          "CHF": 0.0
+        },
+        "2027Q2": {
+          "USD": 4.3,
+          "EUR": 2.9,
+          "GBP": 4.3,
+          "JPY": 1.5,
+          "AUD": 4.4,
+          "NZD": 3.8,
+          "CAD": 2.3,
+          "CHF": 0.0
+        }
+      }
+    }
+  ]
+}

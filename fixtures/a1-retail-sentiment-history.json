@@ -1,0 +1,85 @@
+{
+  "_readme": [
+    "A1'S OWN DAILY RETAIL SENTIMENT, read off their free 'Retail Sent. History'",
+    "page. This is the ORACLE the Crowd column is validated against. It is not a",
+    "transcription of a screenshot: each series was read out of the rendered",
+    "chart's own accessible data table, with the dates taken from that same",
+    "chart's x-axis labels, so a value and its date come from one element pair.",
+    "",
+    "WHY IT MATTERS MORE THAN THE SNAPSHOT PAGE. The sibling 'Retail Sentiment'",
+    "page shows one bar per symbol for the latest available row, which is enough",
+    "to read A1's Bearish/Bullish/Neutral banding off but cannot be joined to a",
+    "Top Setups capture from a past date. This page can: it publishes a value per",
+    "symbol PER DAY, so a crowd cell captured on 2026-08-24 can be checked",
+    "against the long share A1 themselves recorded on 2026-08-24.",
+    "",
+    "IT IS EVIDENCE, NOT A FEED. Nothing in this repo fetches these pages at",
+    "runtime and nothing should: they are embedded Looker Studio reports over A1's",
+    "proprietary 'EdgeFinder Pro' data, with no documented API. The standing rule",
+    "is no scraping and no undocumented endpoint as a production dependency."
+  ],
+
+  "source": {
+    "page": "a1trading.com/retail-sentiment/ -> lookerstudio.google.com/embed/reporting/cfd37bd1-45ce-459a-8d11-b6b7eac72b0d/page/p_1jk2lb88md ('Retail Sent. History')",
+    "readAtUtc": "2026-08-30",
+    "dateRangeShown": "1 Jul 2026 - 31 Aug 2026",
+    "method": "Per symbol: set the report's Asset control, then read the 'RetailSentiment Long' column out of the chart's own <table> data representation and pair it index-for-index with the date labels rendered on the same chart's axis. Both series come from the chart element itself; neither was estimated from pixels.",
+    "attribution": "Chart footer reads 'Source: A1 EdgeFinder Pro | www.a1trading.com'. No upstream provider is named on any A1 page.",
+    "coverage": "Major pairs, minor pairs (crosses), metals, indices and commodities. NO currency-index rows -- searching the Asset control for 'POUND' returns nothing, so GB-POUND and its siblings exist only on the snapshot page. That is why the index rule has to be derived from the dollar pair rather than read directly."
+  },
+
+  "_seriesNote": [
+    "Long share of open retail positions, percent, quoted ON THE PAIR AS NAMED.",
+    "FX rows are whole integers; CFD rows (metals, indices) carry two decimals.",
+    "Only the tail of each series is recorded -- the dates this repo holds A1 Top",
+    "Setups cells for, plus enough surrounding days to show the trend is not a",
+    "single noisy print. EURUSD/GBPUSD/EURCHF/GBPCHF for 08-21..08-25 were already",
+    "on file from the previous round and are repeated here unchanged; re-reading",
+    "EURUSD today reproduced 21 / 25 / 28 exactly."
+  ],
+
+  "series": {
+    "EURUSD": { "2026-08-21": 21, "2026-08-24": 25, "2026-08-25": 28, "2026-08-26": 27, "2026-08-27": 29, "2026-08-28": 32 },
+    "GBPUSD": { "2026-08-21": 29, "2026-08-24": 31, "2026-08-25": 30 },
+    "EURCHF": { "2026-08-21": 34, "2026-08-24": 32, "2026-08-25": 23 },
+    "GBPCHF": { "2026-08-21": 45, "2026-08-24": 36, "2026-08-25": 23 },
+    "NZDUSD": { "2026-08-21": 30, "2026-08-24": 29, "2026-08-25": 31, "2026-08-26": 32, "2026-08-27": 37, "2026-08-28": 35, "2026-08-29": 48 },
+    "USDCHF": { "2026-08-17": 67, "2026-08-18": 62, "2026-08-19": 61, "2026-08-20": 84, "2026-08-21": 82, "2026-08-24": 79, "2026-08-25": 74, "2026-08-26": 72, "2026-08-27": 67, "2026-08-28": 69 },
+    "GOLD": { "2026-08-19": 92.42, "2026-08-20": 92.23, "2026-08-21": 93.87, "2026-08-24": 95.08, "2026-08-25": 96.1, "2026-08-26": 94.41, "2026-08-27": 91.18, "2026-08-28": 58.13 },
+    "SILVER": { "2026-08-19": 91.87, "2026-08-20": 91.57, "2026-08-21": 90.9, "2026-08-24": 91.05, "2026-08-25": 90.99, "2026-08-26": 90.33, "2026-08-27": 84.66, "2026-08-28": 85.3 }
+  },
+
+  "_snapshotIsNotThisSeries": [
+    "The snapshot page and this history page do NOT agree on the same day, and",
+    "the difference is recorded rather than reconciled away. On 2026-08-30 the",
+    "snapshot read EURUSD 47, USDCHF 61 and GOLD 10.84; this history's last point",
+    "for those symbols is 2026-08-28 at 32, 69 and 58.13. NZDUSD is the one symbol",
+    "with a 2026-08-29 point here, and it reads 48 -- exactly the snapshot's NZDUSD.",
+    "So the snapshot is each symbol's LATEST row and the history simply lags for",
+    "some symbols, OR the two are populated by different jobs. Either way: join a",
+    "Top Setups capture to THIS file, never to the snapshot, and do not date the",
+    "snapshot's numbers by the day they were read."
+  ],
+
+  "topSetupsJoin": {
+    "_note": "The section-1E validation. Every (symbol, date) where this repo holds BOTH an A1 Top Setups crowd cell and an A1 long share for the same date. Date-scoped: no row mixes 08-24 with 08-25. `via` names which resolution rung produced the long share.",
+    "rows": [
+      { "symbol": "EURUSD", "date": "2026-08-24", "via": "own symbol",            "longPct": 25,    "expectedCell": 1,  "a1Cell": 1,  "match": true },
+      { "symbol": "GBPUSD", "date": "2026-08-24", "via": "own symbol",            "longPct": 31,    "expectedCell": 1,  "a1Cell": 1,  "match": true },
+      { "symbol": "EURCHF", "date": "2026-08-24", "via": "own symbol (a cross)",  "longPct": 32,    "expectedCell": 1,  "a1Cell": 1,  "match": true },
+      { "symbol": "EURX",   "date": "2026-08-24", "via": "index <- EURUSD",       "longPct": 25,    "expectedCell": 1,  "a1Cell": 1,  "match": true },
+      { "symbol": "XAUUSD", "date": "2026-08-24", "via": "own symbol (GOLD)",     "longPct": 95.08, "expectedCell": -1, "a1Cell": -1, "match": true },
+      { "symbol": "XAGUSD", "date": "2026-08-24", "via": "own symbol (SILVER)",   "longPct": 91.05, "expectedCell": -1, "a1Cell": -1, "match": true },
+      { "symbol": "NZDX",   "date": "2026-08-25", "via": "index <- NZDUSD",       "longPct": 31,    "expectedCell": 1,  "a1Cell": 1,  "match": true },
+      { "symbol": "CHFX",   "date": "2026-08-25", "via": "index <- 100 - USDCHF", "longPct": 26,    "expectedCell": 1,  "a1Cell": 1,  "match": true }
+    ],
+    "_result": "8 of 8. The set is not trivially easy: it spans two capture dates, two majors, one CROSS (which has no futures contract and which a differenced model gets wrong), two METALS, and three CURRENCY INDICES -- two of them reached only through the derived dollar-pair rule, one of those inverted. The 40/60 bands and the per-symbol architecture reproduce every one.",
+    "_whatItDoesNotShow": "It does not identify A1's upstream provider, and it does not show that a bought feed would agree with A1 to the point. It shows that GIVEN A1's own long share, the transformation in `lib/scoring/crowd.ts` returns A1's own cell."
+  },
+
+  "_metalsCorrection": {
+    "claim": "A previous round recorded that 'metals, indices and commodities use a put/call ratio instead' of retail sentiment, inferred from the two-decimal formatting of those rows.",
+    "finding": "The formatting split is real but the conclusion was not. GOLD and SILVER appear in this same Retail Sentiment dataset with per-day long shares, and on 2026-08-24 those shares (95.08 and 91.05) score -1 under the unchanged 40/60 rule -- which is exactly A1's XAUUSD and XAGUSD crowd cell for that date. The demo does carry a separate 'Put-Call Ratio' page, so a put/call series exists; it is not what the Crowd column reads for metals.",
+    "consequence": "None for production today. Those two cells already resolve correctly from their own CFTC contracts, so nothing changes; but a retail feed keyed on metals would now be expected to agree rather than to break them."
+  }
+}

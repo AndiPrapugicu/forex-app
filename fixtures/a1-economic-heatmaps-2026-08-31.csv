@@ -1,0 +1,64 @@
+country,row,series,daysSince,releaseDate,surprise,actual,forecast,previous,currencyImpact,stocksImpact
+US,1,GDP Growth QoQ,5,2026-08-26,0.0,1.5,1.5,2.1,Neutral,Neutral
+US,2,Manufacturing PMIs,28,2026-08-03,1.6,55.6,54,53.3,Bullish,Bullish
+US,3,Services PMIs,26,2026-08-05,-0.4,54.1,54.5,54,Bearish,Bearish
+US,4,Retail Sales MoM,17,2026-08-14,-0.7,-0.6,0.1,0.2,Bearish,Bearish
+US,5,CPI YoY,19,2026-08-12,0.0,3.4,3.4,3.5,Neutral,Neutral
+US,6,PPI YoY,18,2026-08-13,-0.2,4.7,4.9,5.5,Bearish,Bullish
+US,7,PCE YoY,5,2026-08-26,0.0,3.3,3.3,3.3,Neutral,Neutral
+US,8,Wage Growth YoY,24,2026-08-07,-0.3,3.2,3.5,3.4,Bearish,Bearish
+US,9,Unemployment Rate,24,2026-08-07,-0.1,4.1,4.2,4.2,Bullish,Bullish
+US,10,Non-Farm Payroll,24,2026-08-07,-108,-23,85,57,Bearish,Bearish
+US,11,ADP,26,2026-08-05,-24,44,68,98,Bearish,Bearish
+US,12,JOLTS Job Openings,27,2026-08-04,-0.08,7.36,7.44,7.54,Bearish,Bearish
+US,13,US Initial Jobless Claims,4,2026-08-27,-5,203,208,207,Bullish,Bullish
+EU,1,GDP Growth QoQ,17,2026-08-14,0.0,0.4,0.4,0.0,Neutral,Neutral
+EU,2,Manufacturing PMIs,10,2026-08-21,1,52.8,51.8,51.9,Bullish,Bullish
+EU,3,Services PMIs,10,2026-08-21,0.2,51.7,51.5,51.7,Bullish,Bullish
+EU,4,Retail Sales MoM,25,2026-08-06,-0.4,-0.3,0.1,0.2,Bearish,Bearish
+EU,5,CPI YoY,12,2026-08-19,0.0,2.9,2.9,2.8,Neutral,Neutral
+EU,6,PPI YoY,26,2026-08-05,0.0,4.6,4.6,5.9,Neutral,Neutral
+EU,9,Unemployment Rate,32,2026-07-30,0.1,6.3,6.2,6.3,Bearish,Bearish
+UK,1,GDP Growth QoQ,18,2026-08-13,0.0,0.4,0.4,0.6,Neutral,Neutral
+UK,2,Manufacturing PMIs,10,2026-08-21,-0.1,51.5,51.6,51.9,Bearish,Bearish
+UK,3,Services PMIs,10,2026-08-21,1,52.8,51.8,52.1,Bullish,Bullish
+UK,4,Retail Sales MoM,10,2026-08-21,-0.1,-0.5,-0.4,1,Bearish,Bearish
+UK,5,CPI YoY,12,2026-08-19,0.0,2.9,2.9,2.6,Neutral,Neutral
+UK,6,PPI YoY,12,2026-08-19,-0.1,3.1,3.2,3.5,Bearish,Bullish
+UK,9,Unemployment Rate,13,2026-08-18,0.1,4.9,4.8,4.9,Bearish,Bearish
+JP,1,GDP Growth QoQ,14,2026-08-17,-0.2,0.3,0.5,0.5,Bearish,Bearish
+JP,2,Manufacturing PMIs,10,2026-08-21,0,55.1,55.1,54.5,Neutral,Neutral
+JP,3,Services PMIs,10,2026-08-21,1.1,52.3,,51.2,Bullish,Bullish
+JP,4,Retail Sales YoY,1,2026-08-30,0.8,4,3.2,0.5,Bullish,Bullish
+JP,5,CPI YoY,11,2026-08-20,0.3,1.9,,1.6,Bullish,Bearish
+JP,6,PPI YoY,18,2026-08-13,-0.2,7.2,7.4,7.3,Bearish,Bullish
+JP,7,Household Spending,25,2026-08-06,-4.3,-3.3,1.0,-0.4,Bearish,Bullish
+JP,9,Unemployment Rate,4,2026-08-27,-0.1,2.4,2.5,2.5,Bullish,Bullish
+CA,1,GDP Growth QoQ,3,2026-08-28,0.7,0.8,,0.1,Bullish,Bullish
+CA,2,Manufacturing PMIs,27,2026-08-04,1.3,53.5,52.2,53,Bullish,Bullish
+CA,3,Services PMIs,122,2026-05-01,1.4,50.6,,49.2,Bullish,Bullish
+CA,4,Retail Sales MoM,10,2026-08-21,-1.8,-0.8,1,,Bearish,Bearish
+CA,5,CPI YoY,14,2026-08-17,0.1,3.0,2.9,2.8,Bullish,Bearish
+CA,6,PPI YoY,11,2026-08-20,0.4,12.4,12.0,12.4,Bullish,Bearish
+CA,9,Unemployment Rate,24,2026-08-07,-0.1,6.4,6.5,6.5,Bullish,Bullish
+CA,13,Employment Change,206,2026-02-06,0,,,,Neutral,Neutral
+AU,1,GDP Growth QoQ,89,2026-06-03,-0.2,0.3,0.5,0.9,Bearish,Bearish
+AU,2,Manufacturing PMIs,10,2026-08-21,0,52,,52,Neutral,Neutral
+AU,3,Services PMIs,11,2026-08-20,-0.7,52.9,,53.6,Bearish,Bearish
+AU,5,CPI YoY,5,2026-08-26,0.2,3.5,3.3,3.8,Bullish,Bearish
+AU,6,PPI YoY,31,2026-07-31,0.6,3.6,,3.0,Bullish,Bearish
+AU,9,Unemployment Rate,11,2026-08-20,0.1,4.5,4.4,4.4,Bearish,Bearish
+NZ,1,GDP Growth QoQ,74,2026-06-18,0.0,0.8,0.8,0.5,Neutral,Neutral
+NZ,2,Manufacturing PMIs,17,2026-08-14,-5.4,54.3,,59.7,Bearish,Bearish
+NZ,3,Services PMIs,122,2026-05-01,-1.2,47.5,,48.7,Bearish,Bearish
+NZ,4,Retail Sales QoQ,8,2026-08-23,-0.6,-0.5,0.1,0.9,Bearish,Bearish
+NZ,5,CPI YoY,42,2026-07-20,0.1,4.1,4.0,3.1,Bullish,Bearish
+NZ,6,PPI QoQ,12,2026-08-19,0.8,1.6,0.8,0.8,Bullish,Bearish
+NZ,9,Unemployment Rate,27,2026-08-04,0.2,5.6,5.4,5.4,Bearish,Bearish
+CH,1,GDP Growth QoQ,17,2026-08-14,0.8,1.5,,0.7,Bullish,Bullish
+CH,2,Manufacturing PMIs,28,2026-08-03,-1.3,53.2,54.5,54.3,Bearish,Bearish
+CH,3,Services PMIs,10,2026-08-21,0.2,51.7,51.5,51.7,Bullish,Bullish
+CH,4,Retail Sales YoY,31,2026-07-31,-1.6,1.5,3.1,3.5,Bearish,Bearish
+CH,5,CPI YoY,28,2026-08-03,0.0,0.4,0.4,0.5,Neutral,Neutral
+CH,6,PPI YoY,18,2026-08-13,0.0,-2.1,,-2.1,Neutral,Neutral
+CH,9,Unemployment Rate,25,2026-08-06,0.1,3.0,,2.9,Bearish,Bearish

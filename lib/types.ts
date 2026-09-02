@@ -309,8 +309,21 @@ export type Result<T> =
   | { ok: true; data: T; source: string; fetchedAtUtc: string; degraded?: string }
   | { ok: false; error: string; source: string; fetchedAtUtc: string };
 
-export function ok<T>(source: string, data: T, degraded?: string): Result<T> {
-  return { ok: true, data, source, fetchedAtUtc: new Date().toISOString(), degraded };
+/**
+ * A successful result.
+ *
+ * `fetchedAtUtc` defaults to NOW, which is right for a real fetch and wrong
+ * for a cache hit — the payload was fetched when it was stored, not when it was
+ * read. Callers serving from cache pass the stored time so the health table
+ * reports the age of the DATA rather than the age of the lookup.
+ */
+export function ok<T>(
+  source: string,
+  data: T,
+  degraded?: string,
+  fetchedAtUtc: string = new Date().toISOString(),
+): Result<T> {
+  return { ok: true, data, source, fetchedAtUtc, degraded };
 }
 
 export function fail<T>(source: string, error: string): Result<T> {
@@ -321,7 +334,22 @@ export function fail<T>(source: string, error: string): Result<T> {
 export interface SourceHealth {
   source: string;
   ok: boolean;
+  /**
+   * Something is WRONG. Callers treat a present `detail` on an ok source as
+   * "degraded" and colour it as a warning, so routine information must not go
+   * here — see `note`.
+   */
   detail?: string;
+  /**
+   * Something is worth KNOWING, with nothing wrong.
+   *
+   * Split out from `detail` because the backfill's yield ("lent 70 of 1,526
+   * offered") is exactly the number whose absence let that source sit broken
+   * unnoticed — and putting it in `detail` bought the visibility by parking a
+   * healthy source in the warning list forever, which is how a warning list
+   * stops being read.
+   */
+  note?: string;
   fetchedAtUtc: string;
 }
 

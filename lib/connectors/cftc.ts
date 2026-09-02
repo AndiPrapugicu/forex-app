@@ -307,6 +307,33 @@ export async function fetchCotData(): Promise<Result<Map<string, CotSeries>>> {
   return ok(CFTC.name, out, notes.length > 0 ? notes.join('; ') : undefined);
 }
 
+/**
+ * Days between the Tuesday survey and the Friday release.
+ *
+ * Not a tuning knob — it is the CFTC's fixed publication schedule, stated in
+ * this file's header since the connector was written.
+ */
+export const COT_PUBLICATION_LAG_DAYS = 3;
+
+/**
+ * When a report became public, given the Tuesday it surveyed.
+ *
+ * EXPORTED BECAUSE THE SURVEY DATE IS NOT THE KNOWABLE DATE, and anything
+ * rewinding the board to a past moment has to ask the second question rather
+ * than the first. `lib/scoring/backtest.ts` asked the first one until
+ * 2026-08-30, which let a replay of Tuesday 2026-08-25 score itself against a
+ * report that did not exist until Friday 2026-08-28 — three days of look-ahead
+ * on both sentiment columns.
+ *
+ * Lives here rather than at the call site so the schedule stays with the source
+ * that owns it. The header above already described it; nothing read it.
+ */
+export function publicationDate(reportDate: string): string {
+  const d = new Date(`${reportDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + COT_PUBLICATION_LAG_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Most recent report date across all contracts — what the UI must display. */
 export function latestReportDate(data: Map<string, CotSeries>): string | null {
   let latest: string | null = null;

@@ -64,6 +64,81 @@ describe('computeSeasonality', () => {
     expect(result[12]?.years).toBe(1); // Nov->Dec is fine
   });
 
+  /**
+   * REGRESSION: the seasonality series must come from DAILY bars.
+   *
+   * `computeSeasonality` was fed Yahoo's `interval=1mo` series, which is corrupt
+   * in a way the two tests above only half-mitigate. Dedupe handles the repeated
+   * March and the gap guard handles the missing October — but neither can fix a
+   * close stamped with the wrong month, and that is what it also does. Measured
+   * on EURUSD=X, August returns, monthly series against the same months derived
+   * from dailies:
+   *
+   *          2022     2023     2024     2025
+   *   1mo   -1.95%   -3.15%   +0.98%   +0.39%
+   *   1d    -1.66%   -1.40%   +2.37%   +2.35%
+   *
+   * The daily column is the market (EURUSD ran 1.0223 -> 1.0054 in August 2022,
+   * which is -1.66%). Over ten completed Augusts the two disagree on the SIGN:
+   * -0.85% against +0.19%, so EURUSD scored seasonality -1 where A1 scores +1.
+   *
+   * The guard is that a DAILY series must bucket to the same answer as a clean
+   * month-end one — which is the property that lets `computeTechnicals` pass the
+   * long-run daily history straight in.
+   */
+  it('buckets a DAILY series to the same months as a clean month-end one', () => {
+    // Three Junes at +10%, +10%, -5%, expressed as several bars per month so the
+    // dedupe has to pick the month's LAST close rather than its first.
+    const daily: number[] = [];
+    const stamps: number[] = [];
+    const monthEnds: Record<string, number> = {};
+
+    const push = (y: number, m: number, day: number, close: number) => {
+      stamps.push(Math.floor(Date.UTC(y, m - 1, day) / 1000));
+      daily.push(close);
+      monthEnds[`${y}-${m}`] = close;
+    };
+
+    for (const year of [2023, 2024, 2025]) {
+      // May: drifts around, ends at 100.
+      push(year, 5, 2, 90);
+      push(year, 5, 17, 130);
+      push(year, 5, 28, 100);
+      // June: ends at 110, 110, 95.
+      const end = year === 2025 ? 95 : 110;
+      push(year, 6, 3, 999); // an intramonth spike that must NOT be the bucket
+      push(year, 6, 27, end);
+    }
+
+    const fromDaily = computeSeasonality(stamps, daily);
+
+    expect(fromDaily[6]?.years).toBe(3);
+    expect(fromDaily[6]?.meanPct).toBeCloseTo((10 + 10 - 5) / 3, 5);
+    expect(fromDaily[6]?.winRatePct).toBe(67);
+  });
+
+  it('still drops the month IN PROGRESS when the series is daily', () => {
+    /**
+     * The in-progress guard is what stops a part-month being averaged in as a
+     * complete one, and a daily series makes that easy to get wrong — the last
+     * bar is mid-month rather than a month-end. On a symbol whose real August
+     * average is near zero, that one partial observation decides the cell.
+     */
+    const stamps = [
+      Math.floor(Date.UTC(2025, 6, 31) / 1000),
+      Math.floor(Date.UTC(2025, 7, 29) / 1000),
+      Math.floor(Date.UTC(2026, 6, 31) / 1000),
+      Math.floor(Date.UTC(2026, 7, 12) / 1000), // August 2026, still running
+    ];
+    const closes = [100, 110, 100, 50];
+
+    const august = computeSeasonality(stamps, closes, new Date('2026-08-24T00:00:00Z'))[8];
+
+    // One completed August at +10%. The -50% part-month is not an August return.
+    expect(august?.years).toBe(1);
+    expect(august?.meanPct).toBeCloseTo(10, 5);
+  });
+
   it('computes mean return and win rate per calendar month', () => {
     // Three consecutive Junes: +10%, +10%, -5%.
     const stamps = [
@@ -173,5 +248,79 @@ describe('scoreSeasonality', () => {
     expect(score.explanation).toMatch(/August/);
     expect(score.explanation).toMatch(/\+1.2%/);
     expect(score.explanation).toMatch(/70%/);
+  });
+
+  /**
+   * THE PREVIOUS MONTH IS CONTEXT, NEVER A VOTE.
+   *
+   * A1 does not roll this column at the month turn: scoring their 2026-09-01
+   * board against our August signs matched 45 of 51 where September matched 25,
+   * and 23 of the 26 rows where the two months disagree. So the September cell
+   * on our board and the August cell on theirs are both correct readings of the
+   * same averages, and the only defensible thing to do is score the current
+   * month and SAY what the previous one said.
+   *
+   * The scored cell must not move. That is what these pin.
+   */
+  describe('the previous month, shown but never scored', () => {
+    const september = new Date('2026-09-01T00:00:00Z');
+    const across = (august: number, sept: number) =>
+      scoreSeasonality(
+        makeTech({
+          seasonality: {
+            8: { meanPct: august, winRatePct: 60, years: 10 },
+            9: { meanPct: sept, winRatePct: 40, years: 10 },
+          },
+        }),
+        september,
+      )!;
+
+    it('scores the current month and reports the previous one beside it', () => {
+      const score = across(1.2, -0.8);
+      expect(score.cell).toBe(-1);
+      expect(score.previousMonthCell).toBe(1);
+      expect(score.previousMonthName).toBe('August');
+    });
+
+    it('says nothing when the two months agree', () => {
+      const score = across(1.2, 0.8);
+      expect(score.cell).toBe(1);
+      expect(score.previousMonthCell).toBeNull();
+      expect(score.previousMonthName).toBeNull();
+      expect(score.explanation).not.toMatch(/August/);
+    });
+
+    it('names the lag in the sentence a user reads on hover', () => {
+      expect(across(1.2, -0.8).explanation).toMatch(/August scored \+1/);
+      expect(across(1.2, -0.8).explanation).toMatch(/A1 has not always rolled/);
+    });
+
+    it('stays silent when the previous month is too thin to score', () => {
+      const score = scoreSeasonality(
+        makeTech({
+          seasonality: {
+            8: { meanPct: 1.2, winRatePct: 60, years: 3 },
+            9: { meanPct: -0.8, winRatePct: 40, years: 10 },
+          },
+        }),
+        september,
+      )!;
+      expect(score.cell).toBe(-1);
+      expect(score.previousMonthCell).toBeNull();
+    });
+
+    it('wraps from January back to December rather than looking for month 0', () => {
+      const score = scoreSeasonality(
+        makeTech({
+          seasonality: {
+            12: { meanPct: 1.2, winRatePct: 60, years: 10 },
+            1: { meanPct: -0.8, winRatePct: 40, years: 10 },
+          },
+        }),
+        new Date('2026-01-05T00:00:00Z'),
+      )!;
+      expect(score.previousMonthCell).toBe(1);
+      expect(score.previousMonthName).toBe('December');
+    });
   });
 });

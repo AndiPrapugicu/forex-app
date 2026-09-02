@@ -20,6 +20,7 @@ import {
 } from '@/config/setups.config';
 import { YAHOO } from '@/config/sources.config';
 import { fetchJson, fixturesEnabled } from '@/lib/connectors/base';
+import { fetchFredSeries, type DatedObservation } from '@/lib/connectors/yields';
 import { fail, ok, type Result } from '@/lib/types';
 
 interface YahooChart {
@@ -173,7 +174,8 @@ export interface DailyBars {
  */
 export async function fetchDailyBars(ticker: string): Promise<DailyBars | null> {
   const series = await fetchSeries(ticker, '2y', '1d', 3600);
-  return series ? toBars(series) : null;
+  if (!series) return null;
+  return toBars(ticker.endsWith(SPOT_FX_SUFFIX) ? redateSpotFridays(series) : series);
 }
 
 /**
@@ -243,7 +245,13 @@ export async function fetchSeasonalHistory(ticker: string): Promise<DailyBars | 
     SEASONAL_HISTORY_YEARS,
     SEASONAL_HISTORY_TTL_SECONDS,
   );
-  return series ? toBars(series) : null;
+  if (!series) return null;
+  /**
+   * Re-dated here too, because seasonality buckets by CALENDAR MONTH and a
+   * Friday stamped two days late crosses the boundary whenever a month ends on
+   * one — 31 July's session would be counted as August.
+   */
+  return toBars(ticker.endsWith(SPOT_FX_SUFFIX) ? redateSpotFridays(series) : series);
 }
 
 /**
@@ -282,6 +290,71 @@ function toBars(s: Series): DailyBars {
     closes: s.closes,
     ...(s.volumes ? { volumes: s.volumes } : {}),
   };
+}
+
+/**
+ * SPOT FX SUNDAY BARS ARE FRIDAY'S SESSION, MIS-STAMPED. They are re-dated, not
+ * dropped, and the difference between those two is the whole point.
+ *
+ * Yahoo's `=X` daily series returns SUNDAY, MONDAY, TUESDAY, WEDNESDAY,
+ * THURSDAY and never a Friday. Measured 2026-09-01 across all eight dollar
+ * majors plus EURGBP over three months, the weekday histogram is identical on
+ * every one of them: `{Sun 14, Mon 13, Tue 14, Wed 13, Thu 13}`. A feed that
+ * genuinely traded Sunday and not Friday, in perfect lockstep across nine
+ * unrelated symbols, is not a market — it is a labelling bug.
+ *
+ * Cross-checked against 6E=F euro futures, which carry clean Mon-Fri bars and
+ * are the same underlying:
+ *
+ *     futures Fri 2026-08-21  1.16930   <->   spot "Sun" 2026-08-23  1.16816
+ *     futures Fri 2026-08-28  1.15875   <->   spot "Sun" 2026-08-30  1.15890
+ *     futures Mon 2026-08-24  1.16745   <->   spot  Mon  2026-08-24  1.16683
+ *
+ * Monday through Thursday are correctly dated. Friday alone lands two days
+ * late. So the Sunday bar is a REAL SESSION with a wrong date, and the previous
+ * round's conclusion — recorded here as "weekend bars are kept on purpose,
+ * filtering them cost twelve points of parity" — was reasoning from a false
+ * premise. Filtering cost parity because it DELETED FRIDAY, not because A1
+ * reads junk bars.
+ *
+ * WHY THIS DOES NOT MOVE THE LIVE BOARD. A moving average reads bars in order,
+ * and re-dating preserves order, so today's trend cell is unchanged. What it
+ * fixes is every measurement that CUTS the series by date. `seriesAsOf` at a
+ * Friday close previously excluded that Friday's own session and silently
+ * scored the week one bar short — which is exactly what `npm run leg-parity`,
+ * `npm run backtest` and every rewound parity run do. A backtest that cannot
+ * see Friday is not a small error on Fridays; it is a different series.
+ *
+ * Applied to `=X` DAILY bars only. Futures (`=F`), indices and crypto are
+ * correctly dated already, and the intraday series is bucketed by `resampleBars`
+ * from real hourly timestamps.
+ */
+export const SPOT_FX_SUFFIX = '=X';
+
+/**
+ * Move Saturday- and Sunday-stamped bars back to the preceding Friday.
+ *
+ * A bar that collides with a Friday already present is left alone rather than
+ * overwriting it: the observed feed has no such collision, and if one ever
+ * appears it means the shape changed and the assumption above needs
+ * re-measuring, not silently applying.
+ */
+export function redateSpotFridays<T extends { timestamps: number[] }>(series: T): T {
+  const DAY = 86_400;
+  const present = new Set(series.timestamps);
+  let moved = 0;
+
+  const timestamps = series.timestamps.map((ts) => {
+    const day = new Date(ts * 1000).getUTCDay();
+    if (day !== 0 && day !== 6) return ts;
+    // Sunday is two days past Friday, Saturday one.
+    const friday = ts - (day === 0 ? 2 : 1) * DAY;
+    if (present.has(friday)) return ts;
+    moved++;
+    return friday;
+  });
+
+  return moved === 0 ? series : { ...series, timestamps };
 }
 
 /** Seconds per bucket for the resampled intraday view. */
@@ -506,6 +579,55 @@ function fetchSeries(
 }
 
 /**
+ * A price series with every bar after `at` dropped.
+ *
+ * WHY THIS EXISTS. `runSetupsPipeline` has always taken a `now` and handed it to
+ * the calendar connectors, so a rewound board scored its ECONOMIC columns
+ * against releases the frame had actually seen. It never handed it here. The
+ * moving averages — and therefore the TREND cell — were computed from the tail
+ * of the series no matter which date was being reproduced, so `scripts/parity.ts`
+ * printed "rewound to end of that day" over a comparison in which one column was
+ * not rewound at all. `component-parity.ts` had to label every trend cell
+ * LIVE_ONLY to say so, and six cells sat permanently as TIMING_CONFOUNDED
+ * because nothing could tell a real disagreement from a week of drift.
+ *
+ * MEASURED, 2026-08-30, against A1's eight checksummed trend cells: computed
+ * live ours matched SIX; cut off at each capture's own timestamp, EIGHT. EURCHF
+ * went +2 -> -1 and CHFX -2 -> +2, both landing exactly on A1's printed cell.
+ *
+ * THE FORMULA IS NOT TOUCHED. `scoreTrend` is unchanged, `TREND_SMA` is
+ * unchanged. Only the window they read is, which is the difference between
+ * fitting a rule to A1 and reproducing our own rule at the right moment.
+ *
+ * A NO-OP IN LIVE SCORING. When `at` is now, nothing is after it, and the same
+ * object is returned — `price` included, so the live board keeps reading Yahoo's
+ * `regularMarketPrice` rather than the last close.
+ */
+export function seriesAsOf<T extends DailyBars & { price?: number }>(series: T, at: Date): T {
+  const cutoff = Math.floor(at.getTime() / 1000);
+
+  let keep = series.timestamps.length;
+  while (keep > 0 && series.timestamps[keep - 1] > cutoff) keep -= 1;
+  if (keep === series.timestamps.length) return series;
+
+  return {
+    ...series,
+    timestamps: series.timestamps.slice(0, keep),
+    opens: series.opens.slice(0, keep),
+    highs: series.highs.slice(0, keep),
+    lows: series.lows.slice(0, keep),
+    closes: series.closes.slice(0, keep),
+    volumes: series.volumes?.slice(0, keep),
+    /**
+     * The live quote is an anachronism once bars have been dropped, and `price`
+     * is compared against the rewound averages to build `aboveCount`. The last
+     * close inside the window is the only price that existed at `at`.
+     */
+    ...(series.price === undefined || keep === 0 ? {} : { price: series.closes[keep - 1] }),
+  };
+}
+
+/**
  * The same call, windowed by explicit epoch bounds instead of a named range.
  *
  * Both bounds are SNAPPED TO THE DAY. An exact `now` would make the URL — and
@@ -721,7 +843,12 @@ async function computeForTicker(
   // Injected so a test can pin which month counts as in progress.
   now: Date = new Date(),
 ): Promise<TickerResult | null> {
-  const daily = await fetchSeries(ticker, '2y', '1d', 3600);
+  const raw = await fetchSeries(ticker, '2y', '1d', 3600);
+  // Re-date before cutting, or a rewind to a Friday close drops that Friday.
+  const fetched = raw && ticker.endsWith(SPOT_FX_SUFFIX) ? redateSpotFridays(raw) : raw;
+  // Cut to `now` BEFORE the length guard, so a rewind far enough back to leave
+  // too few bars declines to score rather than scoring a short window.
+  const daily = fetched ? seriesAsOf(fetched, now) : null;
   if (!daily || daily.closes.length < 20) return null;
 
   const { closes, price } = daily;
@@ -749,14 +876,53 @@ async function computeForTicker(
   const meanAbs = (arr: number[]) =>
     arr.length ? (arr.reduce((a, b) => a + Math.abs(b), 0) / arr.length) * 100 : null;
 
-  // Monthly series is much slower-moving, so it gets a 7-day cache.
   /**
-   * ONE YEAR MORE THAN THE WINDOW, for the reason the daily path already fetches
-   * `SEASONAL_HISTORY_YEARS`: the newest bar is the month in progress and gets
-   * dropped, and the oldest month-over-month return needs a predecessor to be
-   * measured against. Requesting exactly ten years left nine usable Augusts.
+   * SEASONALITY IS BUILT FROM THE DAILY SERIES, NOT YAHOO'S MONTHLY ONE.
+   *
+   * This used to fetch `range=11y&interval=1mo` and bucket that. The monthly
+   * series is corrupt, which `fetchSeasonalHistory` above has said in prose for
+   * as long as it has existed — "it returned March twice and omitted October for
+   * EURUSD" — while this line went on consuming it anyway. The scanners built
+   * from dailies for that reason; the SCORE did not, so one quantity had two
+   * sources and the scored one was the bad one.
+   *
+   * It is worse than holes. Measured on EURUSD=X on 2026-08-24, the monthly
+   * series carries TWO March bars in every one of the eleven years, and its
+   * closes do not match the month they are stamped with. August returns, monthly
+   * series against the same months derived from dailies:
+   *
+   *          2022     2023     2024     2025
+   *   1mo   -1.95%   -3.15%   +0.98%   +0.39%
+   *   1d    -1.66%   -1.40%   +2.37%   +2.35%
+   *
+   * The daily column is the real market: EURUSD ended July 2022 at 1.0223 and
+   * August at 1.0054, which is -1.66%. The monthly column is not off by rounding,
+   * it is off by about a month — the close stamped August is roughly September's.
+   *
+   * The cost of that was a scored cell with the wrong SIGN. Ten completed
+   * Augusts average -0.85% off the monthly series and +0.19% off the dailies, so
+   * EURUSD's seasonality scored -1 where A1 scores +1 — a two-point error on
+   * that row, and the largest single term in its gap.
+   *
+   * `computeSeasonality` needs no change to accept this: it already dedupes by
+   * year-month keeping the last bar, which turns a daily series into exactly the
+   * month-end series it wants.
+   *
+   * AND IT COSTS NOTHING. This is the same call, with the same cache key and the
+   * same 7-day TTL, that `fetchSeasonalHistories` already makes for the
+   * seasonality scanner pages — so on any warm cache it is served from the one
+   * already there, and the two surfaces can no longer disagree about the same
+   * ten Augusts.
    */
-  const monthly = await fetchSeries(ticker, `${SEASONAL_HISTORY_YEARS}y`, '1mo', 7 * 86400);
+  const monthlyFetched = await fetchSeasonalHistory(ticker);
+  /**
+   * Cut for the same reason, though it changes nothing at a week's rewind:
+   * `computeSeasonality` already drops the in-progress month via `now`, and both
+   * ends of a seven-day rewind sit in the same one. It matters for a rewind of
+   * months or years, where the untruncated history would average Augusts that
+   * had not happened yet.
+   */
+  const monthly = monthlyFetched ? seriesAsOf(monthlyFetched, now) : null;
 
   const technicals: Technicals = {
     symbol,
@@ -791,6 +957,11 @@ async function computeForTicker(
  */
 export async function fetchTechnicals(
   symbols: { symbol: string; yahoo: string }[],
+  /**
+   * The moment being reproduced. Bars after it are dropped — see `seriesAsOf`.
+   * Defaults to now, which drops nothing, so the live board is unaffected.
+   */
+  now: Date = new Date(),
 ): Promise<Result<Map<string, Technicals>>> {
   if (fixturesEnabled()) {
     /**
@@ -826,7 +997,7 @@ export async function fetchTechnicals(
 
     for (let i = 0; i < targets.length; i += BATCH) {
       const batch = targets.slice(i, i + BATCH);
-      const results = await Promise.all(batch.map((s) => computeForTicker(s.symbol, s.yahoo)));
+      const results = await Promise.all(batch.map((s) => computeForTicker(s.symbol, s.yahoo, now)));
       results.forEach((res, idx) => {
         if (!res) {
           missed.push(batch[idx]);
@@ -892,39 +1063,90 @@ export async function fetchTechnicals(
 export interface Yield2y {
   current: number;
   sma: number;
+  /**
+   * FRED's own observation date for `current`.
+   *
+   * Carried so a rewound board can be told apart from a live one at a glance.
+   * The previous source had no observation date to carry, which is part of why
+   * a 24bp stale quote went unnoticed for four rounds.
+   */
+  observedOn: string;
 }
 
 /** The health-table name for the 2-year yield, kept distinct from the bulk Yahoo row. */
-export const YIELD_2Y_SOURCE = `${YAHOO.name}:2y-yield`;
+/** The health-table name for the 2-year yield, kept distinct from the bulk Yahoo row. */
+export const YIELD_2Y_SOURCE = 'FRED:DGS2';
 
 /**
- * 2-year yield and its 21-day average.
+ * The US 2-year against its own 21-day average, REWOUND ON REQUEST.
  *
- * `2YY=F` is the CBOT 2-Year Yield future, which quotes the yield directly
- * rather than a price — verified live at 3.961 during planning. A rising short
- * yield is hawkish, so this feeds the dollar leg of the scorecard.
+ * SOURCE CHANGED 2026-08-31, and the old one was wrong in two ways at once.
+ * This read Yahoo's `2YY=F`, the CBOT 2-Year Yield future. A1's Asset Scorecard
+ * names the row verbatim "US02Yield (21 day SMA)" — the CONSTANT-MATURITY
+ * Treasury yield, which is FRED's DGS2 and not a futures contract on it. This
+ * repo was already fetching DGS2 in lib/connectors/yields.ts for the sovereign
+ * yield map, so the series their label names was one import away the whole time.
+ *
+ * AND THE OLD FEED WAS BROKEN, measured rather than suspected. On 2026-08-31
+ * Yahoo's live quote read 3.961 while DGS2 read 4.20 for the same instrument on
+ * the same day — 24bp apart — and its daily closes had sat at exactly 4.170 for
+ * twelve consecutive sessions while DGS2 took ten distinct values over the same
+ * window. The cell that comparison produced was a live quote from one regime
+ * measured against closes from another.
+ *
+ * THAT ACCIDENT WAS SCORING TWO CELLS CORRECTLY, and losing them is the point.
+ * XAUUSD and XAGUSD rates matched A1's +1 on the 2026-08-24 board because 3.961
+ * sits 5% below 4.172. Under DGS2 the same board reads 4.24 against a 4.219
+ * average — inside the flat band by 0.003 percentage points — and scores 0. An
+ * agreement produced by a 24bp feed error is not a reproduction of their rule,
+ * and this repo does not keep those. See the ledger, `rates:yield2y-source`.
+ *
+ * `asOf` closes the last look-ahead leak in `runBacktest`. It was previously
+ * impossible: a stalled series cannot be rewound, only mis-cut. With a series
+ * that moves, the cutoff is ordinary — and the DXY cell it produces at the
+ * 2026-08-25 board is -1, which is what their own DXY card says ("the 2yr yield
+ * is falling (dovish)").
  *
  * RETURNS A RESULT, not a bare null. This one source moves every commodity,
- * index and crypto row by ±1 when it goes missing, and it was the one source
- * absent from the pipeline's `health` array — so it could fail and shift a
- * third of the board with nothing anywhere saying it had. A null `data` with
- * `ok: true` is the offline case; a false `ok` is a real failure.
+ * index and crypto row by +/-1 when it goes missing, so a failure has to be
+ * visible in the health table rather than inferred from a board of zeroes.
  */
-export async function fetchYield2y(): Promise<Result<Yield2y | null>> {
+/**
+ * The reading itself, split out from the fetch so the cutoff is testable
+ * without a network stub — which is the whole of what went wrong here before.
+ *
+ * Null when the cut leaves fewer observations than the average needs, rather
+ * than averaging whatever is there: a 6-day "21-day average" is a different
+ * statistic wearing the same name.
+ */
+export function yield2yAsOf(
+  observations: readonly DatedObservation[],
+  asOf?: Date,
+): Yield2y | null {
+  const cutoff = asOf ? asOf.toISOString().slice(0, 10) : null;
+  const pool = cutoff ? observations.filter((o) => o.date <= cutoff) : observations;
+  if (pool.length < YIELD_SMA_DAYS) return null;
+
+  const window = pool.slice(-YIELD_SMA_DAYS);
+  const sma = window.reduce((a, b) => a + b.value, 0) / window.length;
+  const latest = pool[pool.length - 1];
+  return { current: latest.value, sma, observedOn: latest.date };
+}
+
+export async function fetchYield2y(asOf?: Date): Promise<Result<Yield2y | null>> {
   if (fixturesEnabled()) return ok(YIELD_2Y_SOURCE, null, 'offline: 2-year yield not captured as a fixture');
 
-  const series = await fetchSeries('2YY=F', '3mo', '1d', 3600);
-  if (!series) return fail(YIELD_2Y_SOURCE, '2YY=F unavailable');
+  const res = await fetchFredSeries('DGS2');
+  if (!res.ok) return fail(YIELD_2Y_SOURCE, 'DGS2 unavailable');
 
-  if (series.closes.length < YIELD_SMA_DAYS) {
+  const reading = yield2yAsOf(res.data, asOf);
+  if (!reading) {
+    const cutoff = asOf ? asOf.toISOString().slice(0, 10) : null;
     return fail(
       YIELD_2Y_SOURCE,
-      `only ${series.closes.length} of the ${YIELD_SMA_DAYS} sessions needed for the average`,
+      `fewer than the ${YIELD_SMA_DAYS} observations needed for the average` +
+        (cutoff ? ` on or before ${cutoff}` : ''),
     );
   }
-
-  const window = series.closes.slice(-YIELD_SMA_DAYS);
-  const sma = window.reduce((a, b) => a + b, 0) / window.length;
-
-  return ok(YIELD_2Y_SOURCE, { current: series.price, sma });
+  return ok(YIELD_2Y_SOURCE, reading);
 }

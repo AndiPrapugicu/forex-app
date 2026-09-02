@@ -110,6 +110,43 @@ export interface SlotDefinition extends SeriesMatcher {
    */
   compare?: 'forecast' | 'previous';
 
+  /**
+   * Per-currency override of `compare`, because forecast COVERAGE is a property
+   * of the calendar, not of the indicator.
+   *
+   * The scoring rule is shared with A1 and settled: read the forecast where one
+   * exists, read the prior print where none does. Two calendars running that
+   * same rule still disagree whenever they disagree about which series carry a
+   * forecast — and ours and theirs demonstrably do, in BOTH directions:
+   *
+   *   JP flash Services PMI   they have a forecast, we do not. We read 52.3
+   *                           against last month's 51.2 and score +1; they read
+   *                           it against a forecast above it and score -1.
+   *   CH SECO Consumer Climate  we have one (-34), they appear not to. We read
+   *                           -35 as a miss at -1; against the prior -40 it is
+   *                           an improvement at +1.
+   *   CH Producer & Import Prices  the same shape: -0.1 misses a 0.2 forecast,
+   *                           but beats a -0.3 prior print.
+   *
+   * Same rule, opposite answers, because the inputs differ. This is the knob for
+   * it — but ONLY with evidence. Their per-country heatmap cards publish the
+   * Forecast column directly, so a blank there is the evidence.
+   *
+   * A BLANK ON ONE CARD IS A SNAPSHOT, NOT A PROPERTY OF THE SERIES. Set this
+   * only where nobody forecasts the series at all — which is testable, because
+   * our own feed will not carry a consensus for it either. Their JP card shows
+   * CPI with a blank Forecast and that reads like the same evidence as the CH
+   * rows below; it is not. Japan's core CPI is routinely forecast, ours carries
+   * one, and forcing the prior print discarded a real number: 111 -> 118. The
+   * CH rows work because Swiss producer prices and unemployment are genuinely
+   * unforecast on both calendars. Do not set this
+   * from a board total, and do not set it currency-wide: scoring every leg
+   * against the prior print was simulated across all eight majors and helps CHF
+   * (-3 -> +1, toward their +3) while wrecking JPY (-1 -> +3, away from their
+   * -5) and CAD (+5 -> +1, away from their +4). The divergence is per SERIES.
+   */
+  compareByCurrency?: Partial<Record<Currency, 'forecast' | 'previous'>>;
+
   /** +1 = a higher reading is bullish for the currency. Economic slots only. */
   polarity?: 1 | -1;
 
@@ -127,6 +164,71 @@ export interface SlotDefinition extends SeriesMatcher {
    * a confident neutral.
    */
   maxAgeDays?: number;
+
+  /**
+   * Per-currency override of `maxAgeDays`, because publication CADENCE is a
+   * property of the country, not of the indicator.
+   *
+   * Retail sales is the case that forced it. Most majors publish monthly, so 75
+   * days is generous; New Zealand publishes QUARTERLY, and a 75-day window
+   * rejects a print that is merely one quarter old and perfectly current. A1
+   * shows exactly that series on their NZ card at seven weeks. Worse, the
+   * freshness tier in `resolveSeries` prefers a fresh-but-unscoreable print over
+   * a stale-but-scoreable one, so the quarterly lost to Electronic Card even
+   * when listed first — the window had to widen before the ordering could work.
+   */
+  maxAgeDaysByCurrency?: Partial<Record<Currency, number>>;
+
+  /**
+   * Show on the per-country heatmap, but NOT as a column on Top Setups.
+   *
+   * `scoring: false` is not enough on its own: those columns are still rendered
+   * in the matrix as context, and A1's Top Setups has no column for these at
+   * all. Their heatmaps do — the euro area's card carries Employment Change and
+   * Japan's carries Household Spending, and both count toward the Impact
+   * percentage on those cards.
+   *
+   * So this is about WHERE a slot appears, which is a different question from
+   * whether it scores. A heatmap-only slot is always `scoring: false` too.
+   */
+  heatmapOnly?: boolean;
+
+  /**
+   * The mirror of `heatmapOnly`: a column on Top Setups with no row on their
+   * per-country card.
+   *
+   * NOT ONE of their nine published country cards — US, EU, UK, JP, CA, AU, NZ,
+   * CH, CN — carries a Consumer Confidence row, while every one of their Top
+   * Setups captures carries the Cnsmr Conf column. So the two surfaces genuinely
+   * run different sets, in BOTH directions, and `heatmapOnly` alone could only
+   * express one of them.
+   *
+   * This is not cosmetic. The card's Impact percentage is bullish over
+   * bullish-plus-bearish, so an extra row moves the DENOMINATOR — and that
+   * percentage drives the Economic Surprise Meter through `buildSurpriseIndex`.
+   * Rendering a row they do not have makes both numbers disagree with theirs
+   * even when every cell we score is right.
+   *
+   * `scoring` is a separate question and stays true: their board really does
+   * have the column, and every captured `cells` row carries a value for it.
+   */
+  matrixOnly?: boolean;
+
+  /**
+   * The series exists for the US economy and nowhere else, so a row with no
+   * dollar leg CANNOT carry a value here — not "does not today", cannot.
+   *
+   * Declarative only. Nothing in the scoring path reads it: the `match`
+   * patterns are already US-only names, so those cells are blank for other
+   * currencies whether or not this flag is set. It exists so a TRANSCRIPTION of
+   * A1's board can be checked against it — see `checkStructuralZeros` in
+   * `lib/scoring/a1-legs.ts`. That check catches the one error class the row-sum
+   * checksum is structurally blind to, because a sum is invariant under
+   * PERMUTATION: a row read with its columns shifted by one still adds to the
+   * printed total, and five separately captured rows in this repo's own
+   * fixtures turned out to be exactly that.
+   */
+  usOnly?: boolean;
 
   /**
    * Sub-series making up a composite column.
@@ -218,6 +320,32 @@ export const SLOTS: SlotDefinition[] = [
         /^Gross Domestic Product \(QoQ\)$/i,
         /^Gross Domestic Product Annualized$/i,
       ],
+      /**
+       * NO GBP ENTRY, AND ITS REMOVAL IS THE POINT.
+       *
+       * This used to name `Gross Domestic Product (MoM)` first, on the strength
+       * of A1's UK heatmap card naming its row "GDP Growth MoM". That card is
+       * real and the reading of it was right; it is simply not what their BOARD
+       * scores, and their card and their board are known to differ — the row
+       * sets differ in both directions on other economies too.
+       *
+       * The 2026-08-13 release is the case that separates them, because the ONS
+       * published both series that morning:
+       *
+       *   GDP (MoM)   0.3 actual vs 0.0 forecast   ->  +1
+       *   GDP (QoQ)   0.4 actual vs 0.4 forecast   ->   0
+       *
+       * A1's own GDP page publishes 0.4 against 0.4 for the UK, and their board
+       * carries a GBP GDP leg of 0 — solved twice over, from GBPUSD against a
+       * known dollar leg and from their GBPX row. Two dated A1 surfaces say
+       * quarterly; one undated screenshot says monthly.
+       *
+       * So the UK is not a second Canada. Canada stays overridden because it has
+       * no TIMELY quarterly at all — its GDP (QoQ) lands eleven weeks late and
+       * carries no forecast, which is a data-availability fact rather than a
+       * preference. Every other major, the UK included, falls through to the
+       * quarterly-first default above.
+       */
     },
   },
   {
@@ -243,6 +371,8 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
+    // No CAD override: see the note on retail-sales. A blank forecast already
+    // falls back to the prior print without one.
     maxAgeDays: 60,
     match: [/^ISM Manufacturing PMI$/i, /Manufacturing PMI$/i],
     matchByCurrency: {
@@ -269,12 +399,36 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
+    // No CAD override: see the note on retail-sales. A blank forecast already
+    // falls back to the prior print without one.
     maxAgeDays: 60,
     match: [/^ISM Services PMI$/i, /Services PMI$/i],
     matchByCurrency: {
       // Canada has no services PMI in this feed; Ivey is the closest activity read.
       CAD: [/^Ivey Purchasing Managers Index s\.a$/i, /^Ivey Purchasing Managers Index$/i],
       NZD: [/^Business NZ PSI$/i],
+      /**
+       * A PROXY, AND NOT A SERVICES PMI. Say so plainly, because the column
+       * header will not.
+       *
+       * Switzerland has no services PMI on FXStreet or TradingView — across all
+       * 70 Swiss rows in a 120-day window the only match for pmi/servic/purchas
+       * is the SVME manufacturing survey, which the mPMI column already uses.
+       * procure.ch does publish a services index in reality; neither feed
+       * carries it. So the honest options were a permanently blank column or a
+       * stand-in, and a stand-in was chosen deliberately.
+       *
+       * KOF is a composite leading indicator for the whole economy, not a
+       * services survey. It is forecast on both feeds (4 prints, 4 consensus),
+       * which is the only reason it can fill the slot at all.
+       *
+       * It has been REMOVED from the consumer-confidence fallback below in the
+       * same change. Leaving it in both would let one survey vote twice on any
+       * run where SECO dropped out — the exact double-count this column is
+       * already at risk of, and the reason to fix it here rather than notice it
+       * later on a board that looks fine.
+       */
+      CHF: [/^KOF Leading Indicator$/i],
     },
   },
   {
@@ -285,41 +439,144 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
+    /**
+     * NO CANADIAN OVERRIDE, AND IT WAS REMOVED ON EVIDENCE RATHER THAN TASTE.
+     *
+     * It used to read `compareByCurrency: { CAD: 'previous' }`, justified by one
+     * observation: a card whose Forecast column was blank, whose Surprise was
+     * actual minus previous. That justification proves only what happens when
+     * there IS no forecast — and in that case `scoreSlot` ALREADY falls back to
+     * the prior print. The override was therefore redundant exactly where its
+     * evidence applied, and active only where its evidence did not.
+     *
+     * What it cost, on the live board of 2026-08-31: Statistics Canada put June
+     * retail sales at +0.6% against a +0.4% consensus, reported everywhere as a
+     * beat. Comparing that to the +1.0% prior print instead scored the CAD leg
+     * -1 where the evidence says +1 — a two-point error on every Canadian pair,
+     * with the leg's own sigma (+0.86, computed against consensus) carrying the
+     * opposite sign to the cell it was printed beside.
+     */
     maxAgeDays: 75,
+    // New Zealand publishes quarterly; 75 days would reject a print one quarter
+    // old and current. See `maxAgeDaysByCurrency`.
+    maxAgeDaysByCurrency: { NZD: 120 },
     match: [/^Retail Sales \(MoM\)$/i, /^Retail Sales s\.a\. \(MoM\)$/i, /^Retail Sales \(YoY\)$/i],
     matchByCurrency: {
       JPY: [/^Retail Trade \(YoY\)$/i, /^Retail Trade s\.a \(MoM\)$/i],
-      NZD: [/^Electronic Card Retail Sales {1,2}\(MoM\)$/i, /^Retail Sales \(QoQ\)$/i],
+      /**
+       * QUARTERLY FIRST, against every other currency's monthly-first order.
+       *
+       * A1's NZ card names this row "Retail Sales QoQ" — the Stats NZ quarterly
+       * release, not the monthly Electronic Card series that used to lead this
+       * list. The distinction matters for more than fidelity: Electronic Card
+       * carries a consensus on none of its prints, while the quarterly is
+       * forecast, so leading with the monthly left the column unscoreable and
+       * `resolveSeries` could not reach past it.
+       */
+      NZD: [/^Retail Sales \(QoQ\)$/i, /^Electronic Card Retail Sales {1,2}\(MoM\)$/i],
       CHF: [/^Real Retail Sales \(YoY\)$/i],
+      /**
+       * NOT AN FXSTREET SERIES. The ABS retired monthly Retail Trade in favour
+       * of the Household Spending Indicator, and FXStreet carries neither —
+       * checked across all 217 Australian rows in a 120-day window, there is no
+       * Retail Sales (MoM), no (QoQ) and no Household Spending, so this column
+       * was blank for the AUD leg of every Aussie pair and no aliasing could
+       * change that.
+       *
+       * The print arrives through `TRADINGVIEW.actualSeries`, an explicit
+       * allowlist of series FXStreet does not publish, and is republished under
+       * the name below so this matcher targets one string. It carries
+       * `actualSource: 'tradingview'` so the card can say where it came from.
+       */
+      AUD: [/^Household Spending \(MoM\)$/i],
     },
   },
   {
-    // Context only — A1 carries no consumer confidence column.
+    /**
+     * CANADA HAS NO ENTRY HERE, AND IT WAS CHECKED RATHER THAN OVERLOOKED.
+     *
+     * Across all 148 Canadian rows in a 120-day window, the only match for
+     * confid/sentim/climate/survey is the Bank of Canada Business Outlook
+     * Survey — quarterly, a business rather than consumer survey, and carrying
+     * no actual at all. TradingView has no Canadian consumer confidence either.
+     *
+     * A proxy was considered and rejected on arithmetic, not taste. The nearest
+     * candidate is the non-seasonally-adjusted Ivey index, and it carries a
+     * consensus on none of its four prints, so it cannot be scored — it would
+     * render blank exactly as the column does now, while implying the gap had
+     * been dealt with. Lending it the s.a. variant's forecast would pair a
+     * forecast of one series with the actual of another, which is the failure
+     * `SERIES_ALIASES` exists to prevent. The s.a. variant itself is already
+     * this currency's sPMI, so reusing it would let one survey vote twice.
+     *
+     * Blank is the honest answer until a feed carries the series.
+     */
     key: 'consumer-confidence',
     label: 'Cnsmr Conf',
     title: 'Consumer confidence / sentiment',
     category: 'growth',
     kind: 'economic',
     scoring: true,
+    /**
+     * ON THE BOARD, OFF THE CARDS. None of their nine country cards carries a
+     * consumer-confidence row; every Top Setups capture carries the column. See
+     * `matrixOnly` for why rendering it on a card moves their Impact percentage
+     * away from ours even when the cell itself is right.
+     */
+    matrixOnly: true,
     polarity: 1,
     maxAgeDays: 60,
     match: [/^Consumer Confidence$/i, /^Consumer Confidence Index$/i, /^Michigan Consumer Sentiment Index$/i],
     matchByCurrency: {
-      AUD: [/^Westpac Consumer Confidence$/i, /^Consumer Confidence$/i],
       // The UK's series is GfK's, and nothing else here matches "Consumer
       // Confidence" for GBP — without this the leg silently scored 0.
       GBP: [/^GfK Consumer Confidence$/i],
       /**
        * SECO's Consumer Climate IS Switzerland's consumer confidence survey, and
-       * it is in the feed — the previous note here claimed otherwise and fell
-       * back to KOF, which is a composite leading indicator measuring something
-       * else. KOF stays as the fallback, since it is the better proxy of the two
-       * if SECO ever drops out.
+       * it is in the feed. Its forecast comes from TradingView via the alias
+       * already wired in `SERIES_ALIASES`.
+       *
+       * KOF WAS the fallback here and has been removed: it now fills the sPMI
+       * slot, which has nothing else at all, and one survey must not be able to
+       * vote in two columns. If SECO ever drops out this column goes blank,
+       * which is the correct answer — a blank says "not published", while KOF
+       * standing in twice would say something false twice.
        */
-      CHF: [/^SECO Consumer Climate \(3m\)$/i, /^KOF Leading Indicator$/i],
-      // New Zealand's is ANZ/Roy Morgan; nothing here says "Consumer Confidence"
-      // on its own, so the leg was resolving to nothing.
-      NZD: [/^ANZ – Roy Morgan Consumer Confidence$/i, /^ANZ - Roy Morgan Consumer Confidence$/i],
+      CHF: [/^SECO Consumer Climate \(3m\)$/i],
+      /**
+       * NZD AND AUD ARE WIRED, AND THE REASON THEY WERE NOT IS WORTH READING.
+       *
+       * Both series were removed on 2026-08-24 with a careful measurement:
+       * wiring them moved TOTAL ABS GAP against A1 from 96 to 102, and A1's own
+       * NZDUSD card implies a New Zealand leg of -1 where every NZ confidence
+       * series in our feed reads bullish. The conclusion drawn was that the gap
+       * must be a SERIES we do not carry.
+       *
+       * That conclusion rested entirely on parity, and parity is no longer a
+       * reason to leave a real economic series unscored. What is actually true:
+       *
+       *   – ANZ–Roy Morgan is THE monthly New Zealand consumer confidence index,
+       *     and it is in our feed with actuals;
+       *   – Westpac is the equivalent for Australia, monthly, also with actuals;
+       *   – neither is forecast on any calendar, so both read against the prior
+       *     print — a basis this engine supports explicitly and documents;
+       *   – the readings are not marginal. NZ confidence ran 80.3 — 86.5 — 91.3 —
+       *     99.3 across four months; a +1 is the honest read of that series.
+       *
+       * A1 scoring the NZ leg -1 remains unexplained and is recorded as a
+       * source difference, not as evidence against our +1. Leaving a current,
+       * primary, monthly series unscored to protect a parity number is the
+       * failure mode this engine exists to avoid.
+       *
+       * The dash in the ANZ name is an EN DASH in the feed. The character class
+       * accepts any of the three so a cosmetic change upstream cannot silently
+       * blank the column — which is exactly how the GBP leg was lost once.
+       */
+      NZD: [
+        /^ANZ\s*[-\u2013\u2014]\s*Roy Morgan Consumer Confidence$/i,
+        /^Westpac Consumer Survey$/i,
+      ],
+      AUD: [/^Westpac Consumer Confidence$/i],
     },
   },
 
@@ -337,8 +594,32 @@ export const SLOTS: SlotDefinition[] = [
     matchByCurrency: {
       // The euro-area aggregate, not a member state.
       EUR: [/^Harmonized Index of Consumer Prices \(YoY\)$/i],
-      // National CPI, not the Tokyo advance print.
-      JPY: [/^National Consumer Price Index \(YoY\)$/i],
+      /**
+       * EX FRESH FOOD, not the headline — because the headline is not forecast.
+       *
+       * Japan is the only major whose HIGH-impact consensus coverage runs near
+       * half (47%, against 80-92% everywhere else), and the CPI complex is the
+       * whole of the difference. Measured over 120 days of the live feed:
+       *
+       *   National Consumer Price Index (YoY)     5 prints, 0 with a consensus
+       *   National CPI ex Food, Energy (YoY)      5 prints, 0
+       *   National CPI ex Fresh Food (YoY)        5 prints, 5   <- this one
+       *
+       * So the headline could never be scored at all: `resolveSeries` skipped it
+       * for want of a forecast and the JPY leg of every yen cross lost the
+       * column outright. Ex-fresh-food is the Bank of Japan's official core
+       * measure and the series the street actually surveys, which is why it is
+       * the one carrying forecasts on both calendars — TradingView corroborates
+       * at 4/4 under the name "Core Inflation Rate YoY".
+       *
+       * The headline is kept as a second pattern so the column degrades to an
+       * unscoreable-but-visible cell if the core series ever drops out, rather
+       * than vanishing. Tokyo's advance print is still deliberately excluded.
+       */
+      JPY: [
+        /^National CPI ex Fresh Food \(YoY\)$/i,
+        /^National Consumer Price Index \(YoY\)$/i,
+      ],
     },
   },
   {
@@ -372,17 +653,50 @@ export const SLOTS: SlotDefinition[] = [
      */
     maxAgeDays: 90,
     match: [/^Producer Price Index \(YoY\)$/i, /^Producer Price Index \(MoM\)$/i],
+    /**
+     * Their CH card publishes this row with no Forecast, and the AU card is
+     * blank too: 3.5 actual against a 3.4 previous, Surprise 0.1%.
+     *
+     * GBP IS THE THIRD, and their card says so as plainly as the other two:
+     * `PPI YoY`, dated Jan 21 26, Actual 3.4, Forecast BLANK, Previous 3.4,
+     * Surprise 0. Actual minus previous, with nothing else it could be. That
+     * is also why the GBP series order below could be wrong for so long — a
+     * forecast-basis slot disqualifies every UK producer-price series that
+     * carries no consensus, which is all of the YoY ones.
+     */
+    compareByCurrency: { CHF: 'previous', AUD: 'previous', GBP: 'previous' },
     matchByCurrency: {
       /**
-       * CORE output prices, not headline output or input.
+       * HEADLINE OUTPUT PRICES, YEAR ON YEAR — the series their card names.
        *
-       * Only the core series reproduces their GBPUSD cell: on the same day
-       * headline output (0.0 vs 0.4) and input (-2.0 vs 0.2) both missed, which
-       * would give GBPUSD 0, while core output (0.8 vs 0.4) beat and gives the
-       * +2 they show. Core also matches what the other currencies use here,
-       * since input prices are a raw-materials series that swings far harder.
+       * OLD RATIONALE, NOW REFUTED: "CORE output prices, not headline output or
+       * input. Only the core series reproduces their GBPUSD cell: on the same
+       * day headline output (0.0 vs 0.4) and input (-2.0 vs 0.2) both missed,
+       * which would give GBPUSD 0, while core output (0.8 vs 0.4) beat and gives
+       * the +2 they show."
+       *
+       * That was fitted to one cell, and it compared a FRESH headline print
+       * against a STALE core one — the 0.0-vs-0.4 headline was 2026-07-22 while
+       * the 0.8-vs-0.4 core was 2026-06-17, a month older. It never considered
+       * the YoY series at all, because a forecast basis disqualified it.
+       *
+       * Their published UK card overrules the inference: `PPI YoY`, Actual 3.4,
+       * Forecast blank, Previous 3.4, Surprise 0. YoY, not MoM; headline, not
+       * core (core output YoY runs near 2.8 and input near 4.9, so 3.4 can only
+       * be the headline); and against the previous print, which is what
+       * `compareByCurrency` above now says.
+       *
+       * WHAT THE OLD ORDER COST. Core output MoM carries no consensus in recent
+       * months, so a forecast basis reached PAST every fresh print to the last
+       * one that had a forecast — 2026-06-17, sixty-eight days before the
+       * capture, scoring +1 off it while 2026-08-19 sat unread four days back.
+       * That print reads 3.1 against a 3.5 previous and a 3.2 consensus: -1 on
+       * either basis. Two points, on the GBP leg of every sterling pair.
        */
-      GBP: [/^PPI Core Output \(MoM\) n\.s\.a$/i, /^Producer Price Index - Output \(MoM\) n\.s\.a$/i],
+      GBP: [
+        /^Producer Price Index - Output \(YoY\) n\.s\.a$/i,
+        /^Producer Price Index - Output \(MoM\) n\.s\.a$/i,
+      ],
       /**
        * Each country names its producer-price series differently, and none of
        * the three below contains the words "Producer Price Index" in the order
@@ -403,15 +717,35 @@ export const SLOTS: SlotDefinition[] = [
        * because the cell is ternary — it reads the direction of the surprise,
        * not the level.
        */
-      CHF: [/^Producer and Import Prices \(MoM\)$/i, /^Producer and Import Prices \(YoY\)$/i],
+      /**
+       * YoY FIRST, reversing the MoM-first order the comment above defends.
+       *
+       * That comment is right that neither calendar forecasts the Swiss YoY
+       * series — and irrelevant, because A1 does not score it against a
+       * forecast. Their published CH card carries `PPI YoY` with the Forecast
+       * column BLANK and a Surprise of -0.2% off an actual of -1.8% against a
+       * previous of -1.6%: actual minus previous, exactly. `compareByCurrency`
+       * below makes us read it the same way, at which point the absence of a
+       * forecast stops disqualifying the series their card actually names.
+       */
+      CHF: [/^Producer and Import Prices \(YoY\)$/i, /^Producer and Import Prices \(MoM\)$/i],
       CAD: [/^Industrial Product Price \(MoM\)$/i],
       NZD: [/^Producer Price Index - Output \(QoQ\)$/i],
       /**
-       * Australia publishes producer prices QUARTERLY, and only the QoQ variant
-       * is forecast — the YoY carries an actual and nothing to score it against,
-       * which is what the generic YoY-first order kept selecting.
+       * YoY FIRST, reversing the QoQ-first order the note below defended.
+       *
+       * OLD RATIONALE, NOW STALE: "Australia publishes producer prices
+       * QUARTERLY, and only the QoQ variant is forecast — the YoY carries an
+       * actual and nothing to score it against." True, and no longer
+       * disqualifying: `compareByCurrency` above now reads this currency's
+       * producer prices against the PREVIOUS PRINT, so the YoY series does not
+       * need a forecast to be scoreable.
+       *
+       * Their AU card names the row `PPI YoY` outright and publishes it with the
+       * Forecast column blank — 3.5% actual against a 3.4% previous, Surprise
+       * 0.1% — which is the same series and the same basis this order now picks.
        */
-      AUD: [/^Producer Price Index \(QoQ\)$/i, /^Producer Price Index \(YoY\)$/i],
+      AUD: [/^Producer Price Index \(YoY\)$/i, /^Producer Price Index \(QoQ\)$/i],
     },
   },
   {
@@ -425,6 +759,7 @@ export const SLOTS: SlotDefinition[] = [
     polarity: 1,
     maxAgeDays: 60,
     // US-only by construction. Other currencies leave this blank.
+    usOnly: true,
     match: [/^Core Personal Consumption Expenditures - Price Index \(YoY\)$/i],
   },
   {
@@ -476,6 +811,7 @@ export const SLOTS: SlotDefinition[] = [
     scoring: true,
     polarity: 1,
     maxAgeDays: 60,
+    usOnly: true,
     // Anchored so "Nonfarm Payrolls (QoQ)" and the benchmark revision are excluded.
     match: [/^Nonfarm Payrolls$/i],
   },
@@ -486,13 +822,57 @@ export const SLOTS: SlotDefinition[] = [
     category: 'jobs',
     kind: 'economic',
     scoring: true,
-    polarity: -1, // higher unemployment is bearish for the currency
+    polarity: -1,
+    /**
+     * Switzerland's unemployment rate carries no forecast on A1's CH card — the
+     * Forecast column is blank and the Surprise is 3.1% against a previous of
+     * 2.9%, so 0.2% is actual minus previous. Every other economy on their cards
+     * shows a forecast for this row, which is why this is one currency and not
+     * the slot default.
+     *
+     * THAT ROW ALSO NAMES THE SERIES, which took three rounds to notice. It is
+     * dated `Jan 9, 26` and no adjusted Swiss print has ever gone 2.9 -> 3.1:
+     * the ADJUSTED series was flat at 3.0 either side of it. The UNADJUSTED one
+     * read 2.90 in November 2025 and 3.10 in December, which is the release that
+     * card is showing. Both halves of this slot's CHF handling — the basis here
+     * and the matcher below — come off that single row.
+     */
+    compareByCurrency: { CHF: 'previous' }, // higher unemployment is bearish for the currency
     maxAgeDays: 60,
     match: [/^Unemployment Rate$/i, /^Unemployment Rate s\.a\.$/i],
     matchByCurrency: {
       GBP: [/^ILO Unemployment Rate \(3M\)$/i],
-      // Named "(MoM)" in the feed but it is a rate, not a change.
-      CHF: [/^Unemployment Rate s\.a \(MoM\)$/i],
+      /**
+       * THE UNADJUSTED RATE, AND THE ADJUSTED ONE IS NOT A FALLBACK.
+       *
+       * SECO publishes both on the same morning. FXStreet carries only
+       * `Unemployment Rate s.a (MoM)` — which this matcher used to name — and
+       * the two series answer the same question with opposite signs whenever
+       * the season turns. July 2026 is exactly that case: unadjusted 2.9 -> 3.0
+       * is a RISE, adjusted 3.1 -> 3.1 is FLAT.
+       *
+       * A1 scores the unadjusted one. Two independent pieces of their own
+       * published output say so and neither is a total:
+       *
+       *   their free Unemployment Rate page, CHF, Dec 24 -> Jun 26:
+       *     2,80 3,00 2,90 2,90 2,80 2,80 2,70 2,70 2,80 2,80 2,90 2,90
+       *     3,10 3,20 3,20 3,10 3,00 3,00 2,90
+       *   winter highs and summer lows, which a seasonally adjusted series does
+       *   not have; the last five agree with this series to the decimal.
+       *
+       *   their CH heatmap card, row dated `Jan 9, 26`: actual 3.1, forecast
+       *   blank, previous 2.9 — the December 2025 unadjusted print, scored
+       *   bearish off actual minus previous.
+       *
+       * The print arrives through `TRADINGVIEW.actualSeries`, the same
+       * allowlist AUD household spending uses, and is republished under the
+       * name below. Listing the adjusted series after it as a safety net was
+       * considered and rejected: a fallback that silently swaps in a different
+       * statistic is worse than a blank cell, because the cell it produces is
+       * confident and wrong. If TradingView is down this column goes blank and
+       * says so.
+       */
+      CHF: [/^Unemployment Rate$/i],
     },
   },
   {
@@ -505,6 +885,7 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: -1,
+    usOnly: true,
     maxAgeDays: 21, // weekly series
     match: [/^Initial Jobless Claims$/i],
   },
@@ -516,6 +897,7 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
+    usOnly: true,
     maxAgeDays: 60,
     match: [/^ADP Employment Change$/i],
   },
@@ -527,28 +909,141 @@ export const SLOTS: SlotDefinition[] = [
     kind: 'economic',
     scoring: true,
     polarity: 1,
+    usOnly: true,
     maxAgeDays: 75, // published with a long lag
     match: [/^JOLTS Job Openings$/i],
+  },
+
+  // --- Heatmap only -------------------------------------------------------
+  // Columns A1's per-country heatmaps carry and their Top Setups does not.
+  // Both count toward the Impact percentage on their cards, so both are scored
+  // here — they simply never reach the matrix. See `heatmapOnly`.
+  {
+    /**
+     * The euro area's headline labour read, and the row A1's EU card carries
+     * where every other economy's card has none.
+     *
+     * Quarterly, hence the long window. The YoY variant exists in the feed and
+     * carries no consensus, so QoQ leads.
+     */
+    key: 'employment-change',
+    label: 'Employment Change',
+    title: 'Employment change',
+    category: 'jobs',
+    kind: 'economic',
+    scoring: false,
+    heatmapOnly: true,
+    polarity: 1,
+    maxAgeDays: 120,
+    match: [/^Employment Change \(QoQ\)$/i, /^Employment Change \(YoY\)$/i],
+    matchByCurrency: {
+      /**
+       * CANADA TOO, not just the euro area — their CA card carries this row as
+       * the last line, where it is the Canadian analogue of the US payroll
+       * print. Statistics Canada calls it Net Change in Employment, which none
+       * of the generic patterns above reach, so the CA card was rendering one
+       * row short of theirs.
+       *
+       * Monthly and forecast on every print in the feed, unlike the euro area's
+       * quarterly, so it is the more reliable half of this slot.
+       */
+      CAD: [/^Net Change in Employment$/i, /^Employment Change$/i],
+    },
+  },
+  {
+    /**
+     * Japan's household spending, the row A1's JP card carries in place of a
+     * consumer-confidence reading.
+     *
+     * Their card reads this Bullish for the yen and Bearish for stocks, which is
+     * the INFLATION polarity applied to a growth series. That looks like a slip
+     * on their side, so it is filed under `growth` here and equities read it the
+     * same way the currency does — noted rather than copied, because copying a
+     * suspected bug is how it becomes permanent.
+     */
+    key: 'household-spending',
+    label: 'Household Spending',
+    title: 'Japanese household spending',
+    category: 'growth',
+    kind: 'economic',
+    scoring: false,
+    heatmapOnly: true,
+    polarity: 1,
+    maxAgeDays: 60,
+    match: [/^Overall Household Spending \(YoY\)$/i, /^Household Spending \(YoY\)$/i],
+  },
+  {
+    /**
+     * WAGE GROWTH, AND THE UNITED STATES ONLY.
+     *
+     * Their US card carries a Wage Growth YoY row and it counts toward the
+     * 58.33% Impact printed beneath it — seven bullish of twelve directional
+     * rows, which only reconciles with this row present. We had no slot for it,
+     * so the dollar's card ran one row short of theirs and the Economic Surprise
+     * Meter inherited the difference.
+     *
+     * NOT WIDENED TO THE OTHER MAJORS, though the feed would allow it: Average
+     * Earnings Including Bonus for the UK, Labor Cash Earnings for Japan,
+     * Average Hourly Wages for Canada, the Wage Price Index for Australia and
+     * Negotiated Wage Rates for the euro area all exist. No card outside the US
+     * carries this row, and adding it would move those cards' Impact
+     * denominators AWAY from theirs — the exact failure this slot fixes for the
+     * dollar. `Average Hourly Earnings (YoY)` is a US-only name, so the
+     * restriction needs no `matchByCurrency`, the same way `employment` is
+     * confined by `/^Nonfarm Payrolls$/i`.
+     *
+     * `jobs` rather than `growth`, so equities read it the same way the dollar
+     * does. Their card's Stocks Impact column agrees: a positive wage surprise
+     * reads Bullish there as well as for the currency.
+     */
+    key: 'wage-growth',
+    label: 'Wage Growth',
+    title: 'Average hourly earnings, year on year',
+    category: 'jobs',
+    kind: 'economic',
+    scoring: false,
+    heatmapOnly: true,
+    polarity: 1,
+    maxAgeDays: 60,
+    match: [/^Average Hourly Earnings \(YoY\)$/i],
   },
 ];
 
 /** The columns that move the total. Everything else is displayed context. */
 export const SCORING_SLOTS = SLOTS.filter((s) => s.scoring);
 
+/**
+ * The columns the Top Setups matrix renders — everything except the
+ * heatmap-only ones. `SLOTS` remains the full set, and the per-country heatmap
+ * is the only consumer that wants it.
+ */
+export const MATRIX_SLOTS = SLOTS.filter((s) => !s.heatmapOnly);
+
+/**
+ * The rows a per-country card renders — everything except the matrix-only ones.
+ *
+ * The complement of `MATRIX_SLOTS`, and the reason both exist: their two
+ * surfaces publish different sets. `buildCurrencyHeatmap` is the only consumer.
+ */
+export const CARD_SLOTS = SLOTS.filter((s) => !s.matrixOnly);
+
 /** Default staleness window when a slot does not set one. */
 export const DEFAULT_MAX_AGE_DAYS = 60;
 
 /**
- * How close two prints of one series must be for the newer to count as a
- * REVISION of the older rather than the next period's release.
+ * REVISION_WINDOW_DAYS IS GONE, DELIBERATELY, AND THIS NOTE IS ITS HEADSTONE.
  *
- * Used by `resolveSeries` to decide whether it may reach past a confirming
- * revision to the flash that carried the actual surprise. A euro-area GDP
- * revision follows its flash by about a fortnight; consecutive months of any
- * monthly series are at least four weeks apart, so three weeks separates the two
- * cases without needing a per-slot cadence.
+ * It was the window inside which `resolveSeries` would reach past a confirming
+ * revision to the flash that carried the actual surprise. A1 does not do that —
+ * their 2026-08-23 EURUSD card only reconciles if the euro GDP leg reads the
+ * 14 Aug revision rather than the 30 Jul flash. Removing the reach-back moved
+ * TOTAL ABS GAP 96 -> 92 and exact rows 7 -> 9 against that capture, and touched
+ * no currency but EUR.
+ *
+ * The full argument, including the one that was lost, is in `pickWithin` in
+ * `lib/scoring/discrete.ts`. Restoring the constant alone will do nothing;
+ * the rule that used it was removed with it.
  */
-export const REVISION_WINDOW_DAYS = 21;
 
 /**
  * Where the standing policy rate is read from, per currency.
@@ -669,6 +1164,69 @@ export const COT_LOOKBACK_WEEKS = 156; // ~3 years
  * A1's published thresholds, verbatim: ">= 60% long -> -1 score", "<= 40% long
  * -> +1". The 40-60% band is deliberately wide; most of the time the crowd is
  * not saying anything.
+ *
+ * THE THRESHOLDS ARE RIGHT AND THE INPUT IS NOT. Identified 2026-08-24 from
+ * their own free Looker demo, which publishes the Retail Sentiment page live
+ * (lookerstudio.google.com/embed/reporting/cfd37bd1-45ce-459a-8d11-b6b7eac72b0d).
+ * Read against fxssi.com/tools/current-ratio in the same minute:
+ *
+ *   pair    EdgeFinder long%   FXSSI buyers%
+ *   EURUSD        24               24
+ *   GBPUSD        31               31
+ *   AUDUSD        25               25
+ *   NZDUSD        29               29
+ *   USDCHF        80               80
+ *   USDJPY        55               55
+ *   USDCAD        63               62   <- their 30-minute refresh against FXSSI's 5
+ *
+ * Six of seven to the point. Their crowd column is a broker-aggregate retail
+ * ratio — FXSSI aggregates Oanda, Dukascopy, IG, FIBO, InstaForex, Myfxbook,
+ * FXBlue and ForexFactory — quoted LONG PERCENT ON THE PAIR AS NAMED. We read
+ * CFTC small traders on the currency future instead, which is a different
+ * population: 62.7% long the EURO FX contract on the same day their crowd was
+ * 24% long EURUSD. Same rule, opposite input, and the whole of EURUSD's
+ * remaining -2.
+ *
+ * Two consequences worth keeping:
+ *   - There is no inversion problem. The feed is per SYMBOL, so USDJPY 55% long
+ *     means 55% long USDJPY. Our `pairContract` sign flip exists only because a
+ *     CME contract is always quoted CUR/USD; a retail feed would not need it.
+ *   - METALS ARE THIS FEED TOO, which a previous round got wrong. It read the
+ *     two-decimal formatting of the GOLD and SILVER rows as evidence they came
+ *     from the put/call page instead. The formatting split is real and the
+ *     inference was not: both appear in A1's own daily retail series, and on
+ *     2026-08-24 they read 95.08% and 91.05% long -- which is -1 under these
+ *     same bands, and is exactly A1's XAUUSD and XAGUSD crowd cell for that
+ *     date. A put/call page does exist in their demo; it is not what the Crowd
+ *     column reads. See `lib/scoring/crowd-oracle.ts`.
+ *
+ * THE BANDS ARE NOW READ OFF A1'S OWN CHART, not inferred from their prose.
+ * Their free Retail Sentiment dashboard renders each row with an explicit
+ * Bearish / Bullish / Neutral classification in its accessibility tree, and on
+ * 2026-08-29 it partitioned exactly here:
+ *
+ *   Bullish   40, 39, 38, 33, 31, 30, 28, 27, 26, 24, 13, 10, 6
+ *   Neutral   58, 54, 53, 48, 47, 44, 42
+ *   Bearish   89, 84, 80, 75, 71, 62, 61, 60.84
+ *
+ * EURGBP AT EXACTLY 40 IS CLASSIFIED BULLISH, which pins the lower bound as
+ * INCLUSIVE and is why `scoreRetailLongPct` uses `<=` rather than `<`. The upper
+ * bound is bracketed rather than pinned: 58 is Neutral and 60.84 is Bearish, so
+ * it lies in (58, 60.84], and A1's published ">= 60% long -> -1" sits inside
+ * that interval.
+ *
+ * TWO APPARENT CONTRADICTIONS WERE THE INPUT, NOT THE RULE. Prior rounds
+ * recorded EURCHF at ~48% long and GBPCHF at ~50% against A1 Top Setups cells of
+ * +1, which the 40/60 bands cannot produce, and left the thresholds under
+ * suspicion for several rounds. Both figures came from FXSSI standing in for
+ * A1's own number, because A1's page was believed to carry no crosses. It does —
+ * the Category filter simply defaults to excluding them. A1's OWN historical
+ * feed for 2026-08-24, the day those cells were captured, reads:
+ *
+ *   EURCHF 32% long   GBPCHF 36%   GBPUSD 31%   EURUSD 25%
+ *
+ * All four are <= 40, all four score +1, and all four match the Top Setups cell
+ * on file. The bands were never wrong. Do not move them.
  */
 export const CROWD_LONG_PCT_BUCKETS = {
   bearish: 60, // crowd leaning long -> -1 (contrarian)

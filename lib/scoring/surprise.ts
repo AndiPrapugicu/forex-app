@@ -22,6 +22,7 @@ import {
   SOURCE_CONFIDENCE,
   matchEventRule,
 } from '@/config/scoring.config';
+import { TERNARY_EPSILON } from '@/config/setups.config';
 import type { Direction, EventScore, NormalizedEvent, ScoreTraceStep } from '@/lib/types';
 
 export function clamp(value: number, min: number, max: number): number {
@@ -54,11 +55,32 @@ export interface SurpriseResult {
  * hourly earnings missing by 0.2pp scores -2.67 sigma. A fixed per-event divisor
  * would rank those two backwards.
  */
-export function computeSurprise(event: NormalizedEvent): SurpriseResult {
+export function computeSurprise(
+  event: NormalizedEvent,
+  /**
+   * The reference the CELL was actually scored against, when the caller knows
+   * it. Supplying it is what makes sigma and the cell describe the same
+   * comparison; omitting it keeps the older standalone behaviour, which picks
+   * its own reference and is therefore only safe where no cell is involved.
+   *
+   * THE DEFECT THIS PARAMETER EXISTS FOR. `scoreSlot` may score against the
+   * prior print — a per-currency basis, or a fallback when no consensus was
+   * published — while the branches below would still reach for `consensus` or
+   * for FXStreet's `ratioDeviation`. The two then measure different things and
+   * are printed side by side as though they agreed. Live on 2026-08-31:
+   * Canadian retail sales carried sigma +0.86 (against a +0.4 consensus)
+   * beside a cell of -1 (against a +1.0 prior print).
+   */
+  scoredReference?: number | null,
+): SurpriseResult {
   const rule = matchEventRule(event.name);
 
   if (event.actual === null) {
     return { sigma: null, method: 'none', detail: 'Not yet released' };
+  }
+
+  if (scoredReference !== undefined && scoredReference !== null && Number.isFinite(scoredReference)) {
+    return surpriseAgainst(event, event.actual, scoredReference, rule.typicalDeviation);
   }
 
   // Preferred: the feed's own historically-calibrated deviation.
@@ -96,6 +118,68 @@ export function computeSurprise(event: NormalizedEvent): SurpriseResult {
   }
 
   return { sigma: null, method: 'none', detail: 'No forecast or previous to compare against' };
+}
+
+/**
+ * Sigma measured against a reference the caller supplies.
+ *
+ * Sign agreement with the cell is guaranteed BY CONSTRUCTION here, because both
+ * are read off the same difference. That is the point: the relationship is not
+ * asserted after the fact, it is made unrepresentable.
+ */
+function surpriseAgainst(
+  event: NormalizedEvent,
+  actual: number,
+  reference: number,
+  typicalDeviation: number,
+): SurpriseResult {
+  const raw = actual - reference;
+
+  // The cell reads this as "landed on reference", so the surprise is zero. A
+  // small non-zero sigma printed beside a 0 cell is the same defect in
+  // miniature, and float noise is the only thing that can produce one here.
+  if (Math.abs(raw) < TERNARY_EPSILON) {
+    return {
+      sigma: 0,
+      method: 'config',
+      detail: `${actual} vs ${reference} — on reference`,
+    };
+  }
+
+  const againstConsensus = event.consensus !== null && reference === event.consensus;
+
+  /**
+   * FXStreet calibrates `ratioDeviation` against THEIR consensus, so it is only
+   * usable when that is also what we scored against — and only when it agrees
+   * in sign, because a disagreement means it is measuring a comparison we did
+   * not make.
+   */
+  if (
+    againstConsensus &&
+    event.ratioDeviation !== null &&
+    Number.isFinite(event.ratioDeviation) &&
+    Math.sign(event.ratioDeviation) === Math.sign(raw)
+  ) {
+    return {
+      sigma: clamp(event.ratioDeviation, -MAX_SIGMA, MAX_SIGMA),
+      method: 'ratioDeviation',
+      detail: `${event.ratioDeviation.toFixed(2)}σ vs this series' own history (FXStreet)`,
+    };
+  }
+
+  // Against a prior print, "above last month" is weaker evidence than "above
+  // what the market expected", and stays damped exactly as it was before.
+  const damping = againstConsensus ? 1 : 0.5;
+  const sigma = clamp(raw / typicalDeviation, -MAX_SIGMA, MAX_SIGMA) * damping;
+
+  return {
+    sigma,
+    method: againstConsensus ? 'config' : 'previous',
+    detail:
+      `${actual} vs ${reference} ${againstConsensus ? 'forecast' : 'previous'} = ` +
+      `${raw > 0 ? '+' : ''}${round(raw)}, normalized by typical ±${typicalDeviation}` +
+      (againstConsensus ? '' : ' (weak signal)'),
+  };
 }
 
 // ---------------------------------------------------------------------------

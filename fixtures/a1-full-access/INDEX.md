@@ -77,3 +77,31 @@ WHAT IT SETTLES, and why it was worth spending free-week access on:
     mai 1, 26 — 125 days old — and both still score.
   - Switzerland's row 3 is byte-identical to the euro area's (0,2 / 51,7 / 51,5
     / 51,7). A1 fills the Swiss services slot with the EU number.
+
+## a1-seasonality-monthly-2026-09-03-0743.csv
+
+A1's Monthly Seasonality scanner, 44 board symbols x 12 calendar months = 528
+rows of the 10-year monthly average they publish. Read from the DOM one symbol
+at a time; their symbol filter is the URL parameter `df1071`, which is what made
+44 pulls practical.
+
+Their scanner covers 48 assets. It does NOT carry the seven currency index rows
+(EURO, GB-POUND, JP-YEN, AU-DOLLAR, NZ-DOLLAR, CA-DOLLAR, CH-FRANC) - only
+USDOLLAR - and it does carry VIX, which is not on the board. CHINA50, NATGAS,
+US10T and VIX are not modelled here.
+
+WHAT IT SETTLES. `npm run seasonality-parity` reads it.
+
+  - Their RULE is ours. `sign(their published average)` reproduces THEIR printed
+    cell 7 times out of 7 on the seven symbols where our cell disagreed.
+  - Our INPUT is very nearly theirs: correlation 0.962 over 528 month-cells,
+    mean signed difference +0.03 pp. There is NO systematic offset, so it is not
+    a lookback, a boundary or an off-by-one-month.
+  - The disagreements are the sign of a near-zero number. Flip rate falls
+    monotonically with distance from zero - 46% under 0.10 pp, 37%, 20%, 7%,
+    6% at 1 pp and over - which is what "same statistic, small independent
+    noise" looks like and nothing else.
+
+So the column is a coin flip wherever the mean is near zero, and 13 points of it
+CANNOT be closed by any rule change. The fixture exists to stop the next round
+trying.

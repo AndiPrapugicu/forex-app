@@ -41,7 +41,8 @@
     "delta-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/delta-parity.ts",
     "a1-truth-table": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/a1-truth-table.ts",
     "seasonality-probe": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/seasonality-probe.ts",
-    "momentum-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/momentum-parity.ts"
+    "momentum-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/momentum-parity.ts",
+    "seasonality-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/seasonality-parity.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

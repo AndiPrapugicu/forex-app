@@ -1,0 +1,96 @@
+# A1 EdgeFinder -> COT Data -> COT Velocity, read from the DOM during full access.
+# CFTC report date printed on the page: 2026-08-28 4:12:11 (same report as the
+# Latest COT capture). "Next update" countdown showed 33:58:31.
+# Captured 2026-09-03 ~10:42Z.
+#
+# Three bar charts, 23 symbols each, all of them the SAME statistic over three
+# lookbacks: the change in NON-COMMERCIAL LONG SHARE, in percentage points.
+#
+# That identification is not inferred - it is checked. Every one of the 23
+# `weekly` rows here equals the Latest report's `netPctChange` column exactly
+# (23/23, see the checksum in a1-cot-latest-2026-09-03-1012.csv, which recovers
+# the prior week as long-dLong / short-dShort). So `weekly` IS
+# longPct(now) - longPct(prior week), and `monthly` / `quarterly` are the same
+# difference taken against a 4-week and 13-week-ago base.
+#
+# WHY THIS MATTERS FOR THE BOARD. Our COT column reads the weekly horizon only.
+# The board's COT cells disagree with ours by 1 point total, so weekly is almost
+# certainly the horizon they score - but until now that was an assumption with no
+# alternative to test it against. These two extra series are that alternative:
+# they sign-disagree with weekly often enough (e.g. CAD weekly +7,43 vs
+# quarterly -0,68; EUR weekly +2,36 vs quarterly -5,83; NASDAQ weekly +5,94 vs
+# monthly +1,45) that a monthly- or quarterly-based cell would look nothing like
+# what the board prints.
+#
+# NOT evidence that the board's COT cell is a sign of this number. It is evidence
+# of what A1 computes and publishes. Symbol names are theirs, unmapped.
+symbol,horizon,longSharePctChange
+NZD,weekly,14.64
+NZD,monthly,17.49
+NZD,quarterly,7.29
+CHF,weekly,7.97
+CHF,monthly,14.49
+CHF,quarterly,19.04
+CAD,weekly,7.43
+CAD,monthly,8.52
+CAD,quarterly,-0.68
+NASDAQ,weekly,5.94
+NASDAQ,monthly,1.45
+NASDAQ,quarterly,3.37
+ZAR,weekly,5.72
+ZAR,monthly,5.22
+ZAR,quarterly,9.41
+GBP,weekly,3.43
+GBP,monthly,7.65
+GBP,quarterly,11.01
+NIKKEI,weekly,3.24
+NIKKEI,monthly,-8.66
+NIKKEI,quarterly,-7.07
+SILVER,weekly,2.77
+SILVER,monthly,2.07
+SILVER,quarterly,-0.96
+EUR,weekly,2.36
+EUR,monthly,3.32
+EUR,quarterly,-5.83
+AUD,weekly,1.4
+AUD,monthly,2.77
+AUD,quarterly,-14.02
+Gold,weekly,1.03
+Gold,monthly,3.72
+Gold,quarterly,3.22
+US10T,weekly,0.99
+US10T,monthly,0.93
+US10T,quarterly,-0.07
+PLATINUM,weekly,0.8
+PLATINUM,monthly,0.91
+PLATINUM,quarterly,-1.69
+NATGAS,weekly,0.34
+NATGAS,monthly,0.78
+NATGAS,quarterly,0.34
+USOil,weekly,0.02
+USOil,monthly,0.02
+USOil,quarterly,0.77
+USD,weekly,-0.09
+USD,monthly,7.63
+USD,quarterly,22.44
+COPPER,weekly,-0.82
+COPPER,monthly,2.82
+COPPER,quarterly,0.77
+BTC,weekly,-1.15
+BTC,monthly,-4.05
+BTC,quarterly,-1.7
+JPY,weekly,-1.38
+JPY,monthly,12.44
+JPY,quarterly,8.86
+ETHEREUM,weekly,-2.62
+ETHEREUM,monthly,-4.13
+ETHEREUM,quarterly,-4.13
+DOW,weekly,-2.84
+DOW,monthly,-1.89
+DOW,quarterly,25.52
+RUSSELL,weekly,-3.33
+RUSSELL,monthly,-9.71
+RUSSELL,quarterly,-2.28
+SPX,weekly,-5.86
+SPX,monthly,-5.45
+SPX,quarterly,6.04

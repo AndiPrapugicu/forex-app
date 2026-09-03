@@ -105,3 +105,40 @@ WHAT IT SETTLES. `npm run seasonality-parity` reads it.
 So the column is a coin flip wherever the mean is near zero, and 13 points of it
 CANNOT be closed by any rule change. The fixture exists to stop the next round
 trying.
+
+## `a1-cot-latest-2026-09-03-1012.csv` — Latest COT Report
+
+23 symbols × 11 published columns, read from `COT Data → Latest COT Report`.
+
+**Their methodology, quoted from the page:** the CFTC weekly commitment of traders
+**legacy** report, **non-commercial** positions only. They state they deliberately
+ignore commercial positions because those hedge rather than speculate.
+
+**What their `Net % Change` column is, verified in-page 23/23:** recover the prior
+week as `long − Δlong` and `short − Δshort`, then
+
+```
+netPctChange == longPct(now) − longPct(prior)
+```
+
+i.e. a change in **long share, in percentage points** — not a percentage change in
+the net position. That is the metric our own COT rule already uses.
+
+**Timing:** on 3 September they are still serving the **28 August** report. The
+publication-lag rule holds — the Tuesday survey is not public until Friday. See
+`cot-cut-on-publication-not-survey`.
+
+## `a1-cot-velocity-2026-09-03-1042.csv` — COT Velocity
+
+Same report date, three bar charts × 23 symbols = 69 rows, long format
+(`symbol,horizon,longSharePctChange`).
+
+All three charts are the **same statistic over three lookbacks**: every `weekly`
+row equals the Latest report's `netPctChange` exactly (23/23), so `monthly` and
+`quarterly` are that same long-share difference taken against a 4-week and
+13-week-ago base.
+
+Value to parity: it is the first thing that can **falsify** the horizon our COT
+column assumes. Weekly and quarterly disagree in sign often (CAD +7.43 vs −0.68,
+EUR +2.36 vs −5.83), so a board built on the longer horizons would not look like
+the one they print.

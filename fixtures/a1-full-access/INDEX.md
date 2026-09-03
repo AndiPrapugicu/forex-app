@@ -195,3 +195,47 @@ versus ex-autos, but neither page names its series so it stays open.
 
 AUD returns no series, which is why their AU heatmap has no retail row. CAD
 publishes no forecast on any of its nine points.
+
+## `a1-econ-consumer-confidence-2026-09-03-1046.csv`
+
+Page `p_i3yq86ivpd`, filter `df1150`. Eight currencies, eight different surveys —
+and the finding is that three of them are **abandoned rather than absent**: AUD
+last printed 233 days before capture, NZD 78, JPY 582, while USD, CHF, EUR and
+GBP are current. No heatmap carries a Consumer Confidence row at all, which is
+why this column had no A1 surface until now.
+
+Read the header before comparing AUD: their AUD series is an index **change**
+(values around 0.01–0.13), not a level.
+
+## `a1-retail-sentiment-2026-09-03-1053.csv` — the crosses, at last
+
+Page `p_5jasyzmtxc`, Category filter `df3624`. **45 symbols**, long/short, plus
+A1's own Bearish/Neutral/Bullish label.
+
+The page opens showing 20 symbols because its Category filter defaults to
+`Major Currency Pairs, Metals, Indices, Commodities`. Ask for the other
+categories and 25 more appear — **22 crosses**, plus US10T, Ethereum and BITCOIN.
+The chart truncates at 30 rows, so categories must be requested in groups; these
+45 were merged from three passes.
+
+Two things fall out:
+
+- **Their bands are 60 and 40, measured tightly.** Their own labels put Bearish's
+  minimum at 60.00 against Neutral's maximum of 59.41, and Neutral's minimum at
+  42.00 against Bullish's maximum of 39.01. `longPct >= 60 → Bearish,
+  <= 40 → Bullish` reproduces their label **42/42**. That is
+  `CROWD_LONG_PCT_BUCKETS` already; what is new is that nothing else fits.
+- **Two providers, blended.** Every FX symbol reports a whole number, every
+  index/metal/commodity/crypto reports two decimals — USDZAR (59.41) the lone
+  exception.
+
+Snapshot, not a feed: it cannot drive production, but it lets parity measure the
+crowd column on crosses for the first time.
+
+## Put-Call Ratio — `p_p6qyxgf9nd`, thresholds only
+
+Their line chart exposes only its two reference lines to the accessible tree, not
+the series, so there is no data file. What it does publish is the **rule**: the
+metric is a **5-day moving average** of the put-call ratio, banded at **1.07 =
+"High Call Volume"** and **1.20 = "High Put Volume"**. Recorded here because the
+bands are the part a scoring rule would need, and they are not guessable.

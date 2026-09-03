@@ -1537,6 +1537,34 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       '(values around 0,01-0,13), not a level, so any like-for-like comparison must not treat it as ' +
       'one.',
   },
+  {
+    key: 'crowd:crosses-are-published-behind-a-default-filter',
+    component: 'Crowd',
+    symbol: '22 crosses',
+    date: '2026-09-03',
+    ours: 'null - no cell scored',
+    a1: 'a long/short percentage for every one',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'Crowd is the largest single column of remaining gap (35) and our crosses score null rather ' +
+      'than wrong, because no retail feed we hold covers them. A1 publishes all of them. Their ' +
+      'Retail Sentiment page (p_5jasyzmtxc) opens with a Category filter set to "Major Currency ' +
+      'Pairs, Metals, Indices, Commodities" and shows 20 symbols; requesting the remaining ' +
+      'categories through df3624 returns 22 crosses plus US10T, Ethereum and BITCOIN. Captured to ' +
+      'fixtures/a1-full-access/a1-retail-sentiment-2026-09-03-1053.csv.',
+    confidence: 'PROVEN',
+    rootCause:
+      'Sourcing, not scoring - which the same capture also demonstrates. The page publishes A1s own ' +
+      'Bearish/Neutral/Bullish label beside each percentage, and our existing 40/60 bands reproduce ' +
+      'that label 42 times out of 42, with their Bearish minimum at 60,00 sitting directly against ' +
+      'their Neutral maximum of 59,41. The rule was never the problem; Myfxbook rejecting its own ' +
+      'session is (see myfxbook-invalid-session).',
+    productionAction:
+      'None from this file - it is a snapshot and must not become a data source. What it unblocks is ' +
+      'MEASUREMENT: parity can now score the crowd column on crosses and say whether the remaining ' +
+      'gap there is sourcing alone. Note the table is two providers blended - FX reports whole ' +
+      'numbers, everything else two decimals - so a live replacement may need to be two feeds.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

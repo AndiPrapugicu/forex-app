@@ -1,0 +1,87 @@
+# A1 EdgeFinder -> Crowd Sentiment -> Retail Sentiment, read from the DOM
+# 2026-09-03. A1 refresh stamp 03.09.2026 13:53:26 (= 10:53Z); the page's own
+# "Last update" cell reads 3 sept. 2026, 04:31:37, and it carries the note
+# "This script is interrupted every morning, returning at 10:00h".
+# Page p_5jasyzmtxc, Category filter is URL parameter df3624.
+#
+# THE POINT OF THIS CAPTURE. Crowd is the largest single column on the board (35
+# of the remaining absolute cell error) and our crosses score NULL, not a
+# difference, because we have no retail feed that covers them - Myfxbook rejects
+# its own session (see myfxbook-invalid-session). A1 publishes the crosses.
+#
+# THEY ARE HIDDEN BY A DEFAULT FILTER, not absent. The page opens with Category
+# set to "Major Currency Pairs, Metals, Indices, Commodities" and shows 20
+# symbols. Requesting the other categories through df3624 returns 25 more:
+# 22 crosses, plus US10T, Ethereum and BITCOIN. Note the chart truncates at 30
+# rows, so the categories have to be requested in groups or the tail is silently
+# dropped - these 45 rows were pulled in three passes and merged.
+#
+# THEIR BANDS ARE OURS, AND THIS PINS THEM TIGHTLY. The page publishes its own
+# Bearish / Neutral / Bullish assignment beside the percentages, which is a
+# labelled sample rather than an inference. Across the 42 labelled symbols the
+# boundaries land at:
+#     Bearish starts at 60,00   Neutral tops out at 59,41
+#     Neutral bottoms at 42,00  Bullish tops out at 39,01
+# so the cuts are 60 and 40, and `longPct >= 60 -> Bearish, <= 40 -> Bullish`
+# reproduces their label 42 times out of 42. That is what CROWD_LONG_PCT_BUCKETS
+# already holds; what is new is the tightness - 59,41 against 60 leaves no room
+# for the band to be anywhere else. The build script asserts the 42/42.
+#
+# NOTE THE SIGN CONVENTION: their "Bearish" is the CONTRARIAN read. A crowd that
+# is 91 % long GBPCAD makes their GBPCAD cell bearish.
+#
+# TWO FEEDS, NOT ONE. Every FX symbol reports a whole number (91 %, 61 %, 43 %)
+# while every index, metal, commodity and crypto reports two decimals (88,81 %,
+# 51,14 %, 81,72 %) - with USDZAR the single exception, at 59,41 %. That is two
+# providers blended into one table, and it is worth knowing before treating a
+# disagreement on a metal as the same kind of thing as one on a cross.
+#
+# This is a SNAPSHOT, not a feed. It cannot drive production. What it can do is
+# let parity measure the crowd column on crosses for the first time, and settle
+# whether the gap there is scoring or sourcing.
+symbol,longPct,shortPct,a1Bucket,category
+DAX,100,0,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+Iron Ore,88.81,11.19,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+COPPER,85.97,14.03,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+NIKKEI,85.14,14.86,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+USDJPY,65,35,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+GBPUSD,61,39,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+NZDUSD,60,40,Bearish,Major Currency Pairs / Metals / Indices / Commodities
+USDCHF,58,42,Neutral,Major Currency Pairs / Metals / Indices / Commodities
+USDCAD,55,45,Neutral,Major Currency Pairs / Metals / Indices / Commodities
+CHINA50,51.14,48.86,Neutral,Major Currency Pairs / Metals / Indices / Commodities
+SPX500,45.65,54.35,Neutral,Major Currency Pairs / Metals / Indices / Commodities
+EURUSD,43,57,Neutral,Major Currency Pairs / Metals / Indices / Commodities
+DOW,39.01,60.99,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+AUDUSD,28,72,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+USOIL,10.89,89.11,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+NASDAQ,9.56,90.44,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+GOLD,8.91,91.09,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+RUSSELL,8.61,91.39,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+SILVER,7.15,92.85,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+UK100,0,100,Bullish,Major Currency Pairs / Metals / Indices / Commodities
+GBPCAD,91,9,Bearish,Crosses / Forex Crosses / Minor / Exotic
+GBPAUD,91,9,Bearish,Crosses / Forex Crosses / Minor / Exotic
+NZDCAD,91,9,Bearish,Crosses / Forex Crosses / Minor / Exotic
+EURCAD,89,11,Bearish,Crosses / Forex Crosses / Minor / Exotic
+CHFJPY,88,12,Bearish,Crosses / Forex Crosses / Minor / Exotic
+NZDJPY,86,14,Bearish,Crosses / Forex Crosses / Minor / Exotic
+CADJPY,79,21,Bearish,Crosses / Forex Crosses / Minor / Exotic
+GBPJPY,78,22,Bearish,Crosses / Forex Crosses / Minor / Exotic
+EURAUD,76,24,Bearish,Crosses / Forex Crosses / Minor / Exotic
+EURJPY,62,38,Bearish,Crosses / Forex Crosses / Minor / Exotic
+GBPNZD,61,39,Bearish,Crosses / Forex Crosses / Minor / Exotic
+USDZAR,59.41,40.59,Neutral,Crosses / Forex Crosses / Minor / Exotic
+AUDJPY,55,45,Neutral,Crosses / Forex Crosses / Minor / Exotic
+EURNZD,54,46,Neutral,Crosses / Forex Crosses / Minor / Exotic
+GBPCHF,53,47,Neutral,Crosses / Forex Crosses / Minor / Exotic
+NZDCHF,42,58,Neutral,Crosses / Forex Crosses / Minor / Exotic
+EURCHF,35,65,Bullish,Crosses / Forex Crosses / Minor / Exotic
+AUDCAD,31,69,Bullish,Crosses / Forex Crosses / Minor / Exotic
+EURGBP,29,71,Bullish,Crosses / Forex Crosses / Minor / Exotic
+CADCHF,28,72,Bullish,Crosses / Forex Crosses / Minor / Exotic
+AUDCHF,11,89,Bullish,Crosses / Forex Crosses / Minor / Exotic
+AUDNZD,10,90,Bullish,Crosses / Forex Crosses / Minor / Exotic
+US10T,90.58,9.42,,Crypto / Bonds
+Ethereum,81.72,18.28,,Crypto / Bonds
+BITCOIN,75.56,24.44,,Crypto / Bonds

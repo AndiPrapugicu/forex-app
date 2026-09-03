@@ -1,0 +1,41 @@
+# A1 EdgeFinder -> Macro Scanners -> Eco Strength Index (page p_unqa9ujhyd).
+# Read from the DOM 2026-09-03; A1 refresh stamp 03.09.2026 14:00:17 (= 11:00Z).
+# Their own subtitle: "Long-term fundamental ranking indicator, based on latest data".
+#
+# THE FORMULA IS PUBLISHED AND IT IS A PLAIN SUM. Their table prints both the raw
+# macro readings and a per-component score, and on all 8 currencies
+#     totalScore == gdpScore + unemploymentScore + interestRateScore + cpiScore
+# with each component in 0..25, so the index runs 0..100. Their separate
+# "Fundamental Strength Score" table lists those same 32 currency-component pairs
+# individually, topping out at 25 - so the components are RANKED across the eight
+# currencies rather than measured against a threshold. The build script asserts
+# the 8/8 sum.
+#
+# BUT THE PAGE PRINTS A SECOND, INCOMPATIBLE SCORING. Its "Latest" panel shows
+# the same eight currencies with components that also sum to their stated total -
+# CHF 37+44+50+0 = 131, USD 44+28+9+44 = 125 - on a scale that is not a rescale
+# of the first (the ratios run 1,76 to 2,36, so no constant maps one to the
+# other). Both are recorded, the second as commented lines, because guessing
+# which one feeds the board would be exactly the kind of invention this project
+# forbids. Our own Eco Strength on /macro was built against the 0..100 one.
+#
+# Bias bands, from their labels: >= 60 Bullish, 42..48 Neutral, <= 29 Bearish.
+# The gap between 48 and 60 is unobserved, so the cut is NOT determined here.
+currency,bias,totalScore,deltaScore,gdpGrowthPct,unemploymentPct,interestRatePct,cpiYoYPct,realYieldDeltaPct,gdpScore,unemploymentScore,interestRateScore,cpiScore
+CHF,Bullish,71,11,1.9,3,0,0.8,-0.4,25,21,0,25
+USD,Bullish,60,-5,1.5,4.1,3.75,3.4,0.1,19,14,22,5
+JPY,Neutral,48,-7,0.3,2.4,1,1.9,-0.2,0,25,6,17
+AUD,Neutral,44,-1,0.4,4.5,4.35,3.5,0.3,2,12,25,5
+GBP,Neutral,42,-10,0.4,4.9,3.75,2.9,-0.3,2,9,22,9
+NZD,Bearish,29,-6,0.8,5.6,2.75,4.1,0.25,8,5,16,0
+CAD,Bearish,29,7,0.8,6.4,2.25,3,-0.2,8,0,13,8
+EUR,Bearish,22,-8,0.4,6.4,2.4,3.3,-0.4,2,0,14,6
+# second panel, same currencies, different scale: currency,totalScore,gdpScore,unemploymentScore,cpiScore,interestRateScore
+# CHF,131,37,44,50,0
+# USD,125,44,28,9,44
+# JPY,103,8,50,33,12
+# GBP,94,12,19,19,44
+# AUD,89,7,25,7,50
+# NZD,64,21,13,0,30
+# EUR,52,9,1,14,28
+# CAD,51,8,0,17,26

@@ -1,0 +1,40 @@
+# A1 EdgeFinder -> Macro Scanners -> Carry Trade Scanner (page p_rh8byw7l3c).
+# Read from the DOM 2026-09-03; A1 refresh stamp 03.09.2026 14:01:40 (= 11:01Z).
+# Top 20 rows by divergence, as their table sorts them.
+#
+# The rule is trivial and fully verified, 20/20: divergence is |base - quote|
+# and direction is Buy when the base rate is higher, Sell when it is lower.
+#
+# THE REASON TO KEEP THIS FILE is not the carry rule - it is that the page
+# publishes A1's policy rate for every currency, and THREE OF THEM CONTRADICT
+# A1's own Eco Strength page captured one minute earlier:
+#     JPY  carry 0,75 %  vs  strength 1,00 %
+#     NZD  carry 2,25 %  vs  strength 2,75 %
+#     EUR  carry 2,15 %  vs  strength 2,40 %
+# while AUD, CHF, USD, GBP and CAD agree exactly. The EUR pair is the tell:
+# 2,15 against 2,40 is the ECB's deposit rate against its main refinancing rate,
+# so these are two different (both defensible) definitions of "the policy rate",
+# not an error. That matters for our rates leg, which had to choose one - see
+# a1-rates-is-policy-vs-projection - and it means a rates disagreement with A1
+# may be a disagreement with only HALF of A1.
+symbol,baseRatePct,quoteRatePct,divergencePct,carryDirection
+AUDCHF,4.35,0,4.35,Buy
+USDTRY,3.75,37,33.25,Sell
+USDCHF,3.75,0,3.75,Buy
+GBPCHF,3.75,0,3.75,Buy
+AUDJPY,4.35,0.75,3.6,Buy
+USDZAR,3.75,6.75,3,Sell
+USDJPY,3.75,0.75,3,Buy
+GBPJPY,3.75,0.75,3,Buy
+CADCHF,2.25,0,2.25,Buy
+NZDCHF,2.25,0,2.25,Buy
+EURAUD,2.15,4.35,2.2,Sell
+EURCHF,2.15,0,2.15,Buy
+AUDCAD,4.35,2.25,2.1,Buy
+AUDNZD,4.35,2.25,2.1,Buy
+EURUSD,2.15,3.75,1.6,Sell
+EURGBP,2.15,3.75,1.6,Sell
+CADJPY,2.25,0.75,1.5,Buy
+USDCAD,3.75,2.25,1.5,Buy
+NZDJPY,2.25,0.75,1.5,Buy
+GBPCAD,3.75,2.25,1.5,Buy

@@ -239,3 +239,34 @@ the series, so there is no data file. What it does publish is the **rule**: the
 metric is a **5-day moving average** of the put-call ratio, banded at **1.07 =
 "High Call Volume"** and **1.20 = "High Put Volume"**. Recorded here because the
 bands are the part a scoring rule would need, and they are not guessable.
+
+## Macro Scanners — three files, captured 2026-09-03 ~11:00Z
+
+`a1-eco-strength-2026-09-03-1400.csv` (`p_unqa9ujhyd`),
+`a1-eco-surprise-2026-09-03-1400.csv` (`p_n5qm8xilrd`),
+`a1-carry-trade-2026-09-03-1401.csv` (`p_rh8byw7l3c`).
+
+Each one publishes its own arithmetic, and each check is asserted by the build
+script rather than asserted in prose:
+
+- **Eco Strength** — `total = gdpScore + unemploymentScore + interestRateScore +
+  cpiScore`, components 0–25, index 0–100. **8/8.** The same page also prints a
+  second, incompatible scoring (CHF 131, USD 125) that is not a rescale of the
+  first; both are recorded and neither is assumed to be the one feeding the board.
+- **Eco Surprise** — every score is a fraction with a denominator under 8 (CHF
+  5/6, CAD 5/7, AUD 3/5, GBP 2/5, EUR 1/4). It is a **count of recent releases
+  that beat forecast**, not an average of surprise sizes. Their currency list is
+  wider than the board's: TRY, CHY and ZAR appear.
+- **Carry Trade** — `divergence = |base − quote|`, `direction = sign(base −
+  quote)`. **20/20.** Kept for a different reason than carry: it publishes their
+  policy rate per currency, and **three contradict their own Eco Strength page
+  one minute earlier** — JPY 0.75 vs 1.00, NZD 2.25 vs 2.75, EUR 2.15 vs 2.40.
+  The EUR pair is ECB deposit vs main refi, so these are two definitions rather
+  than a bug — and a rates disagreement with A1 may be a disagreement with only
+  half of A1.
+
+**Real Yield History** (`p_xxysbv7azd`) confirms `real yield = interest rate −
+CPI YoY` exactly on its published series (4 − 7.1 = −3.1; 5.25 − 4.9 = 0.35), so
+no data file was kept: the definition is the finding. **Stock Surprise Meter**
+(`p_s9xxu4bltd`) rendered only its descriptions in the capture window; its text
+confirms the surprise family is scored "relative to economic forecasts".

@@ -1393,6 +1393,118 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       '8/8; the contradiction is printed rather than resolved. Settle it by capturing a metric ' +
       'page with dated x-axis labels, where a fill and a repeat can be told apart.',
   },
+  {
+    key: 'spmi:chf-reads-the-euro-area',
+    component: 'Services PMI',
+    symbol: 'CHF (every CHF leg)',
+    date: '2026-09-03',
+    ours: 'Swiss services PMI, where our feed has one',
+    a1: 'the euro-area series, unmodified',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      "A1's own Services PMI scanner (page p_wa6fla2ydd, currency filter df935) returns, for CHF, a " +
+      'series byte-identical to the one it returns for EUR — all 24 published points, actual, ' +
+      'forecast and revision alike, from 3 sept. 2025 to 21 aug. 2026. Captured to ' +
+      'fixtures/a1-full-access/a1-econ-services-pmi-2026-09-03-1033.csv, whose build script asserts ' +
+      'the identity and refuses to write the file if it ever stops holding. This was previously ' +
+      'inferred from a single heatmap cell where the CH and EU services rows happened to agree; it ' +
+      'is now the whole history, which no coincidence explains.',
+    confidence: 'PROVEN',
+    rootCause:
+      'Switzerland has no S&P Global services PMI in the flash programme A1 reads (their own page ' +
+      'states "Non-USD assets use Flash PMI Data"), so their pipeline falls back to the euro-area ' +
+      'print for the Swiss row rather than leaving it blank.',
+    productionAction:
+      'None in the `ours` profile — where we hold a real Swiss services print, scoring it is the ' +
+      'better read and the product should keep it. This is the seed entry for the Workstream C ' +
+      "coverage table: in the `a1` mirror profile, CHF services must substitute the EU series so " +
+      'that parity measures reproduction rather than disagreement.',
+  },
+  {
+    key: 'spmi:cad-nzd-have-no-series',
+    component: 'Services PMI',
+    symbol: 'CAD, NZD',
+    date: '2026-09-03',
+    ours: 'Ivey (CAD); BusinessNZ PSI (NZD)',
+    a1: 'a row frozen at 2026-05-01',
+    classification: 'A1_INCONSISTENCY',
+    evidence:
+      'The Services PMI scanner returns an EMPTY chart for both CAD and NZD, under filter codes that ' +
+      'return full histories on the Manufacturing PMI page — so this is absent data, not a bad ' +
+      'query. Yet their CA and NZ Economic Heatmaps both still print a Services PMI row, both dated ' +
+      '1 May 2026: CA 50,6 vs 49,2 and NZ 47,5 vs 48,7. On the capture date that is 125 days stale.',
+    confidence: 'PROVEN',
+    rootCause:
+      'Whatever fed the Canadian and New Zealand services rows stopped publishing in May and A1 kept ' +
+      'scoring the last value instead of blanking the cell. Their scanner and their heatmap disagree ' +
+      'about whether the series exists at all.',
+    productionAction:
+      'None, and specifically DO NOT reproduce it. Matching a 125-day-old frozen print would be ' +
+      "copying a bug. Note this is the one place where removing our staleness cap (decision 1) makes " +
+      'us MORE like them for the wrong reason — the cap was wrong as a rule, but this cell is why ' +
+      'the card must still show ageDays.',
+  },
+  {
+    key: 'pmi:missing-forecast-fallback-confirmed-at-source',
+    component: 'Manufacturing PMI, Services PMI',
+    symbol: 'CAD, NZD, AUD, JPY',
+    date: '2026-09-03',
+    ours: 'actual vs previous print, where no consensus exists',
+    a1: 'the same',
+    classification: 'FIXED',
+    evidence:
+      'The fallback in scoreSlot was adopted from heatmap arithmetic — wherever their Forecast cell ' +
+      'was blank, their Surprise equalled `actual − previous`. Their Economic Data scanners now show ' +
+      'the same thing one level upstream, in the data rather than in the arithmetic: the Forecast ' +
+      'SERIES is empty for NZD manufacturing on 17 of 17 points, CAD manufacturing on 11 of 13, AUD ' +
+      'manufacturing on 16 of 30, AUD services on 17 of 33 and JPY services on 6 of 11. Three ' +
+      'independent current prints confirm the consequence: CA mPMI 53,0 against a prior 53,5 gives ' +
+      'their heatmap −0,5; NZ mPMI 54,3 against a prior 59,7 gives −5,4; JP sPMI 52,3 against a ' +
+      'prior 51,2 gives +1,1. None of the three has a forecast to have used.',
+    confidence: 'PROVEN',
+    rootCause:
+      'No privately-run survey in New Zealand, Australia or Canada is polled ahead of publication, ' +
+      'and A1 reads the S&P Global FLASH release for every non-USD currency (their words: "USD uses ' +
+      'ISM PMI data for both manufacturing and services. Non-USD assets use Flash PMI Data"). Flash ' +
+      'prints carry no consensus. The blank is structural, not a coverage gap either of us can fill.',
+    productionAction:
+      'None — lib/scoring/discrete.ts already does exactly this, and this entry exists so the next ' +
+      'round does not re-litigate removing it for a third time. One nuance the capture adds: A1 DOES ' +
+      'hold forecasts for the JP services FINAL prints and not for the flash, so the long-standing ' +
+      'note that "A1 has a forecast for Jibun Bank Services PMI that our calendars do not carry" is ' +
+      'true only of the final. Their most recent JP services cell is a flash, scored against the ' +
+      'prior actual.',
+  },
+  {
+    key: 'retail:cad-two-surfaces-two-series',
+    component: 'Retail Sales',
+    symbol: 'CAD',
+    date: '2026-09-03',
+    ours: '(see retail:cad-statcan)',
+    a1: '-0,10 on their scanner, -0,8 on their heatmap',
+    classification: 'A1_INCONSISTENCY',
+    evidence:
+      'For the 21 August 2026 Canadian retail release, A1 publishes two different actuals. Their ' +
+      'Retail Sales scanner (page p_gp30uh2ydd, filter df964) shows -0,10 %; their CA Economic ' +
+      'Heatmap shows an actual of -0,8 with a surprise of -1,8 against a previous of 1,0. Captured ' +
+      'to fixtures/a1-full-access/a1-econ-retail-sales-2026-09-03-1040.csv and ' +
+      'a1-econ-heatmaps-2026-09-03-0527.csv respectively. The other seven currencies reconcile ' +
+      'between the two surfaces exactly, so this is specific to CAD and not an extraction fault: ' +
+      "USD, GBP, EUR, JPY, NZD and CHF all match on both actual and forecast, and AUD is absent " +
+      'from both.',
+    confidence: 'PROVEN',
+    rootCause:
+      'UNKNOWN, with one strong candidate: StatCan publishes headline retail and retail ex-autos, ' +
+      'and -0,1 headline beside -0,8 core is an unremarkable month. If that is what it is, the two ' +
+      'A1 surfaces are reading different series rather than disagreeing about one. Neither page ' +
+      'names its series, so this is NOT resolved by assumption. Their heatmap arithmetic is still ' +
+      'internally consistent (-0,8 - 1,0 = -1,8), so no cell is broken - there are simply two.',
+    productionAction:
+      'None yet, and do not pick a side to close the gap. This is exactly the case ' +
+      'triangulate-against-primary-sources describes: the answer comes from a StatCan release, not ' +
+      'from whichever choice happens to move parity. Note the scanner also publishes NO forecast on ' +
+      'any of its nine Canadian points, so CAD retail is scored against the prior actual either way.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

@@ -1,0 +1,105 @@
+# A1 EdgeFinder -> Economic Data -> Economic Growth Data -> Retail Sales.
+# Read from the DOM 2026-09-03; A1 refresh stamp 03.09.2026 13:40:38 (= 10:40Z).
+# Page p_gp30uh2ydd, currency selected by URL parameter df964.
+#
+# Every axis label on this page rendered in FULL - no truncation, no subsampling -
+# so unlike the two PMI captures these dates are read, not reconstructed.
+#
+# Retail Sales is the largest undisputed column left on the board (24 of the
+# remaining absolute cell error), and the reason it was captured is that A1's
+# numbers and our feed's numbers disagree on two currencies. This file pins
+# theirs exactly, with dates, so B3 can put a primary source between us.
+#
+# SEVEN OF EIGHT CURRENCIES RECONCILE with the independently captured heatmaps:
+#   USD  14 aug  -0,60 vs  0,10 forecast   heatmap -0,7 | -0,6 | 0,1 | 0,2   OK
+#   GBP  21 aug  -0,50 vs -0,40            heatmap -0,1 | -0,5 | -0,4 | 1    OK
+#   EUR   6 aug  -0,30 vs  0,10            heatmap -0,4 | -0,3 | 0,1 | 0,2   OK
+#   JPY  30 aug   4,00 vs  3,20            heatmap  0,8 | 4    | 3,2 | 0,5   OK
+#   NZD  23 aug  -0,50 vs  0,10            heatmap -0,6 | -0,5 | 0,1 | 0,9   OK
+#   CHF   1 sept  2,30 vs  1,60            heatmap  0,7 | 2,3  | 1,6 | 1,5   OK
+#   AUD  no series at all, which is why their AU heatmap has no retail row.
+#
+# THE EIGHTH IS A CONTRADICTION INSIDE A1. For CAD, this scanner and their own CA
+# heatmap disagree about the actual for the SAME release date, 21 August 2026:
+#     this page   -0,10 %,  and no forecast on any of its nine points
+#     CA heatmap  -0,8 actual, surprise -1,8 against a previous of 1,0
+# Both cannot be the Canadian retail print. The likeliest reading is that one
+# surface carries headline retail and the other carries ex-autos - StatCan
+# publishes both, and -0,1 headline beside -0,8 core is an ordinary month - but
+# nothing on either page says so, so it is recorded as a disagreement rather than
+# resolved by assumption. Note their heatmap's own arithmetic still holds
+# internally (-0,8 - 1,0 = -1,8), so this is not a broken cell; it is two series.
+#
+# CAD ALSO PUBLISHES NO FORECAST on any of its nine points, which puts it in the
+# same class as NZD/AUD manufacturing PMI: a column A1 scores against the prior
+# actual because no consensus exists to score against.
+#
+# UNITS ARE NOT UNIFORM and the page's chart header lies about it - it says
+# "Retail Sales MoM" for every currency, but JPY is year-over-year and NZD is
+# quarterly (three points a year, matching Stats NZ). The `unit` column here
+# records what the series actually is, taken from the matching heatmap row name.
+currency,unit,idx,date,actualPct,forecastPct,revisionPct
+USD,MoM,1,16 dec. 2025,0.00,0.10,-0.10
+USD,MoM,2,14 ian. 2026,0.60,0.50,0.60
+USD,MoM,3,10 feb. 2026,0.00,0.40,0.00
+USD,MoM,4,6 mar. 2026,-0.20,-0.30,-0.10
+USD,MoM,5,1 apr. 2026,0.60,0.50,0.70
+USD,MoM,6,21 apr. 2026,1.70,1.40,1.60
+USD,MoM,7,14 mai 2026,0.50,0.50,0.40
+USD,MoM,8,17 iun. 2026,0.90,0.50,1.00
+USD,MoM,9,16 iul. 2026,0.20,0.20,0.20
+USD,MoM,10,14 aug. 2026,-0.60,0.10,
+GBP,MoM,1,19 dec. 2025,-0.10,0.30,-0.10
+GBP,MoM,2,23 ian. 2026,0.40,0.00,0.40
+GBP,MoM,3,20 feb. 2026,1.80,0.20,2.00
+GBP,MoM,4,27 mar. 2026,-0.40,-0.60,-0.60
+GBP,MoM,5,24 apr. 2026,0.70,0.00,0.60
+GBP,MoM,6,22 mai 2026,-1.30,-0.60,-1.00
+GBP,MoM,7,19 iun. 2026,1.20,0.50,1.20
+GBP,MoM,8,24 iul. 2026,1.00,-0.30,0.70
+GBP,MoM,9,21 aug. 2026,-0.50,-0.40,
+CAD,MoM,1,19 dec. 2025,-0.20,,
+CAD,MoM,2,23 ian. 2026,1.30,,
+CAD,MoM,3,20 feb. 2026,-0.40,,
+CAD,MoM,4,20 mar. 2026,1.10,,
+CAD,MoM,5,24 apr. 2026,0.70,,
+CAD,MoM,6,22 mai 2026,0.90,,
+CAD,MoM,7,19 iun. 2026,0.50,,
+CAD,MoM,8,23 iul. 2026,1.00,,
+CAD,MoM,9,21 aug. 2026,-0.10,,
+EUR,MoM,1,4 dec. 2025,0.00,0.00,0.30
+EUR,MoM,2,9 ian. 2026,0.20,0.10,0.10
+EUR,MoM,3,5 feb. 2026,-0.50,-0.20,0.20
+EUR,MoM,4,5 mar. 2026,-0.10,0.30,0.00
+EUR,MoM,5,8 apr. 2026,-0.20,-0.20,-0.30
+EUR,MoM,6,7 mai 2026,-0.10,-0.30,0.80
+EUR,MoM,7,4 iun. 2026,-0.40,-0.30,-0.30
+EUR,MoM,8,6 iul. 2026,0.20,0.20,0.40
+EUR,MoM,9,6 aug. 2026,-0.30,0.10,
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),1,25 dec. 2025,1.00,0.90,1.10
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),2,29 ian. 2026,-0.90,0.70,-0.90
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),3,26 feb. 2026,1.80,0.10,1.80
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),4,27 feb. 2026,1.80,0.10,1.80
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),5,31 mar. 2026,-0.20,0.90,-0.10
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),6,29 apr. 2026,1.70,0.90,1.40
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),7,30 apr. 2026,1.70,0.90,1.40
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),8,28 mai 2026,2.10,1.40,2.80
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),9,29 mai 2026,2.10,1.40,2.80
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),10,28 iun. 2026,5.30,3.10,5.00
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),11,29 iun. 2026,5.30,3.10,5.00
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),12,30 iul. 2026,0.50,3.10,0.60
+JPY,YoY (their heatmap calls it YoY; this page's header says MoM),13,30 aug. 2026,4.00,3.20,
+NZD,QoQ,1,22 feb. 2026,0.90,0.60,0.90
+NZD,QoQ,2,21 mai 2026,0.90,0.50,1.00
+NZD,QoQ,3,23 aug. 2026,-0.50,0.10,
+CHF,YoY,1,1 dec. 2025,2.70,1.20,2.20
+CHF,YoY,2,5 ian. 2026,2.30,2.50,1.70
+CHF,YoY,3,2 feb. 2026,2.90,2.50,2.80
+CHF,YoY,4,2 mar. 2026,-1.10,2.70,-0.60
+CHF,YoY,5,1 apr. 2026,0.90,1.50,0.40
+CHF,YoY,6,1 mai 2026,0.50,0.60,1.30
+CHF,YoY,7,1 iun. 2026,1.60,0.20,1.70
+CHF,YoY,8,1 iul. 2026,3.50,1.80,3.40
+CHF,YoY,9,31 iul. 2026,1.50,3.10,1.90
+CHF,YoY,10,1 sept. 2026,2.30,1.60,
+AUD,,,NO SERIES PUBLISHED,,,

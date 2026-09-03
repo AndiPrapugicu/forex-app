@@ -142,3 +142,56 @@ Value to parity: it is the first thing that can **falsify** the horizon our COT
 column assumes. Weekly and quarterly disagree in sign often (CAD +7.43 vs −0.68,
 EUR +2.36 vs −5.83), so a board built on the longer horizons would not look like
 the one they print.
+
+## `a1-sitemap-2026-09-03.csv` — the whole report, 67 pages
+
+Group, page title and Looker page id for every page in their report, plus the
+recipe for reading it again: the left nav has no anchors, but each navigable
+item carries its page id as the DOM `id` and its title as `aria-label`, so
+expanding the subgroups and reading `.xap-nav-item[id^="p_"]` yields the lot
+without a single click.
+
+Worth having on its own: the report is far larger than the nav suggests at first
+glance, and it contains pages nothing in this project had looked at — dedicated
+**Services PMI** and **Manufacturing PMI** history pages, **Consumer
+Confidence**, **Balance of Trade**, **Interest Rate Projections**, a
+**Put-Call Ratio** and **Put & Call Walls**, **AAII Sentiment**, a **Volatility
+Heatmap** and a **Stock Surprise Meter**.
+
+## `a1-econ-manufacturing-pmi-2026-09-03-1023.csv` and `a1-econ-services-pmi-2026-09-03-1033.csv`
+
+Actual, forecast and revision history per currency, from their two PMI scanners.
+Currency is a URL parameter, and **it differs per page** — `df1168` for
+manufacturing, `df935` for services.
+
+Three things came out of these:
+
+- **Their vendor, in their own words:** *"USD uses ISM PMI data for both
+  manufacturing and services. Non-USD assets use Flash PMI Data."*
+- **CHF services is EUR services**, byte-identical on all 24 points. The
+  substitution is proven at the data level, not inferred from one cell.
+- **CAD and NZD have no services series at all**, while their heatmaps still
+  print a CA and NZ services row frozen at 1 May 2026.
+
+The forecast series is empty for whole currencies (NZD manufacturing 17 of 17,
+CAD 11 of 13, AUD 16 of 30), which is the upstream cause of the
+`actual − previous` fallback our `scoreSlot` already implements.
+
+Read the caveats in each file's header before using the dates: their x-axis
+truncates labels once a currency has more than ~13 points, and JPY/AUD subsample
+them, so rows that cannot be dated safely say `UNALIGNED` rather than carrying a
+guess. Values are exact and were verified against the heatmap captures.
+
+## `a1-econ-retail-sales-2026-09-03-1040.csv`
+
+Page `p_gp30uh2ydd`, filter `df964`. **Every label rendered in full here**, so
+these dates are read rather than reconstructed.
+
+Seven of eight currencies reconcile exactly with the heatmap capture. The eighth
+is a contradiction inside A1: for the same 21 August release, their scanner says
+CAD retail was −0.10 % and their CA heatmap says −0.8. Recorded as
+`retail:cad-two-surfaces-two-series`; the likeliest explanation is headline
+versus ex-autos, but neither page names its series so it stays open.
+
+AUD returns no series, which is why their AU heatmap has no retail row. CAD
+publishes no forecast on any of its nine points.

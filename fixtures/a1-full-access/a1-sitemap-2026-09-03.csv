@@ -1,0 +1,82 @@
+# A1 EdgeFinder complete page index, read 2026-09-03 during the free-access week.
+#
+# HOW THIS WAS OBTAINED, because it matters for reproducing it: the left nav is an
+# Angular tree with no anchors, so `a[href]` finds nothing. But every navigable
+# item carries the Looker page id as its DOM `id` attribute and its title as
+# `aria-label`. Expanding the collapsed subgroups and reading
+# `.xap-nav-item[id^="p_"]` yields the whole report without clicking anything.
+#
+# URL for any row:
+#   https://datastudio.google.com/u/0/reporting/9dcec9fb-10be-4f20-b7f1-367ba41a192f/page/<pageId>
+# Per-symbol filtering, where the page supports it, is a URL parameter:
+#   ?params={"df1071":"include<U+E000>0<U+E000>IN<U+E000>SYMBOL"}
+#
+# 67 pages. Groups are their nav hierarchy, in their order.
+group,subgroup,page,pageId
+,,Asset Scorecard,p_1pe2kd5uzd
+,,Forex Scorecard,p_entcpay0wd
+Top Setups,,Top Setups,p_yccf3kzgfd
+Top Setups,,Top Setups (Compact),p_hdupnjs1qd
+Top Setups,,Top Setups (Macro Only),p_gg3soog1qd
+Top Setups,,EdgeFinder Score History,p_vrujpr74zd
+Top Setups,,Trade Ideas,p_2jzr4uh8rd
+COT Data,,Latest COT Report,p_vq5ja62vyd
+COT Data,,COT Data History,p_x6pv0bi9ld
+COT Data,,COT Velocity,p_ljh6ko9j2d
+COT Data,,COT Trends,p_182xj0vs2d
+Crowd Sentiment,,Retail Sentiment,p_5jasyzmtxc
+Crowd Sentiment,,Retail Sent. History,p_1jk2lb88md
+Crowd Sentiment,,Put-Call Ratio,p_p6qyxgf9nd
+Crowd Sentiment,,Net Options Volume,p_z516f2a54d
+Crowd Sentiment,,Put & Call Walls,p_052o7w3h5d
+Crowd Sentiment,,AAII Sentiment,p_rcihth8jid
+Macro Scanners,,Eco Surprise Index,p_n5qm8xilrd
+Macro Scanners,,Eco Strength Index,p_unqa9ujhyd
+Macro Scanners,,Real Yield History,p_xxysbv7azd
+Macro Scanners,,Stock Surprise Meter,p_s9xxu4bltd
+Macro Scanners,,Carry Trade Scanner,p_rh8byw7l3c
+Economic Heatmaps,,US Economic Heatmap,p_s5c4a45kqd
+Economic Heatmaps,,EU Economic Heatmap,p_uaqsd87kqd
+Economic Heatmaps,,UK Economic Heatmap,p_txt26a8kqd
+Economic Heatmaps,,JP Economic Heatmap,p_hdhaoe8kqd
+Economic Heatmaps,,CA Economic Heatmap,p_9acg8f8kqd
+Economic Heatmaps,,AU Economic Heatmap,p_wqts8i8kqd
+Economic Heatmaps,,NZ Economic Heatmap,p_zzoegm8kqd
+Economic Heatmaps,,CH Economic Heatmap,p_872pjadurd
+Economic Heatmaps,,CN Economic Heatmap,p_befiknrqqd
+Economic Data,Economic Growth Data,GDP Growth,p_9309v91ydd
+Economic Data,Economic Growth Data,GDP Growth Forecast,p_ra7jqqustd
+Economic Data,Economic Growth Data,Services PMI,p_wa6fla2ydd
+Economic Data,Economic Growth Data,Manufacturing PMI,p_6r8bqg3hid
+Economic Data,Economic Growth Data,Retail Sales,p_gp30uh2ydd
+Economic Data,Economic Growth Data,Consumer Confidence,p_i3yq86ivpd
+Economic Data,Economic Growth Data,Balance of Trade,p_zdxdjhvstd
+Economic Data,Inflation Data,CPI YoY,p_sig5lz5odd
+Economic Data,Inflation Data,PPI YoY,p_ec49xuglod
+Economic Data,Inflation Data,PCE YoY (USA),p_gjoll7nmod
+Economic Data,Labor Market Data,NFP (USA),p_n6ox4ve4dd
+Economic Data,Labor Market Data,ADP (USA),p_79iii4gcfd
+Economic Data,Labor Market Data,Unemployment Rate,p_jqxfsve4dd
+Economic Data,Labor Market Data,Unemployment Claims (USA),p_121vdg2ydd
+Economic Data,Labor Market Data,Job Openings (USA),p_utmgrg2ydd
+Economic Data,Labor Market Data,Wage Growth (USA),p_18kqkue4dd
+Economic Data,Interest Rates Data,Interest Rates,p_4x7bjq59sd
+Economic Data,Interest Rates Data,Interest Rate Projections,p_5yhhzj9std
+Economic Data,Interest Rates Data,US Treasury Yield Curve,p_gccefsc9cd
+Economic Data,US Housing Data,House Price Index,p_ti7usu2ypd
+Economic Data,US Housing Data,Housing Inventory,p_8mnsxu2ypd
+Economic Data,US Housing Data,Mortgage Applications,p_5g1bzu2ypd
+Economic Data,US Housing Data,Global Housing Prices,p_mga46ayoxd
+Market Spreads,,BTC/GOLD Ratio,p_fbiww70opd
+Market Spreads,,Credit Spreads Tracker,p_81f22s5cyd
+Seasonality Scanners,,Annual Seasonality,p_3vimgkovcd
+Seasonality Scanners,,Monthly Seasonality,p_q3dgzgkg3c
+,,Scenario Backtests,p_x83v9v2hzd
+Technical Scanners,,Momentum Heatmap,p_to8opdcsxd
+Technical Scanners,,Volatility Heatmap,p_86eam119xd
+,,AI News Feed,p_1cc33c75qd
+,,Geopolitical Risk Tracker,p_0bfvxdsi1d
+,,Market Heatmap,p_3mj3yfv72c
+,,Economic Calendar,p_k4izxalncd
+,,Data Updates Log,p_tqod1pswtc
+,,Help,p_xh5ea99xdd

@@ -1,0 +1,218 @@
+# A1 EdgeFinder -> Economic Data -> Economic Growth Data -> Manufacturing PMI.
+# Read from the DOM 2026-09-03; A1 refresh stamp 03.09.2026 13:23:01 (= 10:23Z).
+# Page p_6r8bqg3hid, currency selected by URL parameter df1168.
+# Chart range as shipped: 1 sept. 2025 - 10 sept. 2026.
+#
+# THEIR PUBLISHED RULE, quoted from the page's own Description panel:
+#   "A positive change in PMI suggests growth, or slower decline. So, if PMI in
+#   either category come in higher, it is considered optimistic for its currency
+#   (+1). However, this would impact other assets such as gold, in a negative way."
+# and: "Anything above 50 suggests overall expansion in the economy while anything
+# below indicates a contraction."
+#
+# THE FINDING THIS CAPTURE EXISTS FOR. Their `Forecast` series is EMPTY for whole
+# currencies:
+#     NZD  17 of 17 points have no forecast
+#     CAD  11 of 13
+#     AUD  16 of 30
+#     USD / EUR / GBP / JPY / CHF   0 - every point has one
+# and where the forecast is missing, their Economic Heatmap still prints a
+# surprise. Cross-checking the two captures:
+#     CA mPMI heatmap = surprise -0,5 | 53 | 53,5   and this page has NO Sept
+#                       forecast, with the Aug ACTUAL at 53,5
+#     NZ mPMI heatmap = surprise -5,4 | 54,3 | 59,7  and this page has NO
+#                       forecasts at all, with the prior ACTUAL at 59,7
+# So for those rows A1's surprise is `actual - previous actual`, not
+# `actual - forecast`. That contradicts the blanket "vs. forecast" reading in
+# a1-published-metric-spec and is worth its own ledger entry.
+#
+# EXTRACTION VALIDATED against the independently captured heatmaps: the last row
+# of USD, EUR, GBP, JPY and CHF reproduces that country's heatmap actual and
+# forecast exactly (54,6/55,2  52,7/52,8  51,7/51,5  54,9/55,1  57,1/54,1).
+#
+# CAVEATS, because a fixture that hides these is worse than no fixture:
+#  - `axisLabel` is COPIED VERBATIM from their x-axis, which truncates with an
+#    ellipsis once a currency has more than ~13 points. No date has been inferred
+#    or reconstructed here. Day-of-month and the month prefix survive; the year
+#    does not, though the series is in ascending order.
+#  - JPY renders 34 data points but only 17 axis labels (their renderer subsamples
+#    every other one), so JPY rows carry `UNALIGNED` instead of a guessed label.
+#    Its VALUES are exact - the accessible table was verified to repeat identically
+#    in both halves before de-duplication.
+#  - Currencies with 25-34 points publish flash AND final; those with 13 publish
+#    one release a month. NZD is BusinessNZ, not S&P Global.
+#  - The final row of most currencies has a blank `revision`: that release has not
+#    been revised yet.
+#  - CNY returns an empty chart under this filter; their CN heatmap page exists but
+#    the currency code is not "CNY".
+currency,idx,axisLabel,actual,forecast,revision
+USD,1,2 sept. 2025,48.7,49.0,48.7
+USD,2,1 oct. 2025,49.1,49.0,49.1
+USD,3,3 nov. 2025,48.7,49.4,48.7
+USD,4,1 dec. 2025,48.2,49.0,48.2
+USD,5,5 ian. 2026,47.9,48.3,47.9
+USD,6,2 feb. 2026,52.6,48.5,52.6
+USD,7,2 mar. 2026,52.4,51.7,52.4
+USD,8,1 apr. 2026,52.7,52.3,52.7
+USD,9,1 mai 2026,52.7,53.1,52.7
+USD,10,1 iun. 2026,54.0,53.3,54.0
+USD,11,1 iul. 2026,53.3,53.8,53.3
+USD,12,3 aug. 2026,55.6,54.0,55.6
+USD,13,1 sept. 2026,54.6,55.2,
+EUR,1,1 se…,50.7,50.5,50.7
+EUR,2,23 s…,49.5,50.7,50.7
+EUR,3,1 oct…,49.8,49.5,49.8
+EUR,4,24 o…,50.0,49.8,50.0
+EUR,5,3 no…,50.0,50.0,50.0
+EUR,6,21 n…,49.7,50.1,50.0
+EUR,7,1 de…,49.6,49.7,49.6
+EUR,8,16 d…,49.2,49.9,49.6
+EUR,9,2 ian…,48.8,49.2,48.8
+EUR,10,23 ia…,49.4,49.1,48.8
+EUR,11,2 feb…,49.5,49.4,49.5
+EUR,12,20 fe…,50.8,49.9,49.5
+EUR,13,2 ma…,50.8,50.8,50.8
+EUR,14,24 m…,51.4,49.4,50.8
+EUR,15,1 apr…,51.6,51.4,51.6
+EUR,16,23 a…,52.2,50.9,51.6
+EUR,17,4 ma…,52.2,52.2,52.2
+EUR,18,21 m…,51.4,51.7,52.2
+EUR,19,1 iun…,51.6,51.4,51.6
+EUR,20,23 iu…,51.3,51.6,51.6
+EUR,21,1 iul.…,51.4,51.3,51.4
+EUR,22,24 iu…,52.0,51.5,52.0
+EUR,23,3 au…,51.9,52.0,51.9
+EUR,24,21 a…,52.8,51.8,51.9
+EUR,25,1 se…,52.7,52.8,
+GBP,1,1 se…,47.0,47.3,47.0
+GBP,2,23 s…,46.2,47.1,46.2
+GBP,3,1 oct…,46.2,46.2,46.2
+GBP,4,24 o…,49.6,46.6,49.7
+GBP,5,3 no…,49.7,49.6,49.7
+GBP,6,21 n…,50.2,49.3,50.2
+GBP,7,1 de…,50.2,50.2,50.2
+GBP,8,16 d…,51.2,50.3,51.2
+GBP,9,2 ian…,50.6,51.2,50.6
+GBP,10,23 ia…,51.6,50.6,50.6
+GBP,11,2 feb…,51.8,51.6,51.8
+GBP,12,20 fe…,52.0,51.5,52.0
+GBP,13,2 ma…,51.7,52.0,51.7
+GBP,14,24 m…,51.4,50.0,51.7
+GBP,15,1 apr…,51.0,51.4,51.0
+GBP,16,23 a…,53.6,50.3,51.0
+GBP,17,1 ma…,53.7,53.6,53.7
+GBP,18,21 m…,53.7,52.9,53.7
+GBP,19,1 iun…,53.9,53.7,53.9
+GBP,20,23 iu…,53.1,53.5,53.9
+GBP,21,1 iul.…,52.5,53.1,52.5
+GBP,22,24 iu…,52.8,52.0,52.8
+GBP,23,3 au…,51.9,52.8,51.9
+GBP,24,21 a…,51.5,51.6,51.9
+GBP,25,1 se…,51.7,51.5,
+JPY,1,23 s…,48.4,49.5,49.7
+JPY,2,23 o…,48.5,48.4,48.5
+JPY,3,20 n…,48.3,48.8,48.3
+JPY,4,15 d…,48.2,48.3,48.2
+JPY,5,22 ia…,48.8,48.8,48.2
+JPY,6,19 fe…,48.7,48.8,48.7
+JPY,7,1 ma…,49.7,49.0,48.7
+JPY,8,24 m…,50.0,49.7,50.0
+JPY,9,1 apr…,51.5,50.1,50.0
+JPY,10,23 a…,51.5,51.5,51.5
+JPY,11,1 ma…,52.8,51.3,51.5
+JPY,12,21 m…,52.8,51.3,51.5
+JPY,13,22 iu…,53.0,52.8,53.0
+JPY,14,30 iu…,51.4,53.2,51.4
+JPY,15,23 iu…,51.4,53.2,51.4
+JPY,16,2 au…,51.6,51.6,51.6
+JPY,17,21 a…,51.6,51.6,51.6
+JPY,18,UNALIGNED,54.9,51.1,51.6
+JPY,19,UNALIGNED,54.9,51.1,51.6
+JPY,20,UNALIGNED,55.1,54.9,55.1
+JPY,21,UNALIGNED,55.1,54.9,55.1
+JPY,22,UNALIGNED,54.5,54.5,55.1
+JPY,23,UNALIGNED,54.5,54.5,55.1
+JPY,24,UNALIGNED,54.5,54.5,54.5
+JPY,25,UNALIGNED,54.9,54.5,54.5
+JPY,26,UNALIGNED,54.9,54.5,54.5
+JPY,27,UNALIGNED,54.8,54.9,54.8
+JPY,28,UNALIGNED,54.8,54.9,54.8
+JPY,29,UNALIGNED,54.7,55.0,54.8
+JPY,30,UNALIGNED,54.7,55.0,54.8
+JPY,31,UNALIGNED,54.5,54.7,54.5
+JPY,32,UNALIGNED,54.5,54.7,54.5
+JPY,33,UNALIGNED,55.1,55.1,54.5
+JPY,34,UNALIGNED,54.9,55.1,
+CAD,1,2 sept. 2025,48.3,,48.3
+CAD,2,1 oct. 2025,47.7,,47.7
+CAD,3,3 nov. 2025,49.6,48.2,49.6
+CAD,4,1 dec. 2025,48.4,,48.4
+CAD,5,2 ian. 2026,48.6,,48.6
+CAD,6,2 feb. 2026,50.4,,50.4
+CAD,7,2 mar. 2026,51.0,,51.0
+CAD,8,1 apr. 2026,50.0,,50.0
+CAD,9,1 mai 2026,53.3,,53.3
+CAD,10,1 iun. 2026,52.9,,52.9
+CAD,11,2 iul. 2026,53.0,,53.0
+CAD,12,4 aug. 2026,53.5,52.2,53.5
+CAD,13,1 sept. 2026,53.0,,
+AUD,1,22 s…,51.6,,51.6
+AUD,2,30 s…,51.4,51.6,51.4
+AUD,3,23 o…,49.7,,49.7
+AUD,4,2 no…,49.7,,49.7
+AUD,5,20 n…,51.6,,49.7
+AUD,6,30 n…,51.6,51.6,51.6
+AUD,7,15 d…,52.2,,51.6
+AUD,8,1 ian…,51.6,52.2,51.6
+AUD,9,22 ia…,52.4,,51.6
+AUD,10,1 feb…,52.3,52.4,52.3
+AUD,11,19 fe…,51.5,,52.3
+AUD,12,1 ma…,51.0,51.5,51.0
+AUD,13,23 m…,50.1,,51.0
+AUD,14,31 m…,49.8,50.1,49.8
+AUD,15,22 a…,51.0,,49.8
+AUD,16,23 a…,51.0,,49.8
+AUD,17,30 a…,51.3,51.0,51.3
+AUD,18,1 ma…,51.3,51.0,51.3
+AUD,19,20 m…,50.2,,51.3
+AUD,20,1 iun…,50.7,50.2,50.7
+AUD,21,22 iu…,51.2,,50.7
+AUD,22,23 iu…,51.2,,50.7
+AUD,23,30 iu…,51.5,51.2,51.5
+AUD,24,1 iul.…,51.5,51.2,51.5
+AUD,25,23 iu…,51.7,,51.5
+AUD,26,24 iu…,51.7,,51.5
+AUD,27,2 au…,52.0,51.7,52.0
+AUD,28,3 au…,52.0,51.7,52.0
+AUD,29,20 a…,52.0,,52.0
+AUD,30,31 a…,52.0,52.0,
+NZD,1,11 sept. 2025,49.9,,49.9
+NZD,2,9 oct. 2025,49.9,,50.1
+NZD,3,13 nov. 2025,51.4,,51.2
+NZD,4,11 dec. 2025,51.4,,51.4
+NZD,5,15 ian. 2026,56.1,,56.1
+NZD,6,12 feb. 2026,55.2,,55.1
+NZD,7,13 feb. 2026,55.2,,55.1
+NZD,8,12 mar. 2026,55.0,,54.8
+NZD,9,9 apr. 2026,53.2,,52.8
+NZD,10,10 apr. 2026,53.2,,52.8
+NZD,11,14 mai 2026,50.5,,50.4
+NZD,12,15 mai 2026,50.5,,50.4
+NZD,13,11 iun. 2026,49.9,,51.3
+NZD,14,12 iun. 2026,49.9,,51.3
+NZD,15,8 iul. 2026,59.7,,60.1
+NZD,16,9 iul. 2026,59.7,,60.1
+NZD,17,14 aug. 2026,54.3,,54.3
+CHF,1,1 sept. 2025,49.0,46.9,49.0
+CHF,2,1 oct. 2025,46.3,47.9,46.3
+CHF,3,3 nov. 2025,48.2,47.7,48.2
+CHF,4,4 dec. 2025,49.7,48.9,49.7
+CHF,5,5 ian. 2026,45.8,49.9,45.8
+CHF,6,2 feb. 2026,48.8,47.2,48.8
+CHF,7,2 mar. 2026,47.4,49.8,47.4
+CHF,8,1 apr. 2026,53.3,47.2,53.3
+CHF,9,4 mai 2026,54.5,52.0,54.5
+CHF,10,1 iun. 2026,57.3,54.0,57.3
+CHF,11,1 iul. 2026,54.3,56.4,54.3
+CHF,12,3 aug. 2026,53.2,54.5,53.2
+CHF,13,1 sept. 2026,57.1,54.1,

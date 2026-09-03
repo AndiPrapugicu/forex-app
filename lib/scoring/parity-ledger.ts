@@ -1505,6 +1505,38 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'from whichever choice happens to move parity. Note the scanner also publishes NO forecast on ' +
       'any of its nine Canadian points, so CAD retail is scored against the prior actual either way.',
   },
+  {
+    key: 'cnsmr-conf:a1-has-the-series-but-abandoned-them',
+    component: 'Consumer Confidence',
+    symbol: 'AUD, NZD, JPY',
+    date: '2026-09-03',
+    ours: 'no consumer-confidence leg for these currencies',
+    a1: 'a series that exists and stopped updating',
+    classification: 'UNKNOWN',
+    evidence:
+      'None of the eight Economic Heatmaps carries a Consumer Confidence row, which is why this ' +
+      'column has been reasoned about as something A1 does not publish. Their Consumer Confidence ' +
+      'scanner (page p_i3yq86ivpd, filter df1150) does publish it, for eight currencies. Three of ' +
+      'them are stale rather than absent: AUD last printed 13 ian. 2026 (233 days before capture), ' +
+      'NZD 17 iun. 2026 (78 days), JPY 29 ian. 2025 (582 days). USD, CHF, EUR and GBP are current. ' +
+      'Captured to fixtures/a1-full-access/a1-econ-consumer-confidence-2026-09-03-1046.csv.',
+    confidence: 'PROVEN',
+    rootCause:
+      'The comment in lib/scoring/discrete.ts justifying the missing-forecast fallback describes ' +
+      'Westpac and ANZ-Roy Morgan confidence as series "A1 does not have at all". That was inferred ' +
+      'from the heatmaps, correctly, and is now too strong: A1 has them and abandoned them. Which ' +
+      'means the interesting question is not coverage but what their pipeline does with a series ' +
+      'that stops - it scores a 125-day-old CA services print but shows no heatmap row for a ' +
+      '233-day-old AUD confidence print, so some threshold or staleness flag exists between those ' +
+      'two ages that nothing has yet located.',
+    productionAction:
+      'None, and explicitly NOT a licence to pick a staleness threshold. Decision 1 was to drop our ' +
+      'own maxAgeDays cap because it was our invention; this entry says the replacement is not ' +
+      '"score everything forever" either, and that the observation which would settle it is a cell ' +
+      'on their board fed by a series this old. Note also that the AUD series is an index CHANGE ' +
+      '(values around 0,01-0,13), not a level, so any like-for-like comparison must not treat it as ' +
+      'one.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

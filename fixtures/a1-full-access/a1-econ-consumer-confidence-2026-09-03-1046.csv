@@ -1,0 +1,287 @@
+# A1 EdgeFinder -> Economic Data -> Economic Growth Data -> Consumer Confidence.
+# Read from the DOM 2026-09-03; A1 refresh stamp 03.09.2026 13:46:20 (= 10:46Z).
+# Page p_i3yq86ivpd, currency selected by URL parameter df1150 (multi-select).
+#
+# WHY THIS ONE MATTERED. Consumer Confidence is 24 points of board gap and the leg
+# solver flags it DISPUTED, meaning at least one captured cell must be misread.
+# It is also the column where none of the eight Economic Heatmaps carries a row -
+# so until now there was no A1 surface publishing the underlying numbers at all.
+# This page is that surface.
+#
+# EIGHT CURRENCIES, EIGHT DIFFERENT SURVEYS, AND THEY ARE NOT ALL ALIVE:
+#   USD  Conference Board       31 pts, forecasts throughout, last 25 aug. 2026
+#   CHF  SECO                   31 pts, forecasts throughout, last  7 aug. 2026
+#   EUR  EU flash + final       60 pts, forecasts throughout, last 21 aug. 2026
+#   GBP  GfK                    34 pts, forecasts throughout, last 24 iul. 2026
+#   CAD  index ~45-50           32 pts, NO forecast on any point, last 8 iul. 2026
+#   NZD  quarterly index        15 pts, NO forecast, last 17 iun. 2026   (78d stale)
+#   AUD  index CHANGE, not level 25 pts, NO forecast, last 13 ian. 2026 (233d stale)
+#   JPY  index ~35-39           14 pts, forecasts, last 29 ian. 2025    (582d stale)
+#
+# THE FINDING. lib/scoring/discrete.ts currently reasons that Westpac and
+# ANZ-Roy Morgan consumer confidence are series "A1 does not have at all", on the
+# evidence that no heatmap carries a row for them. That evidence was sound and the
+# conclusion is now too narrow: A1 HAS the AUD, NZD and JPY series - it stopped
+# updating them. AUD is 233 days stale on the capture date and JPY is 582.
+#
+# That distinction matters for decision 1 (drop our staleness cap to match A1).
+# A1 clearly does score old prints - their CA services row is 125 days old and
+# still scored. But these three are older still and appear on NO heatmap, which
+# suggests their pipeline drops a series at some age or on some staleness flag
+# rather than scoring it forever. Nothing here establishes where that line is, and
+# THIS FILE IS NOT EVIDENCE FOR PICKING ONE. It is evidence that "A1 has no such
+# series" was the wrong reason, and that the right question is what they do with a
+# series that stops.
+#
+# AUD IS A DIFFERENT QUANTITY. Its values are around 0,01 to 0,13, not an index
+# level - that is a monthly CHANGE. Any comparison that treats it as a level, ours
+# or theirs, is comparing two different things.
+#
+# CAVEATS: EUR, GBP and CAD render roughly twice as many data points as axis
+# labels (their chart plots flash and final, or repeats a point, and the axis
+# subsamples), so their rows carry UNALIGNED rather than a guessed date; the
+# span is given per currency above and the VALUES are in order and exact. The
+# other five align 1:1 and their dates are read verbatim.
+currency,series,idx,date,actual,forecast
+USD,Conference Board Consumer Confidence,1,30 ian. 2024,114.8,114.2
+USD,Conference Board Consumer Confidence,2,27 feb. 2024,106.7,114.8
+USD,Conference Board Consumer Confidence,3,26 mar. 2024,104.7,106.9
+USD,Conference Board Consumer Confidence,4,30 apr. 2024,97,104
+USD,Conference Board Consumer Confidence,5,28 mai 2024,102,96
+USD,Conference Board Consumer Confidence,6,25 iun. 2024,100.4,100
+USD,Conference Board Consumer Confidence,7,30 iul. 2024,100.3,99.7
+USD,Conference Board Consumer Confidence,8,27 aug. 2024,103.3,100.9
+USD,Conference Board Consumer Confidence,9,24 sept. 20…,98.7,103.9
+USD,Conference Board Consumer Confidence,10,29 oct. 2024,108.7,99.5
+USD,Conference Board Consumer Confidence,11,26 nov. 2024,111.7,111.8
+USD,Conference Board Consumer Confidence,12,23 dec. 2024,104.7,112.9
+USD,Conference Board Consumer Confidence,13,28 ian. 2025,104.1,105.7
+USD,Conference Board Consumer Confidence,14,25 feb. 2025,98.3,102.7
+USD,Conference Board Consumer Confidence,15,25 mar. 2025,92.9,94.2
+USD,Conference Board Consumer Confidence,16,29 apr. 2025,86,87.7
+USD,Conference Board Consumer Confidence,17,27 mai 2025,98,87.1
+USD,Conference Board Consumer Confidence,18,24 iun. 2025,93,99.4
+USD,Conference Board Consumer Confidence,19,29 iul. 2025,97.2,95.9
+USD,Conference Board Consumer Confidence,20,26 aug. 2025,97.4,96.4
+USD,Conference Board Consumer Confidence,21,30 sept. 20…,94.2,96
+USD,Conference Board Consumer Confidence,22,25 nov. 2025,88.7,93.5
+USD,Conference Board Consumer Confidence,23,23 dec. 2025,89.1,91.7
+USD,Conference Board Consumer Confidence,24,27 ian. 2026,84.5,90.6
+USD,Conference Board Consumer Confidence,25,24 feb. 2026,91.2,87.4
+USD,Conference Board Consumer Confidence,26,31 mar. 2026,91.8,87.8
+USD,Conference Board Consumer Confidence,27,28 apr. 2026,92.8,89
+USD,Conference Board Consumer Confidence,28,26 mai 2026,93.1,91.9
+USD,Conference Board Consumer Confidence,29,30 iun. 2026,91.2,94.4
+USD,Conference Board Consumer Confidence,30,28 iul. 2026,90.8,92.4
+USD,Conference Board Consumer Confidence,31,25 aug. 2026,89.4,90.3
+CHF,SECO Consumer Confidence,1,15 feb. 2024,-26,-33
+CHF,SECO Consumer Confidence,2,11 mar. 2024,-42,-35
+CHF,SECO Consumer Confidence,3,5 apr. 2024,-38,-41
+CHF,SECO Consumer Confidence,4,13 mai 2024,-24,-40
+CHF,SECO Consumer Confidence,5,10 iun. 2024,-38,-37
+CHF,SECO Consumer Confidence,6,5 iul. 2024,-37,-35
+CHF,SECO Consumer Confidence,7,9 aug. 2024,-19,-36
+CHF,SECO Consumer Confidence,8,6 sept. 2024,-35,-33
+CHF,SECO Consumer Confidence,9,11 oct. 2024,-34,-33
+CHF,SECO Consumer Confidence,10,8 nov. 2024,-27,-33
+CHF,SECO Consumer Confidence,11,9 dec. 2024,-37,-38
+CHF,SECO Consumer Confidence,12,13 ian. 2025,-30,-38
+CHF,SECO Consumer Confidence,13,7 feb. 2025,-21,-31
+CHF,SECO Consumer Confidence,14,10 mar. 2025,-34,-28
+CHF,SECO Consumer Confidence,15,11 apr. 2025,-35,-32
+CHF,SECO Consumer Confidence,16,9 mai 2025,-39,-34
+CHF,SECO Consumer Confidence,17,10 iun. 2025,-37,-38
+CHF,SECO Consumer Confidence,18,11 iul. 2025,-32,-35
+CHF,SECO Consumer Confidence,19,8 aug. 2025,-28,-30
+CHF,SECO Consumer Confidence,20,5 sept. 2025,-40,-37
+CHF,SECO Consumer Confidence,21,10 oct. 2025,-37,-38
+CHF,SECO Consumer Confidence,22,7 nov. 2025,-37,-36
+CHF,SECO Consumer Confidence,23,8 dec. 2025,-34,-34
+CHF,SECO Consumer Confidence,24,12 ian. 2026,-31,-33
+CHF,SECO Consumer Confidence,25,9 feb. 2026,-30,-30
+CHF,SECO Consumer Confidence,26,9 mar. 2026,-30,-29
+CHF,SECO Consumer Confidence,27,10 apr. 2026,-43,-32
+CHF,SECO Consumer Confidence,28,8 mai 2026,-40,-46
+CHF,SECO Consumer Confidence,29,15 iun. 2026,-38,-38
+CHF,SECO Consumer Confidence,30,10 iul. 2026,-36,-35
+CHF,SECO Consumer Confidence,31,7 aug. 2026,-33,-34
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),1,5 ian. 2024,37.2,36.6
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),2,31 ian. 2024,38,37.6
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),3,1 mar. 2024,39.1,38.4
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),4,9 apr. 2024,39.5,39.6
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),5,2 mai 2024,38.3,39.7
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),6,29 mai 2024,36.2,39.1
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),7,1 iul. 2024,36.4,36.4
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),8,31 iul. 2024,36.7,36.5
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),9,29 aug. 2024,36.7,36.9
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),10,2 oct. 2024,36.9,37.1
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),11,30 oct. 2024,36.2,36.7
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),12,29 nov. 2024,36.4,36.4
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),13,8 ian. 2025,36.2,36.6
+JPY,Consumer Confidence (ABANDONED - last point 29 ian. 2025),14,29 ian. 2025,35.2,36.6
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),1,16 ian. 2024,-0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),2,13 feb. 2024,0.06,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),3,26 mar. 2024,-0.02,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),4,9 apr. 2024,-0.02,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),5,21 mai 2024,-0,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),6,25 iun. 2024,0.02,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),7,9 iul. 2024,-0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),8,13 aug. 2024,0.03,0.01
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),9,10 sept. 20…,-0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),10,8 oct. 2024,0.06,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),11,12 nov. 2024,0.05,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),12,17 dec. 2024,-0.02,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),13,14 ian. 2025,-0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),14,11 feb. 2025,0,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),15,11 mar. 2025,0.04,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),16,8 apr. 2025,-0.06,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),17,13 mai 2025,0.02,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),18,10 iun. 2025,0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),19,15 iul. 2025,0.01,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),20,19 aug. 2025,0.06,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),21,9 sept. 2025,-0.03,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),22,7 oct. 2025,-0.04,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),23,11 nov. 2025,0.13,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),24,16 dec. 2025,-0.09,
+AUD,Consumer Confidence, index change (ABANDONED - last point 13 ian. 2026),25,13 ian. 2026,-0.02,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),1,19 mar. 2024,93.2,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),2,17 iun. 2024,82.2,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),3,17 sept. 2024,90.8,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),4,17 dec. 2024,97.5,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),5,18 mar. 2025,89.2,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),6,19 mar. 2025,89.2,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),7,17 iun. 2025,91.2,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),8,16 sept. 2025,90.9,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),9,16 dec. 2025,96.5,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),10,18 dec. 2025,96.5,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),11,17 mar. 2026,94.7,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),12,18 mar. 2026,94.7,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),13,19 mar. 2026,94.7,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),14,16 iun. 2026,80.4,
+NZD,Consumer Confidence, quarterly (ABANDONED - last point 17 iun. 2026),15,17 iun. 2026,80.4,
+EUR,EU Consumer Confidence (flash and final both plotted),1,UNALIGNED,-15,-15.1
+EUR,EU Consumer Confidence (flash and final both plotted),2,UNALIGNED,-16.1,-14.3
+EUR,EU Consumer Confidence (flash and final both plotted),3,UNALIGNED,-16.1,-16.1
+EUR,EU Consumer Confidence (flash and final both plotted),4,UNALIGNED,-15.5,-16
+EUR,EU Consumer Confidence (flash and final both plotted),5,UNALIGNED,-15.5,-15.5
+EUR,EU Consumer Confidence (flash and final both plotted),6,UNALIGNED,-14.9,-15
+EUR,EU Consumer Confidence (flash and final both plotted),7,UNALIGNED,-14.9,-14.9
+EUR,EU Consumer Confidence (flash and final both plotted),8,UNALIGNED,-14.7,-14
+EUR,EU Consumer Confidence (flash and final both plotted),9,UNALIGNED,-14.7,-14.7
+EUR,EU Consumer Confidence (flash and final both plotted),10,UNALIGNED,-14.3,-14
+EUR,EU Consumer Confidence (flash and final both plotted),11,UNALIGNED,-14.3,-14.3
+EUR,EU Consumer Confidence (flash and final both plotted),12,UNALIGNED,-14,-14
+EUR,EU Consumer Confidence (flash and final both plotted),13,UNALIGNED,-14,-14
+EUR,EU Consumer Confidence (flash and final both plotted),14,UNALIGNED,-13,-13
+EUR,EU Consumer Confidence (flash and final both plotted),15,UNALIGNED,-13,-13
+EUR,EU Consumer Confidence (flash and final both plotted),16,UNALIGNED,-13.4,-13
+EUR,EU Consumer Confidence (flash and final both plotted),17,UNALIGNED,-13.5,-13.4
+EUR,EU Consumer Confidence (flash and final both plotted),18,UNALIGNED,-12.9,-13
+EUR,EU Consumer Confidence (flash and final both plotted),19,UNALIGNED,-12.9,-12.9
+EUR,EU Consumer Confidence (flash and final both plotted),20,UNALIGNED,-12.5,-12
+EUR,EU Consumer Confidence (flash and final both plotted),21,UNALIGNED,-12.5,-12.5
+EUR,EU Consumer Confidence (flash and final both plotted),22,UNALIGNED,-13.7,-12.4
+EUR,EU Consumer Confidence (flash and final both plotted),23,UNALIGNED,-13.7,-13.7
+EUR,EU Consumer Confidence (flash and final both plotted),24,UNALIGNED,-14.5,-14
+EUR,EU Consumer Confidence (flash and final both plotted),25,UNALIGNED,-14.5,-14.5
+EUR,EU Consumer Confidence (flash and final both plotted),26,UNALIGNED,-14.2,-14
+EUR,EU Consumer Confidence (flash and final both plotted),27,UNALIGNED,-14.2,-14.2
+EUR,EU Consumer Confidence (flash and final both plotted),28,UNALIGNED,-13.6,
+EUR,EU Consumer Confidence (flash and final both plotted),29,UNALIGNED,-13.6,-13.6
+EUR,EU Consumer Confidence (flash and final both plotted),30,UNALIGNED,-14.5,-13
+EUR,EU Consumer Confidence (flash and final both plotted),31,UNALIGNED,-14.5,-14.5
+EUR,EU Consumer Confidence (flash and final both plotted),32,UNALIGNED,-16.7,-15
+EUR,EU Consumer Confidence (flash and final both plotted),33,UNALIGNED,-16.7,-16.7
+EUR,EU Consumer Confidence (flash and final both plotted),34,UNALIGNED,-15.2,-16
+EUR,EU Consumer Confidence (flash and final both plotted),35,UNALIGNED,-15.2,-15.2
+EUR,EU Consumer Confidence (flash and final both plotted),36,UNALIGNED,-15.3,-15
+EUR,EU Consumer Confidence (flash and final both plotted),37,UNALIGNED,-15.3,-15.3
+EUR,EU Consumer Confidence (flash and final both plotted),38,UNALIGNED,-14.7,-15
+EUR,EU Consumer Confidence (flash and final both plotted),39,UNALIGNED,-14.7,-14.7
+EUR,EU Consumer Confidence (flash and final both plotted),40,UNALIGNED,-15.5,-15.5
+EUR,EU Consumer Confidence (flash and final both plotted),41,UNALIGNED,-14.9,-14.9
+EUR,EU Consumer Confidence (flash and final both plotted),42,UNALIGNED,-14.2,-14.2
+EUR,EU Consumer Confidence (flash and final both plotted),43,UNALIGNED,-14.6,-14
+EUR,EU Consumer Confidence (flash and final both plotted),44,UNALIGNED,-13.1,-14.6
+EUR,EU Consumer Confidence (flash and final both plotted),45,UNALIGNED,-12.4,-13
+EUR,EU Consumer Confidence (flash and final both plotted),46,UNALIGNED,-12.4,-12.4
+EUR,EU Consumer Confidence (flash and final both plotted),47,UNALIGNED,-12.2,-12
+EUR,EU Consumer Confidence (flash and final both plotted),48,UNALIGNED,-12.2,-12.2
+EUR,EU Consumer Confidence (flash and final both plotted),49,UNALIGNED,-16.3,-15
+EUR,EU Consumer Confidence (flash and final both plotted),50,UNALIGNED,-16.3,-16.3
+EUR,EU Consumer Confidence (flash and final both plotted),51,UNALIGNED,-20.6,-18
+EUR,EU Consumer Confidence (flash and final both plotted),52,UNALIGNED,-20.6,-20.6
+EUR,EU Consumer Confidence (flash and final both plotted),53,UNALIGNED,-19,-21
+EUR,EU Consumer Confidence (flash and final both plotted),54,UNALIGNED,-19,-19
+EUR,EU Consumer Confidence (flash and final both plotted),55,UNALIGNED,-17.7,-18
+EUR,EU Consumer Confidence (flash and final both plotted),56,UNALIGNED,-17.7,-17.7
+EUR,EU Consumer Confidence (flash and final both plotted),57,UNALIGNED,-15.9,-17
+EUR,EU Consumer Confidence (flash and final both plotted),58,UNALIGNED,-15.9,-15.9
+EUR,EU Consumer Confidence (flash and final both plotted),59,UNALIGNED,-15.5,-16
+EUR,EU Consumer Confidence (flash and final both plotted),60,UNALIGNED,-15.5,-15.5
+GBP,GfK Consumer Confidence,1,UNALIGNED,-19,-21
+GBP,GfK Consumer Confidence,2,UNALIGNED,-21,-18
+GBP,GfK Consumer Confidence,3,UNALIGNED,-21,-19
+GBP,GfK Consumer Confidence,4,UNALIGNED,-19,-20
+GBP,GfK Consumer Confidence,5,UNALIGNED,-17,-18
+GBP,GfK Consumer Confidence,6,UNALIGNED,-14,-16
+GBP,GfK Consumer Confidence,7,UNALIGNED,-13,-12
+GBP,GfK Consumer Confidence,8,UNALIGNED,-13,-12
+GBP,GfK Consumer Confidence,9,UNALIGNED,-20,-13
+GBP,GfK Consumer Confidence,10,UNALIGNED,-21,-20
+GBP,GfK Consumer Confidence,11,UNALIGNED,-18,-22
+GBP,GfK Consumer Confidence,12,UNALIGNED,-17,-18
+GBP,GfK Consumer Confidence,13,UNALIGNED,-22,-18
+GBP,GfK Consumer Confidence,14,UNALIGNED,-20,-22
+GBP,GfK Consumer Confidence,15,UNALIGNED,-19,-20
+GBP,GfK Consumer Confidence,16,UNALIGNED,-23,-21
+GBP,GfK Consumer Confidence,17,UNALIGNED,-20,-22
+GBP,GfK Consumer Confidence,18,UNALIGNED,-18,-19
+GBP,GfK Consumer Confidence,19,UNALIGNED,-19,-19
+GBP,GfK Consumer Confidence,20,UNALIGNED,-17,-19
+GBP,GfK Consumer Confidence,21,UNALIGNED,-19,-18
+GBP,GfK Consumer Confidence,22,UNALIGNED,-19,-18
+GBP,GfK Consumer Confidence,23,UNALIGNED,-17,-18
+GBP,GfK Consumer Confidence,24,UNALIGNED,-16,-17
+GBP,GfK Consumer Confidence,25,UNALIGNED,-19,-15
+GBP,GfK Consumer Confidence,26,UNALIGNED,-21,-24
+GBP,GfK Consumer Confidence,27,UNALIGNED,-21,-24
+GBP,GfK Consumer Confidence,28,UNALIGNED,-25,-24
+GBP,GfK Consumer Confidence,29,UNALIGNED,-23,-28
+GBP,GfK Consumer Confidence,30,UNALIGNED,-23,-28
+GBP,GfK Consumer Confidence,31,UNALIGNED,-23,-24
+GBP,GfK Consumer Confidence,32,UNALIGNED,-17,-22
+GBP,GfK Consumer Confidence,33,UNALIGNED,-17,-22
+GBP,GfK Consumer Confidence,34,UNALIGNED,-14,-18
+CAD,Consumer Confidence index (NO forecast on any point),1,UNALIGNED,49.46,
+CAD,Consumer Confidence index (NO forecast on any point),2,UNALIGNED,47.38,
+CAD,Consumer Confidence index (NO forecast on any point),3,UNALIGNED,47.89,
+CAD,Consumer Confidence index (NO forecast on any point),4,UNALIGNED,48.02,
+CAD,Consumer Confidence index (NO forecast on any point),5,UNALIGNED,47.25,
+CAD,Consumer Confidence index (NO forecast on any point),6,UNALIGNED,47.14,
+CAD,Consumer Confidence index (NO forecast on any point),7,UNALIGNED,46.97,
+CAD,Consumer Confidence index (NO forecast on any point),8,UNALIGNED,50.06,
+CAD,Consumer Confidence index (NO forecast on any point),9,UNALIGNED,49.48,
+CAD,Consumer Confidence index (NO forecast on any point),10,UNALIGNED,48.41,
+CAD,Consumer Confidence index (NO forecast on any point),11,UNALIGNED,49.72,
+CAD,Consumer Confidence index (NO forecast on any point),12,UNALIGNED,48.24,
+CAD,Consumer Confidence index (NO forecast on any point),13,UNALIGNED,45.47,
+CAD,Consumer Confidence index (NO forecast on any point),14,UNALIGNED,46.09,
+CAD,Consumer Confidence index (NO forecast on any point),15,UNALIGNED,45.47,
+CAD,Consumer Confidence index (NO forecast on any point),16,UNALIGNED,45.35,
+CAD,Consumer Confidence index (NO forecast on any point),17,UNALIGNED,48.15,
+CAD,Consumer Confidence index (NO forecast on any point),18,UNALIGNED,48.82,
+CAD,Consumer Confidence index (NO forecast on any point),19,UNALIGNED,48.07,
+CAD,Consumer Confidence index (NO forecast on any point),20,UNALIGNED,47.7,
+CAD,Consumer Confidence index (NO forecast on any point),21,UNALIGNED,47.79,
+CAD,Consumer Confidence index (NO forecast on any point),22,UNALIGNED,48.04,
+CAD,Consumer Confidence index (NO forecast on any point),23,UNALIGNED,47.44,
+CAD,Consumer Confidence index (NO forecast on any point),24,UNALIGNED,46.43,
+CAD,Consumer Confidence index (NO forecast on any point),25,UNALIGNED,49.28,
+CAD,Consumer Confidence index (NO forecast on any point),26,UNALIGNED,47.46,
+CAD,Consumer Confidence index (NO forecast on any point),27,UNALIGNED,49.37,
+CAD,Consumer Confidence index (NO forecast on any point),28,UNALIGNED,45.59,
+CAD,Consumer Confidence index (NO forecast on any point),29,UNALIGNED,47.58,
+CAD,Consumer Confidence index (NO forecast on any point),30,UNALIGNED,48.95,
+CAD,Consumer Confidence index (NO forecast on any point),31,UNALIGNED,49.42,
+CAD,Consumer Confidence index (NO forecast on any point),32,UNALIGNED,48.19,

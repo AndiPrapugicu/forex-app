@@ -307,6 +307,45 @@ describe('checkStructuralZeros', () => {
   it('ignores a symbol it does not know rather than guessing its legs', () => {
     expect(checkStructuralZeros({ NOTASYMBOL: row({ pce: 1 }) })).toHaveLength(0);
   });
+
+  it('DROPS on a transcription and KEEPS on a DOM read, reporting either way', () => {
+    /*
+     * The same impossible cell means two different things depending on how it
+     * was captured, and this is the distinction.
+     *
+     * Transcribed from a video frame, it is evidence about the READER: the six
+     * header groups were partitioned by eye and one boundary landed wrong, so
+     * the whole row is suspect and goes.
+     *
+     * Read out of the DOM under its own header, a column shift has no mechanism
+     * - so the cell is evidence about A1. Dropping the row then discards
+     * seventeen good cells in order to disbelieve one, which is what took eight
+     * of fifty-one rows out of the attribution: A1 prints -1 in PCE on every
+     * yen cross, plus JPYX and JP225, on captures where every one of those rows
+     * checksums to its own published Score.
+     *
+     * The breach is REPORTED in both cases. Only `discard` differs.
+     */
+    const cells = { GBPJPY: row({ pce: -1 }) };
+
+    const transcribed = checkStructuralZeros(cells, 'transcribed');
+    expect(transcribed).toHaveLength(1);
+    expect(transcribed[0].discard).toBe(true);
+    expect(transcribed[0].detail).toContain('misread');
+
+    const dom = checkStructuralZeros(cells, 'dom');
+    expect(dom).toHaveLength(1);
+    expect(dom[0].slotKey).toBe('pce');
+    expect(dom[0].value).toBe(-1);
+    expect(dom[0].discard).toBe(false);
+    expect(dom[0].detail).toContain('THEIR cell');
+  });
+
+  it('defaults to the strict reading, so an un-updated caller cannot silently keep a bad row', () => {
+    // Omitting the argument must mean 'transcribed'. Every caller that has not
+    // been taught the difference is reading a video frame.
+    expect(checkStructuralZeros({ GBPJPY: row({ pce: -1 }) })[0].discard).toBe(true);
+  });
 });
 
 describe('captures are solved one date at a time', () => {

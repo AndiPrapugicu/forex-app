@@ -1610,6 +1610,43 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'that limit, so nothing here guesses at one. If a capture ever shows a board cell fed by a ' +
       'series that old, maxAgeFor is where the rule goes.',
   },
+  {
+    key: 'pce:a1-scores-it-on-yen-crosses',
+    component: 'PCE',
+    symbol: 'GBPJPY, EURJPY, CHFJPY, CADJPY, NZDJPY, AUDJPY, JPYX, JP225',
+    date: '2026-09-03',
+    ours: '0 - PCE is a US series and these rows have no dollar leg',
+    a1: '-1 on every yen cross and JPYX, +1 on JP225',
+    classification: 'A1_INCONSISTENCY',
+    evidence:
+      'Stable across all five captures (08-31, 09-01 x2, 09-02 x2), two of them read from the DOM ' +
+      'rather than transcribed, and every one of the eight rows checksums to its own published ' +
+      'Score. It is arithmetically impossible as a leg difference, which is what makes it an ' +
+      'inconsistency rather than a coverage difference: DXY prints PCE 0, so the dollar leg is 0; ' +
+      'USDJPY prints +1, which under `base - quote` needs a yen leg of -1; the other yen crosses ' +
+      'print -1, which needs +1. No single value satisfies both. With the eight rows admitted, the ' +
+      'leg solve now reports PCE as satisfiable on only 48 of 51 rows - it had been reporting the ' +
+      'column clean because the contradicting rows were being discarded before it ran.',
+    confidence: 'PROVEN',
+    rootCause:
+      'UNKNOWN on their side, and the shape of it argues against a simple story. A positional slot ' +
+      'would explain the yen rows - see a1:positional-slots-jp-household-spending, where their JP ' +
+      'heatmap fills row 7 with Household Spending - but a positional read would still have to be ' +
+      'leg-differenced, and no leg value fits both USDJPY and the crosses. So either the column is ' +
+      'not differenced for these rows or one of the two readings is stale.',
+    productionAction:
+      'DONE to the MEASUREMENT and deliberately nothing to the scoring. checkStructuralZeros now ' +
+      'takes a provenance argument: on a transcription it still drops the row, because the fault ' +
+      'it detects - six header groups partitioned by eye - is real there; on a DOM read it reports ' +
+      'the breach and KEEPS the row, because that fault has no mechanism when cells are read under ' +
+      'their own headers. Dropping was discarding seventeen good cells to disbelieve one, and it ' +
+      'silently removed 8 of 51 rows from per-slot attribution. The default is still `transcribed`, ' +
+      'pinned by a test, so a caller that has not been taught the difference cannot quietly start ' +
+      'keeping bad rows; component-parity.ts reads only the 08-24 and 08-25 transcriptions and ' +
+      'correctly keeps it. DO NOT change our PCE rule from these cells - a self-contradicting ' +
+      'column cannot say what the right answer is, and the honest consequence is that the 1 point ' +
+      'of PCE gap is now marked disputed and is no longer fixable from this capture.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

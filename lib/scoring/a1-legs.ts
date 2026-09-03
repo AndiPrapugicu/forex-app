@@ -710,20 +710,55 @@ export function explainGaps(
  * finding that read as "A1's model is not leg-differenced after all" and was in
  * fact five misread cells.
  *
- * ROWS ARE DISCARDED, NEVER REPAIRED. A breach says the partition is wrong
- * somewhere, not where — the misplaced value could have come from any column in
- * the row. Nudging cells until the structure holds is the "never alter a cell to
- * make a check pass" rule with an extra step.
+ * ROWS ARE DISCARDED, NEVER REPAIRED — WHEN THE CAPTURE WAS TRANSCRIBED. A
+ * breach says the partition is wrong somewhere, not where; the misplaced value
+ * could have come from any column in the row. Nudging cells until the structure
+ * holds is the "never alter a cell to make a check pass" rule with an extra
+ * step.
+ *
+ * A DOM-READ CAPTURE CANNOT HAVE THE FAULT THIS CHECK DETECTS, and treating it
+ * as though it can costs real evidence. The whole inference above rests on a
+ * human partitioning six header groups by eye. Read the cells out of the DOM
+ * under their own headers and a column SHIFT is not merely unlikely, it has no
+ * mechanism — so a non-zero in a US-only column is not a misread, it is what A1
+ * published, and discarding the row throws away eighteen cells to avoid
+ * believing one.
+ *
+ * That is not hypothetical. A1 prints -1 in the PCE column on EVERY yen cross —
+ * GBPJPY, EURJPY, CHFJPY, CADJPY, NZDJPY, AUDJPY — plus -1 on JPYX and +1 on
+ * JP225, stable across all five captures, two of them read from the DOM, and
+ * every one of those rows checksums to its own published Score. It is also
+ * arithmetically impossible as a leg difference: DXY's PCE is 0, so the dollar
+ * leg is 0; USDJPY prints +1, which under `base - quote` needs a yen leg of -1;
+ * the other yen crosses print -1, which needs +1. No single leg value satisfies
+ * both, so this is A1 contradicting A1 rather than a capture contradicting
+ * itself — see the ledger and `a1-scores-pce-on-jpy-crosses`.
+ *
+ * So the breach is still REPORTED for a DOM read, and the row is KEPT. The
+ * contradiction then surfaces where it belongs: `solveA1Legs` marks PCE
+ * disputed, and the attribution says so, instead of eight rows quietly leaving
+ * the measurement.
  */
 export interface StructuralBreach {
   symbol: string;
   slotKey: string;
   value: number;
+  /**
+   * Whether the row should be dropped. False for a DOM-read capture, where the
+   * cell is evidence about A1 rather than evidence about the reader.
+   */
+  discard: boolean;
   detail: string;
 }
 
+/**
+ * @param provenance how the cells were captured. 'transcribed' is the video
+ * frame case this check was written for and drops the row; 'dom' reports the
+ * same breach and keeps it.
+ */
 export function checkStructuralZeros(
   rows: Record<string, CapturedCells>,
+  provenance: 'transcribed' | 'dom' = 'transcribed',
 ): StructuralBreach[] {
   const bySymbol = new Map(ALL_SYMBOLS.map((d) => [d.symbol, d]));
   const usOnlySlots = SCORING_SLOTS.filter((s) => s.usOnly);
@@ -749,9 +784,14 @@ export function checkStructuralZeros(
         symbol,
         slotKey: slot.key,
         value,
+        discard: provenance === 'transcribed',
         detail:
-          `${slot.label} is a US-only series and ${symbol} has no dollar leg — A1 prints 0 here. ` +
-          `A ${signed(value)} cannot be their cell, so this row's columns are misaligned or misread.`,
+          provenance === 'transcribed'
+            ? `${slot.label} is a US-only series and ${symbol} has no dollar leg — A1 prints 0 here. ` +
+              `A ${signed(value)} cannot be their cell, so this row's columns are misaligned or misread.`
+            : `${slot.label} is a US-only series and ${symbol} has no dollar leg, yet A1 published ` +
+              `${signed(value)}. Read from the DOM under its own header, so it is THEIR cell, not a ` +
+              `misread — the row is kept and the column is left to the leg solve to dispute.`,
       });
     }
   }

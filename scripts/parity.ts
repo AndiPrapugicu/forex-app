@@ -68,6 +68,15 @@ interface Capture {
   /** null when the capture's date could not be established. */
   capturedUtc: string | null;
   provenance: string;
+  /**
+   * Read out of A1's DOM under its own column headers, rather than transcribed
+   * by eye from a video frame.
+   *
+   * It decides whether `checkStructuralZeros` may DROP a row. A transcription
+   * can have its six header groups partitioned wrongly; a DOM read has no
+   * mechanism for that, so an impossible cell there is A1's, not the reader's.
+   */
+  domRead: boolean;
   totals: Record<string, number>;
   cells: Record<string, Record<string, number>>;
 }
@@ -118,6 +127,7 @@ function csvCaptures(): Capture[] {
     out.push({
       capturedUtc: time === '0000' ? date : `${date}T${time.slice(0, 2)}:${time.slice(2)}:00.000Z`,
       provenance: `fixtures/${file} — read from A1's DOM during full access`,
+      domRead: true,
       totals,
       cells,
     });
@@ -125,7 +135,15 @@ function csvCaptures(): Capture[] {
   return out;
 }
 
-const captures = [...(board.captures as unknown as Capture[]), ...csvCaptures()];
+/**
+ * `domRead: false` on every board.json capture, stated rather than defaulted:
+ * those are livestream video frames read by eye, which is exactly the input
+ * `checkStructuralZeros` was written to police.
+ */
+const captures: Capture[] = [
+  ...(board.captures as unknown as Omit<Capture, 'domRead'>[]).map((c) => ({ ...c, domRead: false })),
+  ...csvCaptures(),
+];
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const pad = (s: string | number, n: number) => String(s).padEnd(n);
@@ -173,9 +191,15 @@ function selectCapture(): Capture {
  * pair sharing that leg the wrong way. So treat a transcribed cell as a
  * hypothesis, change the rule it implies, and let TOTAL ABS GAP judge it.
  */
-function validateCells(capture: Capture): { cells: Record<string, Record<string, number>>; rejected: string[] } {
+function validateCells(capture: Capture): {
+  cells: Record<string, Record<string, number>>;
+  rejected: string[];
+  /** Structurally impossible cells that are A1's own, so the row stays. */
+  kept: string[];
+} {
   const good: Record<string, Record<string, number>> = {};
   const rejected: string[] = [];
+  const kept: string[] = [];
 
   for (const [symbol, row] of Object.entries(capture.cells)) {
     const published = capture.totals[symbol];
@@ -202,13 +226,24 @@ function validateCells(capture: Capture): { cells: Record<string, Record<string,
    * And the check the sum is blind to BY CONSTRUCTION, because addition does not
    * care about order. See `checkStructuralZeros`: a row read with its columns
    * shifted still adds to the printed total.
+   *
+   * On a DOM capture these are REPORTED AND KEPT. The shift this catches cannot
+   * happen when cells are read under their own headers, so an impossible cell is
+   * A1's own — dropping the row discarded seventeen good cells to avoid
+   * believing one, and took eight of fifty-one rows out of the attribution
+   * below without saying so.
    */
-  for (const breach of checkStructuralZeros(good)) {
-    rejected.push(`${pad(breach.symbol, 9)} ${breach.slotKey} = ${signed(breach.value)} — ${breach.detail}`);
-    delete good[breach.symbol];
+  for (const breach of checkStructuralZeros(good, capture.domRead ? 'dom' : 'transcribed')) {
+    const note = `${pad(breach.symbol, 9)} ${breach.slotKey} = ${signed(breach.value)} — ${breach.detail}`;
+    if (breach.discard) {
+      rejected.push(note);
+      delete good[breach.symbol];
+    } else {
+      kept.push(note);
+    }
   }
 
-  return { cells: good, rejected };
+  return { cells: good, rejected, kept };
 }
 
 /**
@@ -236,7 +271,7 @@ function contradictedColumns(cells: Record<string, Record<string, number>>) {
 
 const CAPTURE = selectCapture();
 const totals = CAPTURE.totals;
-const { cells, rejected } = validateCells(CAPTURE);
+const { cells, rejected, kept } = validateCells(CAPTURE);
 
 function summarise(rows: SymbolRow[]) {
   const compared = Object.keys(totals)
@@ -441,6 +476,22 @@ async function main() {
     console.log('CAPTURED ROWS REJECTED — these do not sum to their own published total\n');
     for (const r of rejected) console.log(`  ${r}`);
     console.log('\n  re-read them off the frame; they are excluded from attribution below\n');
+  }
+
+  /**
+   * Kept, not rejected, and the distinction is the whole point of the block.
+   * These cells are impossible as leg differences AND they are what A1
+   * published, which makes them a fact about their model rather than about our
+   * reading of it. The rows stay in the attribution; the leg solve is what
+   * decides the column is in dispute.
+   */
+  if (kept.length > 0) {
+    console.log('A1 CELLS THAT CANNOT BE LEG DIFFERENCES - kept, because they are THEIRS\n');
+    for (const k of kept) console.log(`  ${k}`);
+    console.log(
+      '  These rows REMAIN in the attribution below. The columns they contradict are marked ' +
+        'disputed by the leg solve, which is where a contradiction belongs.\n',
+    );
   }
 
   console.log(`PARITY vs A1's board captured ${CAPTURE.capturedUtc}\n`);

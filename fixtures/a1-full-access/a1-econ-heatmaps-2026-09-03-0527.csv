@@ -1,0 +1,71 @@
+# A1 EdgeFinder per-country Economic Heatmaps, read from the DOM during full access.
+# A1 refresh stamp on every page: 03.09.2026 08:27:25-26 local (UTC+3) = 2026-09-03 05:27Z.
+# Columns are A1's own: surprise, actual, forecast, previous, then the CURRENCY impact and
+# the STOCKS impact they print per row. `row` is their positional slot number, which is what
+# identifies the column - the series filling a slot differs by country (JP row 7 is Household
+# Spending where US row 7 is PCE YoY).
+# checksum verifies A1's own arithmetic: surprise == actual - forecast, to their printed precision.
+country,row,series,date,daysAgo,surprise,actual,forecast,previous,currencyImpact,stocksImpact,checksum
+US,1,GDP Growth QoQ,2026-08-26,8,0.0,1.5,1.5,2.1,,,OK
+US,2,Manufacturing PMIs,2026-09-01,2,-0.6,54.6,55.2,55.6,Bearish,Bearish,OK
+US,3,Services PMIs,2026-08-05,29,-0.4,54.1,54.5,54.0,Bearish,Bearish,OK
+US,4,Retail Sales MoM,2026-08-14,20,-0.7,-0.6,0.1,0.2,Bearish,Bearish,OK
+US,5,CPI YoY,2026-08-12,22,0.0,3.4,3.4,3.5,Neutral,Neutral,OK
+US,6,PPI YoY,2026-08-13,21,-0.2,4.7,4.9,5.5,Bearish,Bullish,OK
+US,7,PCE YoY,2026-08-26,8,0.0,3.3,3.3,3.3,Neutral,Neutral,OK
+US,8,Wage Growth YoY,2026-08-07,27,-0.3,3.2,3.5,3.4,Bearish,Bearish,OK
+US,9,Unemployment Rate,2026-08-07,27,-0.1,4.1,4.2,4.2,Bullish,Bullish,OK
+US,10,Non-Farm Payroll,2026-08-07,27,-108.0,-23.0,85.0,57.0,,,OK
+US,11,ADP,2026-09-02,1,-9.0,38.0,47.0,44.0,,,OK
+US,12,JOLTS Job Openings,2026-09-01,2,-0.06,7.27,7.33,7.18,,,OK
+US,13,US Initial Jobless Claims,2026-08-27,7,-5.0,203.0,208.0,207.0,,,OK
+EU,1,GDP Growth QoQ,2026-08-14,20,0.0,0.4,0.4,0.0,Neutral,Neutral,OK
+EU,2,Manufacturing PMIs,2026-09-01,2,-0.1,52.7,52.8,52.8,Bearish,Bearish,OK
+EU,3,Services PMIs,2026-08-21,13,0.2,51.7,51.5,51.7,Bullish,Bullish,OK
+EU,4,Retail Sales MoM,2026-08-06,28,-0.4,-0.3,0.1,0.2,Bearish,Bearish,OK
+EU,5,CPI YoY,2026-09-01,2,0.0,3.3,3.3,2.9,Neutral,Neutral,OK
+EU,6,PPI YoY,2026-08-05,29,0.0,4.6,4.6,5.9,Neutral,Neutral,OK
+EU,9,Unemployment Rate,2026-09-01,2,0.1,6.4,6.3,6.4,Bearish,Bearish,OK
+UK,1,GDP Growth QoQ,2026-08-13,21,0.0,0.4,0.4,0.6,Neutral,Neutral,OK
+UK,2,Manufacturing PMIs,2026-09-01,2,0.2,51.7,51.5,51.5,Bullish,Bullish,OK
+UK,3,Services PMIs,2026-08-21,13,1.0,52.8,51.8,52.1,Bullish,Bullish,OK
+UK,4,Retail Sales MoM,2026-08-21,13,-0.1,-0.5,-0.4,1.0,Bearish,Bearish,OK
+UK,5,CPI YoY,2026-08-19,15,0.0,2.9,2.9,2.6,Neutral,Neutral,OK
+UK,6,PPI YoY,2026-08-19,15,-0.1,3.1,3.2,3.5,Bearish,Bullish,OK
+UK,9,Unemployment Rate,2026-08-18,16,0.1,4.9,4.8,4.9,Bearish,Bearish,OK
+JP,1,GDP Growth QoQ,2026-08-17,17,-0.2,0.3,0.5,0.5,Bearish,Bearish,OK
+JP,2,Manufacturing PMIs,2026-09-01,2,-0.2,54.9,55.1,55.1,Bearish,Bearish,OK
+JP,3,Services PMIs,2026-08-21,13,1.1,52.3,51.2,,Bullish,Bullish,OK
+JP,4,Retail Sales YoY,2026-08-30,4,0.8,4.0,3.2,0.5,Bullish,Bullish,OK
+JP,5,CPI YoY,2026-08-20,14,0.3,1.9,1.6,,Bullish,Bearish,OK
+JP,6,PPI YoY,2026-08-13,21,-0.2,7.2,7.4,7.3,Bearish,Bullish,OK
+JP,7,Household Spending,2026-08-06,28,-4.3,-3.3,1.0,-0.4,Bearish,Bullish,OK
+JP,9,Unemployment Rate,2026-08-27,7,-0.1,2.4,2.5,2.5,Bullish,Bullish,OK
+CA,1,GDP Growth QoQ,2026-08-28,6,0.7,0.8,0.1,,Bullish,Bullish,OK
+CA,2,Manufacturing PMIs,2026-09-01,2,-0.5,53.0,53.5,,Bearish,Bearish,OK
+CA,3,Services PMIs,2026-05-01,125,1.4,50.6,49.2,,Bullish,Bullish,OK
+CA,4,Retail Sales MoM,2026-08-21,13,-1.8,-0.8,1.0,,Bearish,Bearish,OK
+CA,5,CPI YoY,2026-08-17,17,0.1,3.0,2.9,2.8,Bullish,Bearish,OK
+CA,6,PPI YoY,2026-08-20,14,0.4,12.4,12.0,12.4,Bullish,Bearish,OK
+CA,9,Unemployment Rate,2026-08-07,27,-0.1,6.4,6.5,6.5,Bullish,Bullish,OK
+CA,13,Employment Change,2026-02-06,209,0.0,,,,Neutral,Neutral,n/a
+AU,1,GDP Growth QoQ,2026-09-02,1,0.1,0.4,0.3,0.3,Bullish,Bullish,OK
+AU,2,Manufacturing PMIs,2026-08-31,3,0.0,52.0,52.0,52.0,Neutral,Neutral,OK
+AU,3,Services PMIs,2026-08-20,14,-0.7,52.9,53.6,,Bearish,Bearish,OK
+AU,5,CPI YoY,2026-08-26,8,0.2,3.5,3.3,3.8,Bullish,Bearish,OK
+AU,6,PPI YoY,2026-07-31,34,0.6,3.6,3.0,,Bullish,Bearish,OK
+AU,9,Unemployment Rate,2026-08-20,14,0.1,4.5,4.4,4.4,Bearish,Bearish,OK
+NZ,1,GDP Growth QoQ,2026-06-18,77,0.0,0.8,0.8,0.5,Neutral,Neutral,OK
+NZ,2,Manufacturing PMIs,2026-08-14,20,-5.4,54.3,59.7,,Bearish,Bearish,OK
+NZ,3,Services PMIs,2026-05-01,125,-1.2,47.5,48.7,,Bearish,Bearish,OK
+NZ,4,Retail Sales QoQ,2026-08-23,11,-0.6,-0.5,0.1,0.9,Bearish,Bearish,OK
+NZ,5,CPI YoY,2026-07-20,45,0.1,4.1,4.0,3.1,Bullish,Bearish,OK
+NZ,6,PPI QoQ,2026-08-19,15,0.8,1.6,0.8,0.8,Bullish,Bearish,OK
+NZ,9,Unemployment Rate,2026-08-04,30,0.2,5.6,5.4,5.4,Bearish,Bearish,OK
+CH,1,GDP Growth QoQ,2026-08-14,20,0.8,1.5,0.7,,Bullish,Bullish,OK
+CH,2,Manufacturing PMIs,2026-09-01,2,3.0,57.1,54.1,53.2,Bullish,Bullish,OK
+CH,3,Services PMIs,2026-08-21,13,0.2,51.7,51.5,51.7,Bullish,Bullish,OK
+CH,4,Retail Sales YoY,2026-09-01,2,0.7,2.3,1.6,1.5,Bullish,Bullish,OK
+CH,5,CPI YoY,2026-08-03,31,0.0,0.4,0.4,0.5,Neutral,Neutral,OK
+CH,6,PPI YoY,2026-08-13,21,0.0,-2.1,-2.1,,Neutral,Neutral,OK
+CH,9,Unemployment Rate,2026-08-06,28,0.1,3.0,2.9,,Bearish,Bearish,OK

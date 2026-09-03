@@ -288,7 +288,15 @@ async function main() {
 
     const series = new Map<string, { daily: number[]; fourH: number[] }>();
     for (const t of targets) {
-      const [daily, hourly] = await Promise.all([fetchDailyBars(t.ticker), fetchHourlyBars(t.ticker)]);
+      /**
+       * The capture moment goes INTO the daily fetch: spot FX rebuilds its
+       * trailing session from hourly bars, and cutting after that rebuild
+       * leaves prices from after the capture inside it.
+       */
+      const [daily, hourly] = await Promise.all([
+        fetchDailyBars(t.ticker, capture.at),
+        fetchHourlyBars(t.ticker),
+      ]);
       const fourH = hourly ? resampleBars(hourly, FOUR_HOURS) : null;
       series.set(t.symbol, {
         daily: closesOf(daily, capture.at),

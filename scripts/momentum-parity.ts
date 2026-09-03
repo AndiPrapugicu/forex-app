@@ -43,7 +43,7 @@ import path from 'node:path';
 
 import { ALL_SYMBOLS } from '@/config/symbols.config';
 import { NAME_MAP, NOT_MODELED } from '@/lib/scoring/a1-symbol-map';
-import { fetchDailyBars, seriesAsOf, type DailyBars } from '@/lib/connectors/technicals';
+import { fetchDailyBars, type DailyBars } from '@/lib/connectors/technicals';
 
 /**
  * The heatmap captures, each with the UTC moment A1's own refresh stamp names.
@@ -189,9 +189,14 @@ async function main() {
         unmapped.push(`${capture.file}: ${row.asset}`);
         continue;
       }
-      const daily = await fetchDailyBars(ticker);
+      /**
+       * The cutoff goes INTO the fetch. Cutting afterwards would leave prices
+       * from after the capture inside the rebuilt trailing session — see
+       * `spliceFxSessions`.
+       */
+      const daily = await fetchDailyBars(ticker, capture.at);
       if (!daily) continue;
-      obs.push({ capture: capture.file, asset: row.asset, symbol, row, bars: seriesAsOf(daily, capture.at) });
+      obs.push({ capture: capture.file, asset: row.asset, symbol, row, bars: daily });
     }
   }
 

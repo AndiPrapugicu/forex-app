@@ -11,6 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '@/lib/connectors/base';
 import {
   FOUR_HOURS,
+  FX_DAY_ANCHOR_OFFSET,
+  FX_DAY_CLOSE_HOUR_UTC,
+  ONE_DAY,
   ONE_WEEK,
   WEEK_ANCHOR_OFFSET,
   fetchTechnicals,
@@ -18,6 +21,7 @@ import {
   resampleBars,
   seriesAsOf,
   smaSeries,
+  spliceFxSessions,
   yield2yAsOf,
   type DailyBars,
 } from '@/lib/connectors/technicals';
@@ -594,5 +598,98 @@ describe('redateSpotFridays', () => {
   it('returns the input untouched when there is nothing to move', () => {
     const clean = { timestamps: [day('2026-08-27'), day('2026-08-28')], closes: [1, 2] };
     expect(redateSpotFridays(clean)).toBe(clean);
+  });
+});
+
+/**
+ * Rebuilding the recent spot-FX daily series from hourly bars.
+ *
+ * The fault this repairs is not visible in a chart and not visible in a rule
+ * fit: Yahoo's `=X` daily series drops whole sessions and never carries the
+ * session in progress at a rewound cut, so a 3-day average — which is what
+ * Trend reads — is computed on the wrong three days. These tests pin the
+ * boundary, the seam, and the two ways splicing could quietly lose history.
+ */
+describe('spliceFxSessions', () => {
+  /** 2026-09-01T22:00:00Z — an FX day boundary, so buckets start here. */
+  const SEAM = Math.floor(Date.UTC(2026, 8, 1, FX_DAY_CLOSE_HOUR_UTC) / 1000);
+
+  const bars = (timestamps: number[], closes: number[]): DailyBars => ({
+    timestamps,
+    opens: closes,
+    highs: closes,
+    lows: closes,
+    closes,
+  });
+
+  /** Hourly bars every hour from `start`, `n` of them, closing at `close(i)`. */
+  const hours = (start: number, n: number, close: (i: number) => number): DailyBars =>
+    bars(
+      Array.from({ length: n }, (_, i) => start + i * H),
+      Array.from({ length: n }, (_, i) => close(i)),
+    );
+
+  it('puts the FX day boundary at 22:00 UTC, not midnight', () => {
+    // 21:00 belongs to the session ending at 22:00; 23:00 opens the next one.
+    const before = SEAM - H;
+    const out = resampleBars(hours(before, 3, (i) => 10 + i), ONE_DAY, FX_DAY_ANCHOR_OFFSET);
+    expect(out.timestamps).toEqual([SEAM - ONE_DAY, SEAM]);
+    // The 21:00 bar closes its own session; 22:00 and 23:00 open the next.
+    expect(out.closes).toEqual([10, 12]);
+  });
+
+  it('replaces the daily tail with rebuilt sessions and keeps the older history', () => {
+    const daily = bars(
+      [SEAM - 3 * ONE_DAY, SEAM - 2 * ONE_DAY, SEAM - ONE_DAY, SEAM - ONE_DAY + H],
+      [1, 2, 3, 4],
+    );
+    // Hourly covers only the last two sessions.
+    const spliced = spliceFxSessions(daily, hours(SEAM - ONE_DAY, 26, (i) => 100 + i));
+
+    // Everything before the first rebuilt bucket survives untouched...
+    expect(spliced.closes.slice(0, 2)).toEqual([1, 2]);
+    // ...and the daily bars the rebuild covers are gone, not duplicated.
+    expect(spliced.closes).not.toContain(3);
+    expect(spliced.closes).not.toContain(4);
+    expect(spliced.timestamps).toEqual([SEAM - 3 * ONE_DAY, SEAM - 2 * ONE_DAY, SEAM - ONE_DAY, SEAM]);
+  });
+
+  it('carries the session in progress, which the daily series never has', () => {
+    // The whole point. Yahoo's daily series stops at the last COMPLETED session;
+    // A1's board is reading the one that is running.
+    const daily = bars([SEAM - 2 * ONE_DAY, SEAM - ONE_DAY], [1, 2]);
+    const spliced = spliceFxSessions(daily, hours(SEAM - ONE_DAY, 30, (i) => 100 + i));
+
+    expect(spliced.timestamps[spliced.timestamps.length - 1]).toBe(SEAM);
+    // Four hours into the new session, its close is the latest hourly close.
+    expect(spliced.closes[spliced.closes.length - 1]).toBe(129);
+  });
+
+  it('leaves the series alone when there are no hourly bars', () => {
+    const daily = bars([SEAM - ONE_DAY, SEAM], [1, 2]);
+    expect(spliceFxSessions(daily, bars([], []))).toBe(daily);
+  });
+
+  it('refuses to splice when the rebuild would truncate the history', () => {
+    // Two years of daily bars against a handful of hourly ones means the daily
+    // fetch came back short, not that the rebuild is better. Splicing here
+    // would throw away every bar the 200-day average needs.
+    const daily = bars(
+      Array.from({ length: 300 }, (_, i) => SEAM - (300 - i) * ONE_DAY),
+      Array.from({ length: 300 }, (_, i) => i),
+    );
+    const stale = hours(SEAM - 400 * ONE_DAY, 3, () => 1);
+    expect(spliceFxSessions(daily, stale)).toBe(daily);
+  });
+
+  it('drops volume rather than splicing old numbers onto new nothing', () => {
+    const daily: DailyBars = { ...bars([SEAM - ONE_DAY], [1]), volumes: [42] };
+    const spliced = spliceFxSessions(daily, hours(SEAM, 2, () => 5));
+    expect(spliced.volumes).toBeUndefined();
+  });
+
+  it('keeps `price` where it is — repointing it is the caller of a rewind', () => {
+    const daily = { ...bars([SEAM - ONE_DAY], [1]), price: 99 };
+    expect(spliceFxSessions(daily, hours(SEAM, 2, () => 5)).price).toBe(99);
   });
 });

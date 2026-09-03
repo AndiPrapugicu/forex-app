@@ -172,10 +172,27 @@ export interface DailyBars {
  * the live scorecard wants and useless to a backtest — you cannot recover
  * yesterday's 14-day average from today's. This returns the series itself.
  */
-export async function fetchDailyBars(ticker: string): Promise<DailyBars | null> {
+export async function fetchDailyBars(
+  ticker: string,
+  /**
+   * The moment being reproduced. Pass it rather than calling `seriesAsOf` on the
+   * result: for spot FX the trailing session is REBUILT from hourly bars, and
+   * cutting after the rebuild leaves prices from after `at` inside it. Defaults
+   * to now, which cuts nothing.
+   */
+  at?: Date,
+): Promise<DailyBars | null> {
   const series = await fetchSeries(ticker, '2y', '1d', 3600);
   if (!series) return null;
-  return toBars(ticker.endsWith(SPOT_FX_SUFFIX) ? redateSpotFridays(series) : series);
+
+  const isSpotFx = ticker.endsWith(SPOT_FX_SUFFIX);
+  const redated = isSpotFx ? redateSpotFridays(series) : series;
+  const cut = at ? seriesAsOf(redated, at) : redated;
+  if (!isSpotFx) return toBars(cut);
+
+  const hourly = await fetchSeries(ticker, HOURLY_RANGE, '1h', 3600);
+  if (!hourly) return toBars(cut);
+  return toBars(spliceFxSessions(cut, at ? seriesAsOf(hourly, at) : hourly));
 }
 
 /**
@@ -357,10 +374,39 @@ export function redateSpotFridays<T extends { timestamps: number[] }>(series: T)
   return moved === 0 ? series : { ...series, timestamps };
 }
 
+/**
+ * WHERE THE FX TRADING DAY ENDS: 17:00 New York, which is 22:00 UTC while New
+ * York is on EDT. Every retail FX broker rolls the day there.
+ *
+ * This is the anchor `resampleBars` needs to turn hourly bars into daily ones —
+ * see `spliceFxSessions` for why we rebuild them at all.
+ *
+ * NOT A FITTED PARAMETER, and the sweep that shows it is the reason to trust
+ * it. All 24 possible boundaries were scored against A1's own Trend cells over
+ * four full-access captures (116 spot-FX cells). 22:00 lands 91, 23:00 lands 88,
+ * and the other twenty-two hours sit between 65 and 77 with no structure. The
+ * peak is sharp, isolated, and on the hour market convention already names — so
+ * convention predicted it and the measurement confirmed it, which is the
+ * opposite of choosing an hour because it scored well.
+ *
+ * The one-hour-wide plateau at 22:00/23:00 is what a DST boundary looks like:
+ * 17:00 New York is 22:00 UTC in summer and 23:00 in winter, and the fitting
+ * window straddles neither. Left at 22:00 rather than made timezone-aware,
+ * because a fixed anchor keeps `resampleBars` buckets stable and no evidence on
+ * disk covers a winter month. Revisit after the November change.
+ */
+export const FX_DAY_CLOSE_HOUR_UTC = 22;
+
+/** `resampleBars` floors `ts + offset`, so a day ending at 22:00 UTC needs 2h. */
+export const FX_DAY_ANCHOR_OFFSET = (24 - FX_DAY_CLOSE_HOUR_UTC) * 3600;
+
 /** Seconds per bucket for the resampled intraday view. */
 export const FOUR_HOURS = 4 * 3600;
 
-export const ONE_WEEK = 7 * 86_400;
+/** Seconds in a day, for bucketing hourly bars back into sessions. */
+export const ONE_DAY = 86_400;
+
+export const ONE_WEEK = 7 * ONE_DAY;
 
 /**
  * The shift that moves epoch-anchored weekly buckets onto a Monday.
@@ -430,6 +476,80 @@ export function resampleBars(bars: DailyBars, seconds: number, anchorOffset = 0)
   if (outVolumes) out.volumes = outVolumes;
 
   return out;
+}
+
+/**
+ * REBUILD THE RECENT SPOT-FX DAILY SERIES FROM HOURLY BARS.
+ *
+ * Yahoo's `=X` daily series cannot support a 3-day average, which is what Trend
+ * reads. Measured against the raw endpoint on 2026-09-02, three separate faults:
+ *
+ *   - WHOLE SESSIONS GO MISSING. `EURUSD=X` has no 2026-09-01 bar at all. It
+ *     jumps from the Aug 31 session to a null-close bar for the session in
+ *     progress.
+ *   - THE CURRENT SESSION IS NEVER IN A REWOUND CUT. Yahoo appends today as a
+ *     bar stamped NOW (`2026-09-02T15:33:50Z`), so `seriesAsOf` at any earlier
+ *     moment drops it. Futures stamp today's bar at 04:00 UTC and are current,
+ *     so the defect is invisible unless you look per ticker — which is why it
+ *     survived several rounds of treating Trend as a rule problem.
+ *   - Plus the Friday-stamped-Sunday fault `redateSpotFridays` already repairs.
+ *
+ * The hourly series has none of these: real timestamps, no missing sessions, and
+ * the session in progress is simply the last few bars. Bucketing it at the FX
+ * rollover reconstructs the daily series we should have had.
+ *
+ * MEASURED, against A1's own Trend cells over four full-access captures:
+ * spot-FX went 76/116 to 91/116 (65.5% -> 78.4%) with `scoreTrend` and
+ * `TREND_SMA` untouched. The rule was never what was wrong.
+ *
+ * SPLICED, NOT SUBSTITUTED, because hourly is only ~180 days deep and the
+ * 200-day average needs more than that. Bars older than the hourly window keep
+ * coming from the daily series; everything the hourly window covers is rebuilt.
+ * The two conventions stamp a session an hour apart (Yahoo at 23:00, a bucket
+ * at 22:00), which is why the seam is cut on the first rebuilt bucket rather
+ * than by matching timestamps — a moving average reads bars in order and does
+ * not care where inside the session the label sits.
+ *
+ * APPLIED TO `=X` ONLY. Rebuilding futures, indices and crypto makes them worse
+ * (DXY 4/4 -> 2/4, CADX 4/4 -> 1/4 on the same captures): their daily bars are
+ * already correctly dated, and their hourly sessions have gaps a bucket would
+ * quietly fill.
+ *
+ * CUT THE HOURLY SERIES BEFORE CALLING THIS. A bucket built from uncut hourly
+ * bars contains prices from after the moment being reproduced, and a rewound
+ * board would read the future through the trailing bucket.
+ */
+export function spliceFxSessions<T extends DailyBars & { price?: number }>(
+  daily: T,
+  hourly: DailyBars,
+): T {
+  const rebuilt = resampleBars(hourly, ONE_DAY, FX_DAY_ANCHOR_OFFSET);
+  if (rebuilt.timestamps.length === 0) return daily;
+
+  const seam = rebuilt.timestamps[0];
+  let keep = 0;
+  while (keep < daily.timestamps.length && daily.timestamps[keep] < seam) keep += 1;
+
+  /**
+   * A rebuilt window that covers less than the daily one is the point; a
+   * rebuilt window that covers MORE means the daily series arrived short, and
+   * splicing would silently truncate the history a 200-day average needs.
+   */
+  if (keep === 0 && daily.timestamps.length > rebuilt.timestamps.length) return daily;
+
+  return {
+    ...daily,
+    timestamps: [...daily.timestamps.slice(0, keep), ...rebuilt.timestamps],
+    opens: [...daily.opens.slice(0, keep), ...rebuilt.opens],
+    highs: [...daily.highs.slice(0, keep), ...rebuilt.highs],
+    lows: [...daily.lows.slice(0, keep), ...rebuilt.lows],
+    closes: [...daily.closes.slice(0, keep), ...rebuilt.closes],
+    /**
+     * Volume is dropped rather than half-filled: spot FX reports none, so a
+     * spliced column would be old zeroes against new nothing.
+     */
+    ...(daily.volumes ? { volumes: undefined } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -843,12 +963,43 @@ async function computeForTicker(
   // Injected so a test can pin which month counts as in progress.
   now: Date = new Date(),
 ): Promise<TickerResult | null> {
+  const isSpotFx = ticker.endsWith(SPOT_FX_SUFFIX);
+
   const raw = await fetchSeries(ticker, '2y', '1d', 3600);
   // Re-date before cutting, or a rewind to a Friday close drops that Friday.
-  const fetched = raw && ticker.endsWith(SPOT_FX_SUFFIX) ? redateSpotFridays(raw) : raw;
+  const fetched = raw && isSpotFx ? redateSpotFridays(raw) : raw;
   // Cut to `now` BEFORE the length guard, so a rewind far enough back to leave
   // too few bars declines to score rather than scoring a short window.
-  const daily = fetched ? seriesAsOf(fetched, now) : null;
+  const cut = fetched ? seriesAsOf(fetched, now) : null;
+
+  /**
+   * SPOT FX GETS ITS RECENT SESSIONS REBUILT FROM HOURLY BARS — see
+   * `spliceFxSessions` for the three faults in Yahoo's `=X` daily series and the
+   * measurement that pins this.
+   *
+   * The hourly series is cut to `now` FIRST. Bucketing uncut bars would put
+   * prices from after the moment being reproduced inside the trailing session,
+   * and a rewound board would read the future through it.
+   */
+  let daily = cut;
+  if (cut && isSpotFx) {
+    const hourly = await fetchSeries(ticker, HOURLY_RANGE, '1h', 3600);
+    if (hourly) {
+      const spliced = spliceFxSessions(cut, seriesAsOf(hourly, now));
+      /**
+       * `seriesAsOf` re-points `price` at the last close whenever it drops a
+       * bar, because a live quote is an anachronism in a rewound series. The
+       * splice changes WHICH bar is last, so that has to be redone — and only
+       * when the series really was rewound, or the live board would trade
+       * Yahoo's current quote for an hour-old bucket close.
+       */
+      const rewound = cut !== fetched;
+      daily = rewound && spliced.closes.length > 0
+        ? { ...spliced, price: spliced.closes[spliced.closes.length - 1] }
+        : spliced;
+    }
+  }
+
   if (!daily || daily.closes.length < 20) return null;
 
   const { closes, price } = daily;

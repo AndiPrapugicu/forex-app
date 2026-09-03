@@ -1647,6 +1647,69 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'column cannot say what the right answer is, and the honest consequence is that the 1 point ' +
       'of PCE gap is now marked disputed and is no longer fixable from this capture.',
   },
+  {
+    key: 'crowd:their-net-column-is-half-what-it-says',
+    component: 'Crowd',
+    symbol: 'EURUSD (the series captured)',
+    date: '2026-09-03',
+    ours: 'we never read their net - the rule scores the LONG SHARE against 40/60 bands',
+    a1: 'a column labelled "Net Retail Positioning (Long%-Short%)" carrying long% - 50',
+    classification: 'A1_INCONSISTENCY',
+    evidence:
+      'Their Retail Sent. History page (p_1jk2lb88md) publishes long %, short % and a net series ' +
+      'together. Across 44 daily rows, 6 iul. 2026 to 3 sept. 2026, the net equals `long - 50` on ' +
+      '44 of 44 and `long - short` on 0 of 44 - exactly half its own legend. 60/40 publishes as ' +
+      '10%, not 20%; 22/78 as -28%, not -56%. Captured to ' +
+      'fixtures/a1-full-access/a1-retail-sent-history-EURUSD-2026-09-03.csv, whose build script ' +
+      'refuses to write the file if either identity breaks.',
+    confidence: 'PROVEN',
+    rootCause:
+      'A mislabelled chart on their side, not a different measurement: `long - 50` and ' +
+      '`(long - short) / 2` are the same number, so their series is the ordinary net halved. ' +
+      'Nothing about it is ambiguous once both columns are read together, which is only possible ' +
+      'because this page publishes the components beside the derived figure.',
+    productionAction:
+      'NONE, and that is the point of recording it. Our crowd rule reads the long share against ' +
+      'the 40/60 bands - see CROWD_LONG_PCT_BUCKETS - and has never touched their net, so this ' +
+      'costs no parity today. It is pinned by a test in lib/scoring/crowd-oracle.test.ts because ' +
+      'the hazard is future: their net column is the obvious thing to reach for when scoring ' +
+      'crosses, and reaching for it would be out by a factor of two in a way that still LOOKS ' +
+      'like a plausible sentiment reading.',
+  },
+  {
+    key: 'crowd:dated-cross-history-is-reachable-but-their-feed-went-down',
+    component: 'Crowd',
+    symbol: '22 crosses',
+    date: '2026-09-03',
+    ours: 'null on every cross',
+    a1: 'a dated daily series per cross, behind an asset filter',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'crowd:crosses-are-published-behind-a-default-filter established that A1 publishes the ' +
+      'crosses, from their Retail Sentiment SNAPSHOT. A snapshot cannot fill a cell, only pin the ' +
+      'bands: it carries no date for the reading, so it cannot be joined to a dated board capture ' +
+      '(see a1-crowd-is-fxssi). Their Retail Sent. HISTORY page can. It is dated, its Asset filter ' +
+      'is URL parameter df1033, and the dropdown lists the crosses - AUDCAD, AUDNZD, CADCHF, ' +
+      'CADJPY, CHFJPY and the rest - alongside BITCOIN, COPPER and DAX. EURUSD was captured in ' +
+      'full, 44 days ending on the day of capture.',
+    confidence: 'PROVEN',
+    rootCause:
+      'Sourcing on our side (Myfxbook rejects its own session, see myfxbook-invalid-session) and, ' +
+      'for the moment, availability on theirs: partway through the capture every chart on both ' +
+      'crowd pages began returning "A expirat / Data Studio nu se poate conecta la setul de date", ' +
+      'including on a clean reload with no parameters, having worked at 10:53 the same morning. ' +
+      'Their own snapshot page carries the note "This script is interrupted every morning, ' +
+      'returning at 10:00h", so their scraper has scheduled downtime. Not caused by the capture: ' +
+      'one chart was already failing on the very first load.',
+    productionAction:
+      'RETRY THE CAPTURE, do not hammer it, and do not treat the snapshot as a substitute. The ' +
+      'recipe is page p_1jk2lb88md with df1033 set per symbol, reading the barchart accessible ' +
+      'table and halving it. Free access ends 2026-09-07, so this is the highest-value remaining ' +
+      'capture: Crowd is the largest single column of remaining gap at 35 and our crosses score ' +
+      'null rather than wrong. NOTE the dates need deriving - the axis prints one label per two ' +
+      'rows - and the derivation must be checked against an independent capture before it is ' +
+      'believed, as the EURUSD series was, 6 of 6.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

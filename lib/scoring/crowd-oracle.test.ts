@@ -8,6 +8,9 @@
  * crosses go back to being differenced.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import ORACLE from '@/fixtures/a1-retail-sentiment-history.json';
@@ -171,6 +174,77 @@ describe('the oracle fixture itself', () => {
     const cells = new Set(a1CrowdCells().map((c) => `${c.symbol}@${c.date}`));
     for (const row of ORACLE.topSetupsJoin.rows) {
       expect(cells.has(`${row.symbol}@${row.date}`), `${row.symbol}@${row.date}`).toBe(true);
+    }
+  });
+});
+
+/**
+ * The dated daily history captured from A1's own Retail Sent. History page
+ * (p_1jk2lb88md) on 2026-09-03, held to the two things that make it usable.
+ *
+ * IT MATTERS BECAUSE OF WHAT IT IS NOT. The Retail Sentiment SNAPSHOT publishes
+ * all 45 symbols including the 22 crosses, and carries no date for the reading -
+ * so it can pin the bands and can never be joined to a dated board capture.
+ * This page is dated, one asset at a time, behind URL parameter df1033.
+ */
+describe('the dated retail-sentiment history capture', () => {
+  const rows = (() => {
+    const text = readFileSync(
+      path.join(process.cwd(), 'fixtures', 'a1-full-access', 'a1-retail-sent-history-EURUSD-2026-09-03.csv'),
+      'utf8',
+    );
+    // Trimmed per line, because git normalises this file's endings on checkout
+    // and a trailing carriage return would ride along inside the last field.
+    const lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '' && !l.startsWith('#'));
+    const cols = lines[0].split(',');
+    return lines.slice(1).map((line) => {
+      const c = line.split(',');
+      return Object.fromEntries(cols.map((k, i) => [k, c[i]])) as Record<string, string>;
+    });
+  })();
+
+  it('agrees with the independently captured oracle on every shared date', () => {
+    /*
+     * THE CHECK THAT MAKES THE DATES TRUSTWORTHY. The axis prints 22 labels for
+     * 44 rows, so the dates are derived - 44 consecutive business days from the
+     * first label - rather than read off every row. Self-consistency is not
+     * enough for that: a one-row misalignment would still produce 44 tidy dates.
+     *
+     * These six come from a different page read on a different day. A shifted
+     * derivation breaks all six at once, so agreement is the evidence.
+     */
+    const byDate = new Map(rows.map((r) => [r.date, Number(r.longPct)]));
+    const shared = Object.entries(ORACLE.series.EURUSD as Record<string, number>);
+
+    expect(shared.length).toBeGreaterThan(0);
+    for (const [date, longPct] of shared) {
+      expect(byDate.get(date), date).toBe(longPct);
+    }
+  });
+
+  it("pins that their 'Net (Long%-Short%)' is NOT long minus short", () => {
+    /*
+     * Their legend says Long% - Short% and their values are half that: 60/40 is
+     * published as 10%, not 20%. It holds on 44 of 44 rows, so it is the
+     * definition rather than a rounding artefact.
+     *
+     * Harmless today - our rule reads the long share against the 40/60 bands and
+     * never touches their net - and pinned here so that anyone who later reaches
+     * for that column finds out from a failing test rather than from a column
+     * that is quietly out by a factor of two.
+     */
+    expect(rows).toHaveLength(44);
+    for (const r of rows) {
+      const long = Number(r.longPct);
+      const short = Number(r.shortPct);
+      const net = Number(r.a1NetPct);
+
+      expect(long + short, r.date).toBe(100);
+      expect(net, r.date).toBe(long - 50);
+      if (long !== 50) expect(net, r.date).not.toBe(long - short);
     }
   });
 });

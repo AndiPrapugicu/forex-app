@@ -270,3 +270,54 @@ CPI YoY` exactly on its published series (4 − 7.1 = −3.1; 5.25 − 4.9 = 0.3
 no data file was kept: the definition is the finding. **Stock Surprise Meter**
 (`p_s9xxu4bltd`) rendered only its descriptions in the capture window; its text
 confirms the surprise family is scored "relative to economic forecasts".
+
+## `a1-retail-sent-history-EURUSD-2026-09-03.csv` — the DATED crowd series
+
+Crowd Sentiment → Retail Sent. History, page `p_1jk2lb88md`, read from the DOM on
+2026-09-03. 44 rows, EURUSD, **2026-07-06 … 2026-09-03**.
+
+**Why this page and not the snapshot.** `a1-retail-sentiment-2026-09-03-1053.csv`
+has 45 symbols including all 22 crosses, and it is undated — the page carries no
+date for the reading (see `a1-crowd-is-fxssi`). That makes it able to pin the
+**bands** and unable to fill a **cell**, because a cell has to join to a dated
+board capture. This page is dated. It is the input `crowdOracleJoin` wants, and it
+extends `fixtures/a1-retail-sentiment-history.json` (2026-08-17 … 08-29) back to
+6 July.
+
+**The Asset filter is URL parameter `df1033`**, one symbol at a time, and its
+dropdown lists the crosses — AUDCAD, AUDNZD, CADCHF, CADJPY, CHFJPY … alongside
+BITCOIN, COPPER, DAX. So **the dated history for every cross is reachable**, which
+is the thing that would let the Crowd column (35 points, our largest) be measured
+on crosses rather than left null.
+
+**It is not captured yet, and the reason is on their side.** Partway through this
+capture every chart on the page began returning *"A expirat / Data Studio nu se
+poate conecta la setul de date"*, including on a clean reload with no parameters;
+one chart was already showing it on the very first load, and the Retail Sentiment
+page went the same way shortly after, having worked at 10:53 the same morning.
+That page's own note reads *"This script is interrupted every morning, returning
+at 10:00h"*, so their scraper has scheduled downtime. **Retry, do not hammer.**
+Free access ends **2026-09-07**.
+
+### Two findings the build script asserts
+
+- **`long + short == 100` on 44/44.**
+- **Their "Net Retail Positioning (Long%−Short%)" is not long minus short.** It
+  equals **`long − 50`** on 44 of 44 rows and `long − short` on 0 of 44 — exactly
+  half what the legend claims. 60/40 publishes as 10%, not 20%; 22/78 as −28%, not
+  −56%. Harmless to us (our rule reads the long share against the 40/60 bands and
+  never their net) and pinned in `crowd-oracle.test.ts` so anyone who later reaches
+  for that column learns it from a failing test.
+
+### The dates are derived and then verified
+
+The axis prints **22 labels for 44 rows** — every second row — so the series is
+read as 44 consecutive business days from the first label. All 22 printed labels
+land exactly where that rule predicts, including 31 Aug (a UK bank holiday their
+feed does not skip), and the 44th row is the day of capture.
+
+Self-consistency would not be enough, so it is checked against a **different
+capture read on a different day**: all six EURUSD dates in
+`a1-retail-sentiment-history.json` agree exactly — 08-21 21, 08-24 25, 08-25 28,
+08-26 27, 08-27 29, 08-28 32. **6 of 6.** A one-row misalignment breaks all six at
+once, which is what makes this evidence rather than tidiness.

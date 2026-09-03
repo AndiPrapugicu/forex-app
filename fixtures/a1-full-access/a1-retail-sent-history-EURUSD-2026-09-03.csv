@@ -1,0 +1,96 @@
+# A1 EdgeFinder -> Crowd Sentiment -> Retail Sent. History, read from the DOM
+# 2026-09-03. Page p_1jk2lb88md. Report date range as shown: 5 iul. 2026 - 30 sept. 2026.
+#
+# WHY THIS PAGE AND NOT THE SNAPSHOT. The Retail Sentiment page (p_5jasyzmtxc,
+# captured 2026-09-03-1053) publishes 45 symbols including the 22 crosses, but it
+# is a SNAPSHOT carrying no date for the reading - see the memory note
+# a1-crowd-is-fxssi. A snapshot cannot be joined to a dated board capture, so it
+# pins the BANDS and not the CELLS. This page is dated, which is what the crowd
+# oracle needs.
+#
+# THE ASSET FILTER IS URL PARAMETER df1033, and its dropdown lists crosses
+# (AUDCAD, AUDNZD, CADCHF, CADJPY, CHFJPY, ... alongside BITCOIN, COPPER, DAX),
+# so the dated history for the crosses IS reachable. It is not in this file.
+# Partway through this capture A1's own data source began returning "A expirat /
+# Data Studio nu se poate conecta la setul de date" on every chart on the page,
+# including on a clean reload with no parameters; one chart was already showing
+# that on the very first load, so it is an upstream failure on their side rather
+# than something the capture caused. THE CROSSES REMAIN TO BE CAPTURED and the
+# recipe is exactly the parameter above. Free access ends 2026-09-07.
+#
+# THEIR "NET RETAIL POSITIONING (LONG%-SHORT%)" IS NOT LONG MINUS SHORT.
+# It equals long% - 50 on 44 of 44 rows, and long% - short% on 0 of 44 - exactly
+# half what the legend says. 60/40 is published as 10%, not 20%; 22/78 as -28%,
+# not -56%. The build script asserts this and refuses to write the file if it
+# stops holding. It costs us nothing today because our crowd rule reads the LONG
+# SHARE against the 40/60 bands and never their net, but anyone who later scores
+# off their net column will be out by a factor of two.
+#
+# DATES ARE DERIVED AND THEN CHECKED, NOT INFERRED. The axis prints 22 labels for
+# 44 rows - every second row - so the series is read as 44 consecutive business
+# days from the first label. That gives 6 iul. 2026 .. 3 sept. 2026, and all 22
+# printed labels land exactly where that rule predicts, including 31 aug. (a UK
+# bank holiday their feed does not skip). The last row is the day of capture. Any
+# row whose date were merely assumed would be marked UNALIGNED; none is.
+#
+# The bar chart's accessible table is duplicated by Looker and was de-duplicated
+# by halving, the two halves being identical.
+#
+# THE DERIVED DATES ARE CONFIRMED BY AN INDEPENDENT CAPTURE, 6 of 6. Every
+# EURUSD date already in fixtures/a1-retail-sentiment-history.json - read on a
+# different day, from a different page - agrees exactly with the long share this
+# file assigns to it: 08-21 21, 08-24 25, 08-25 28, 08-26 27, 08-27 29, 08-28 32.
+# That is the check that turns the business-day derivation from self-consistent
+# into verified: a one-row misalignment would have broken all six.
+#
+# Price is A1's own series for the pair, to one hundredth, as published beside
+# the net positioning. Context, not a source: our prices come from the spot feed.
+#
+# HOW TO USE IT. Oracle input - A1's own long share replayed through our
+# resolveCrowd - and NOT a data source for the board. It extends the window in
+# fixtures/a1-retail-sentiment-history.json (2026-08-17 .. 08-29) back to 6 July.
+date,symbol,longPct,shortPct,a1NetPct,a1Band,a1Price
+2026-07-06,EURUSD,60,40,10,Bearish,1.14
+2026-07-07,EURUSD,56,44,6,Neutral,1.14
+2026-07-08,EURUSD,60,40,10,Bearish,1.14
+2026-07-09,EURUSD,54,46,4,Neutral,1.14
+2026-07-10,EURUSD,56,44,6,Neutral,1.14
+2026-07-13,EURUSD,53,47,3,Neutral,1.14
+2026-07-14,EURUSD,63,37,13,Bearish,1.14
+2026-07-15,EURUSD,54,46,4,Neutral,1.14
+2026-07-16,EURUSD,45,55,-5,Neutral,1.15
+2026-07-17,EURUSD,55,45,5,Neutral,1.14
+2026-07-20,EURUSD,55,45,5,Neutral,1.14
+2026-07-21,EURUSD,59,41,9,Neutral,1.14
+2026-07-22,EURUSD,60,40,10,Bearish,1.14
+2026-07-23,EURUSD,58,42,8,Neutral,1.14
+2026-07-24,EURUSD,62,38,12,Bearish,1.14
+2026-07-27,EURUSD,53,47,3,Neutral,1.14
+2026-07-28,EURUSD,62,38,12,Bearish,1.14
+2026-07-29,EURUSD,53,47,3,Neutral,1.14
+2026-07-30,EURUSD,44,56,-6,Neutral,1.15
+2026-07-31,EURUSD,38,62,-12,Bullish,1.15
+2026-08-03,EURUSD,38,62,-12,Bullish,1.15
+2026-08-04,EURUSD,44,56,-6,Neutral,1.15
+2026-08-05,EURUSD,37,63,-13,Bullish,1.15
+2026-08-06,EURUSD,36,64,-14,Bullish,1.16
+2026-08-07,EURUSD,46,54,-4,Neutral,1.15
+2026-08-10,EURUSD,36,64,-14,Bullish,1.16
+2026-08-11,EURUSD,44,56,-6,Neutral,1.15
+2026-08-12,EURUSD,45,55,-5,Neutral,1.15
+2026-08-13,EURUSD,45,55,-5,Neutral,1.15
+2026-08-14,EURUSD,36,64,-14,Bullish,1.15
+2026-08-17,EURUSD,28,72,-22,Bullish,1.16
+2026-08-18,EURUSD,37,63,-13,Bullish,1.16
+2026-08-19,EURUSD,32,68,-18,Bullish,1.16
+2026-08-20,EURUSD,22,78,-28,Bullish,1.17
+2026-08-21,EURUSD,21,79,-29,Bullish,1.17
+2026-08-24,EURUSD,25,75,-25,Bullish,1.17
+2026-08-25,EURUSD,28,72,-22,Bullish,1.17
+2026-08-26,EURUSD,27,73,-23,Bullish,1.17
+2026-08-27,EURUSD,29,71,-21,Bullish,1.17
+2026-08-28,EURUSD,32,68,-18,Bullish,1.17
+2026-08-31,EURUSD,46,54,-4,Neutral,1.16
+2026-09-01,EURUSD,46,54,-4,Neutral,1.16
+2026-09-02,EURUSD,49,51,-1,Neutral,1.16
+2026-09-03,EURUSD,43,57,-7,Neutral,1.16

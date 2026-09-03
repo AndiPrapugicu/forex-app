@@ -183,15 +183,33 @@ describe('which rows appear at all', () => {
     }
   });
 
-  it('KEEPS a stale row, because ageing out is information', () => {
-    // "We had this and it went stale" and "this economy has no such series" are
-    // different statements and must not render the same.
+  it('KEEPS an aged-out row, SCORES it, and marks how old it is', () => {
+    /*
+     * This test used to assert the opposite - status 'stale' and a null impact -
+     * and the reason it flipped is A1. Their board carries a Canada services PMI
+     * from 1 May and scores it 125 days later; our 60-day window blanked the
+     * equivalent cell. The window was ours, no captured A1 surface has ever
+     * shown a resolved row suppressed for age, so enforcing it scored a
+     * different board than the one being reproduced.
+     *
+     * What survives is the distinction the old test was really defending: "we
+     * had this and it aged out" and "this economy has no such series" still must
+     * not render the same. They now differ by `stale` and `ageDays` rather than
+     * by one of them being blank.
+     */
     const old = makeEvent({ dateUtc: '2026-01-01T00:00:00.000Z' });
     const map = buildCurrencyHeatmap('USD', [old], NOW);
 
     const cpi = rowFor(map, 'cpi')!;
-    expect(cpi.status).toBe('stale');
-    expect(cpi.currencyImpact).toBeNull();
+    expect(cpi.status).toBe('scored');
+    expect(cpi.currencyImpact).not.toBeNull();
+    expect(cpi.stale).toBe(true);
+    expect(cpi.ageDays).toBeGreaterThan(60);
+
+    // And it counts, which is the whole behavioural change: the currency's own
+    // macro score now includes the reading rather than ignoring it.
+    expect(map.scored).toBe(1);
+    expect(map.macroScore).toBe(cpi.currencyImpact);
   });
 });
 

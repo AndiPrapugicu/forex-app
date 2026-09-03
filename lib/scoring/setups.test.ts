@@ -147,18 +147,47 @@ describe('scoreSlot', () => {
     expect(result.explanation).toMatch(/inverted/);
   });
 
-  it('marks a print beyond its window as STALE rather than neutral', () => {
-    // A five-month-old monthly print is not a confident zero.
+  it('SCORES a print beyond its window, and says how old it is', () => {
+    /*
+     * The inverse of what this test asserted for several rounds, and A1 is the
+     * reason. It read: "a five-month-old monthly print is not a confident
+     * zero", nulled the cell and stamped it 'stale'. True as economics, wrong
+     * as a model of their board - which carries a 1 May Canada services PMI and
+     * scores it 125 days on. Nothing captured from A1 has ever shown a resolved
+     * row suppressed for age, so the window was ours alone.
+     *
+     * The concern behind the old assertion is met a different way: the cell
+     * still distinguishes itself, by `stale` and `ageDays` and by saying so in
+     * its explanation, rather than by withholding the reading.
+     */
     const old = makeEvent({ dateUtc: '2026-03-01T12:00:00Z', ratioDeviation: 2 });
     const result = scoreSlot(slot('cpi'), 'USD', [old], NOW);
 
-    expect(result.status).toBe('stale');
-    expect(result.cell).toBeNull();
-    expect(result.explanation).toMatch(/days ago/);
+    expect(result.status).toBe('scored');
+    expect(result.cell).not.toBeNull();
+    expect(result.stale).toBe(true);
+    expect(result.ageDays).toBeGreaterThan(60);
+    expect(result.explanation).toMatch(/days old/);
   });
 
-  it('allows quarterly series a longer window than monthly ones', () => {
-    // 100 days: inside GDP's 120-day allowance, outside CPI's 60.
+  it('leaves `stale` unset for a print inside its window', () => {
+    // The flag has to be worth reading, which means it must be false when the
+    // series is current - not merely truthy on the one case that motivated it.
+    const fresh = makeEvent({ dateUtc: '2026-08-07T12:30:00Z', ratioDeviation: 2 });
+    const result = scoreSlot(slot('cpi'), 'USD', [fresh], NOW);
+
+    expect(result.status).toBe('scored');
+    expect(result.stale).toBe(false);
+  });
+
+  it('judges a print against its OWN cadence, quarterly being longer', () => {
+    /*
+     * 100 days: inside GDP's 120-day allowance, outside CPI's 60. Both score
+     * now - age stopped gating - so what this pins is that the windows still
+     * MEAN something and still differ per slot. They are what `resolveSeries`
+     * ranks candidates by, and a quarterly series that had inherited CPI's
+     * 60-day window would be judged old the moment it was published on time.
+     */
     const old = makeEvent({ dateUtc: '2026-04-30T12:00:00Z', ratioDeviation: 2 });
 
     const gdp = scoreSlot(
@@ -170,7 +199,12 @@ describe('scoreSlot', () => {
     const cpi = scoreSlot(slot('cpi'), 'USD', [old], NOW);
 
     expect(gdp.status).toBe('scored');
-    expect(cpi.status).toBe('stale');
+    expect(cpi.status).toBe('scored');
+
+    // The same print, the same day, read as current by one slot and overdue by
+    // the other.
+    expect(gdp.stale).toBe(false);
+    expect(cpi.stale).toBe(true);
   });
 
   it('reports no-data when the currency does not publish the series', () => {

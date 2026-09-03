@@ -61,10 +61,12 @@ const IMPACT_LABEL: Record<string, { text: string; className: string }> = {
 function ImpactBadge({ value, status }: { value: number | null; status: string }) {
   const impact = status === 'scored' && value !== null ? IMPACT_LABEL[String(value)] : null;
 
+  // No 'stale' case: an old print carries a real verdict now, so it reaches
+  // IMPACT_LABEL like any other. Its age is marked in the date column instead.
   if (!impact) {
     return (
       <span className="text-[10px] text-[var(--color-faint)]">
-        {status === 'stale' ? 'stale' : status === 'not-released' ? 'awaiting' : 'no data'}
+        {status === 'not-released' ? 'awaiting' : 'no data'}
       </span>
     );
   }
@@ -225,8 +227,13 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
 
                     <td className="px-2 py-1.5 text-left text-[11px] whitespace-nowrap text-[var(--color-muted)]">
                       {row.dateUtc ? row.dateUtc.slice(0, 10) : '—'}
-                      {row.status === 'stale' && (
-                        <span className="ml-1.5 text-[9px] text-[var(--color-uncertain)] italic">stale</span>
+                      {row.stale && (
+                        <span
+                          className="ml-1.5 text-[9px] text-[var(--color-uncertain)] italic"
+                          title={`${row.ageDays ?? '?'} days old — past this series' usual cadence, and scored anyway, as A1 does`}
+                        >
+                          {row.ageDays === null ? 'stale' : `${row.ageDays}d`}
+                        </span>
                       )}
                     </td>
 

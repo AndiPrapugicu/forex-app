@@ -92,8 +92,9 @@ async function main() {
         oldest = Math.max(oldest, age);
       }
 
-      const cellText =
-        r.status === 'scored' && r.cell !== null ? signed(r.cell) : r.status === 'stale' ? 'STALE' : r.status;
+      // No STALE case: an old print scores, and its age is already reported by
+      // the `oldest` column below.
+      const cellText = r.status === 'scored' && r.cell !== null ? signed(r.cell) : r.status;
 
       console.log(
         `  ${pad(slot.label, 20)}${pad((e?.name ?? '?').slice(0, 38), 40)}${padStart(num(e?.actual), 9)}` +

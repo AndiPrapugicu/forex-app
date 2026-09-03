@@ -19,11 +19,12 @@ Every cell carries its own explanation. `MatrixCell` exposes:
 | field | meaning |
 |---|---|
 | `cell` | the score, or `null` for "not measured" |
-| `status` | `scored` \| `no-data` \| `stale` \| `partial` |
+| `status` | `scored` \| `no-data` \| `not-released` \| `partial` |
 | `explanation` | the sentence a user reads on hover |
 | `legs[]` | per-currency detail: series name, actual, reference, `referenceLabel`, `dateUtc`, `consensusSource`, `actualSource` |
 | `baseCell` / `quoteCell` | the two halves of a differenced pair cell |
 | `missingLeg` | which leg was expected and absent, when `status` is `partial` |
+| `stale` | the print is past its series' cadence. **Display only** — it never suppresses the cell |
 | `basis` | sentiment columns only: which population was measured |
 
 `status` always agrees with `cell`: a `null` cell is never `scored`.
@@ -108,7 +109,8 @@ report `null` and are not checked.
 | Transformation | raw sign, **no dead band**; `polarity` inverts unemployment |
 | Reference | `forecast` by default; `previous` where the series is genuinely unforecast. The prior print means the **revised** one |
 | Range | −1 … +1 per leg, −2 … +2 differenced |
-| Missing | `null`. A print past `maxAgeDays` is `stale`, rendered grey at 0 and **not** counted |
+| Missing | `null` only when nothing resolved, or when the print has no forecast AND no prior print to read it against |
+| Age | **Reported, never enforced.** A print past `maxAgeDays` scores exactly as a fresh one does and is flagged `stale` |
 | One-sided | a release only one economy publishes scores from the single leg, inverting for the quote |
 | Provenance | `legs[].referenceLabel`, `consensusSource`, `actualSource` |
 | Historical | **HISTORICAL.** `asOf` drops releases dated after the cutoff |
@@ -170,7 +172,8 @@ disagreements are reported as timing, never as scoring.
 | Provider times out or errors | `Result.ok === false`, recorded in the pipeline health table. **Never throws** |
 | Provider returns stale cache | Served, with age; the UI can say so |
 | Provider returns nothing | Cell `null`, `status: 'no-data'` |
-| Release older than its window | `status: 'stale'`, rendered 0, **not summed** |
+| Release older than its window | Scored and summed as normal, flagged `stale`, age shown |
+| Release with no forecast and no prior print | Cell `null`, `status: 'not-released'` |
 | One leg of a pair missing | `status: 'partial'`, `missingLeg` names it |
 | Host sends `429` | Per-host cooldown honours `retry-after`; no retry through it |
 | `USE_FIXTURES` set in production | **Ignored**, warned once, live sources used |

@@ -111,6 +111,15 @@ export interface MatrixCell {
   /** Extra note the cell carries beyond its legs, e.g. the CPI level band. */
   note?: string;
   /**
+   * A contributing leg's print is older than its cadence window — DISPLAY
+   * ONLY, and never a reason the cell is blank.
+   *
+   * There used to be a `stale` STATUS here that meant blank, and removing it is
+   * the point: A1 scores a 125-day-old Canadian services PMI, so suppressing
+   * one was reproducing our policy instead of their board. See `maxAgeFor`.
+   */
+  stale?: boolean;
+  /**
    * WHICH POPULATION a sentiment cell was measured on, where the column has
    * more than one and they are not interchangeable.
    *
@@ -607,28 +616,27 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
         /**
          * A leg the economy simply never publishes ('no-data') is not a
          * failure — that is what lets NZDUSD read the NFP column at all. A leg
-         * that resolved to a real series and then aged out or arrived without a
-         * reference IS one: the series exists, it just is not usable today, and
-         * the cell on screen is a single-economy reading wearing a pair's
-         * clothes.
+         * that resolved to a real series and then arrived without any reference
+         * to read it against IS one: the series exists, it just is not usable
+         * today, and the cell on screen is a single-economy reading wearing a
+         * pair's clothes.
+         *
+         * Aging out USED to be the other half of this test, and is no longer a
+         * way to be unusable — an old print scores. `not-released` is what is
+         * left: no forecast and no prior print, so there is nothing to compare.
          */
-        const expected = (result: SlotResult | undefined) =>
-          result?.status === 'stale' || result?.status === 'not-released';
+        const expected = (result: SlotResult | undefined) => result?.status === 'not-released';
 
         const combined = combinePairCells(baseCell, quoteCell, PAIR_CELL_MAX, {
           base: { label: def.base, expected: expected(baseResult) },
           quote: { label: def.quote, expected: expected(quoteResult) },
         });
 
-        // A cell is only stale if EVERY contributing leg is stale — one fresh
-        // leg is still information.
-        const statuses = [baseResult?.status, quoteResult?.status].filter(Boolean) as CellStatus[];
-        const status: CellStatus =
-          combined.cell !== null
-            ? combined.status
-            : statuses.length > 0 && statuses.every((s) => s === 'stale')
-              ? 'stale'
-              : 'no-data';
+        const status: CellStatus = combined.cell !== null ? combined.status : 'no-data';
+
+        // Noted if EITHER leg is old, because either is enough to make the
+        // difference on screen older than it looks. Display only.
+        const stale = (baseResult?.stale ?? false) || (quoteResult?.stale ?? false);
 
         const parts = [
           baseResult?.status === 'scored' ? `${def.base}: ${baseResult.explanation}` : null,
@@ -640,6 +648,7 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
           slotKey: slot.key,
           cell: combined.cell,
           status,
+          stale,
           missingLeg: combined.missingLeg,
           baseCell,
           quoteCell,

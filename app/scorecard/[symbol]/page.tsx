@@ -365,7 +365,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                               <BiasPill
                                 cell={cell.cell}
                                 maxCell={maxCellFor(slot.key, def.kind)}
-                                stale={cell.status === 'stale'}
+                                stale={cell.stale ?? false}
                                 partial={cell.status === 'partial' ? (cell.missingLeg ?? null) : null}
                               />
                             </td>

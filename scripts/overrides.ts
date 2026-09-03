@@ -27,7 +27,7 @@
  */
 
 import { MATRIX_SLOTS } from '@/config/setups.config';
-import { resolveSeries, scoreSlot, priorPrint } from '@/lib/scoring/discrete';
+import { maxAgeFor, resolveSeries, scoreSlot, priorPrint } from '@/lib/scoring/discrete';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import type { Currency, NormalizedEvent } from '@/lib/types';
 
@@ -67,7 +67,17 @@ async function main() {
        */
       const generic = resolveSeries(slot, cur, events, 'forecast', {
         now,
-        maxAgeDays: slot.maxAgeDays ?? 60,
+        /*
+         * Through `maxAgeFor`, because this window has to be the one the real
+         * resolver would use. Re-deriving it as `slot.maxAgeDays ?? 60` skipped
+         * `maxAgeDaysByCurrency` entirely, so New Zealand retail sales was
+         * ranked against 75 days here and 120 in production - and since the
+         * window decides which candidate ranks best, the "no override" arm
+         * could reach a different print than dropping the override actually
+         * would. That makes the verdict below describe a slot that does not
+         * exist.
+         */
+        maxAgeDays: maxAgeFor(slot, cur),
       });
       const genericCell = genericCellFor(slot, generic);
 

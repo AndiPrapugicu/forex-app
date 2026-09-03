@@ -34,8 +34,17 @@ import type { Currency, NormalizedEvent } from '@/lib/types';
  * failed COT contract turned EURUSD's cell from `eur − usd` into `0 − usd` and
  * still stamped it `scored`, so a transient upstream failure was indistinguishable
  * from a genuine neutral reading.
+ *
+ * THERE USED TO BE A `stale` STATUS AND IT WAS NOT A STATUS, IT WAS A POLICY.
+ *
+ * It meant "this print resolved, and we chose not to score it", which is a
+ * judgement about age rather than a fact about the cell. A1 does not make that
+ * judgement: their board carries a Canadian services PMI from 1 May and scores
+ * it, 125 days on. Age is now reported by `SlotResult.stale` and `ageDays` and
+ * changes nothing about the number, so the four statuses that remain are all
+ * things the DATA did rather than things we decided.
  */
-export type CellStatus = 'scored' | 'partial' | 'stale' | 'no-data' | 'not-released';
+export type CellStatus = 'scored' | 'partial' | 'no-data' | 'not-released';
 
 export interface SlotResult {
   slotKey: string;
@@ -48,6 +57,16 @@ export interface SlotResult {
   sigma: number | null;
   ageDays: number | null;
   explanation: string;
+  /**
+   * The print is older than its slot's cadence window — DISPLAY ONLY.
+   *
+   * Deliberately has no effect on `cell` or `status`. It exists so a card can
+   * say "the last print was 125 days ago" beside a number that is nonetheless
+   * the number A1 would show, and so the freshness ranking in `resolveSeries`
+   * has something to name. Anything that starts branching on this to suppress a
+   * value is re-introducing the gate that was removed; see `maxAgeFor`.
+   */
+  stale?: boolean;
   /**
    * What the cell was ACTUALLY measured against, which is not always what the
    * slot asked for — see the fallback in `scoreSlot`. Callers must read this
@@ -243,9 +262,25 @@ export function resolveSeries(
  *
  * Cadence is a property of the country, not the indicator — New Zealand's
  * retail sales is quarterly where everyone else's is monthly — so the per-slot
- * default can be overridden per currency. Everything that judges staleness must
- * go through here, or `resolveSeries` picks a print that `scoreSlot` then
- * rejects and the column goes blank for a reason neither of them reports.
+ * default can be overridden per currency.
+ *
+ * THIS IS A PREFERENCE, NOT A LIMIT. It answers "which of two candidate series
+ * describes today better" inside `resolveSeries`, and it labels a print's age
+ * for the UI. It does NOT decide whether a resolved print scores.
+ *
+ * It used to decide exactly that, and the reason it stopped is A1: their board
+ * carries a 1 May Canada services PMI and scores it, 125 days on, while our
+ * 60-day window blanked the same cell. The window was our invention — no
+ * captured A1 surface has ever shown a resolved row suppressed for age — so
+ * enforcing it was scoring a different board than the one we are reproducing.
+ *
+ * WHAT IS STILL UNKNOWN is where their own limit sits. Their Consumer
+ * Confidence scanner publishes AUD (233 days stale at capture) and JPY (582)
+ * series that their heatmaps do not carry a row for, so SOMETHING between 125
+ * and 233 days drops a series on their side. Nothing observed locates it, which
+ * is why nothing here guesses at it — see the ledger entry
+ * `cnsmr-conf:a1-has-the-series-but-abandoned-them`. If a capture ever shows a
+ * board cell fed by a series that old, this is the place that learns the rule.
  */
 export function maxAgeFor(slot: SlotDefinition, currency: Currency): number {
   return slot.maxAgeDaysByCurrency?.[currency] ?? slot.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
@@ -345,16 +380,12 @@ export function scoreSlot(
   const age = ageInDays(event.dateUtc, now);
   const maxAge = maxAgeFor(slot, currency);
 
-  if (age > maxAge) {
-    return {
-      ...base,
-      event,
-      ageDays: Math.round(age),
-      status: 'stale',
-      explanation:
-        `Last ${slot.label} print was ${Math.round(age)} days ago, beyond the ${maxAge}-day window`,
-    };
-  }
+  /**
+   * Age is REPORTED, not enforced — see `maxAgeFor` for why, and for what is
+   * still unknown about their own limit. An old print scores exactly as a fresh
+   * one does; the only difference is that it says so.
+   */
+  const stale = age > maxAge;
 
   /**
    * What the print is measured against, and what to do when that is missing.
@@ -427,6 +458,7 @@ export function scoreSlot(
       ...base,
       event,
       ageDays: Math.round(age),
+      stale,
       status: 'not-released',
       // Nothing to compare against at all — no forecast AND no prior print.
       explanation: `${event.name}: no forecast or previous print to compare against`,
@@ -455,6 +487,7 @@ export function scoreSlot(
     event,
     sigma: surprise.sigma === null ? null : Math.round(surprise.sigma * 100) / 100,
     ageDays: Math.round(age),
+    stale,
     referenceLabel,
     explanation:
       `${event.name}: ${event.actual}${event.unit ?? ''} vs ${reference}${event.unit ?? ''} ${referenceLabel}` +
@@ -464,7 +497,9 @@ export function scoreSlot(
       // forecast, and must not read the same.
       (referenceLabel === 'previous' && !againstPrevious
         ? ' — no forecast is published for this series, so the direction is read against the prior print'
-        : ''),
+        : '') +
+      // Scored regardless, but a reader is owed the age of what they are reading.
+      (stale ? ` — ${Math.round(age)} days old, past this series' ${maxAge}-day cadence` : ''),
   };
 }
 
@@ -491,19 +526,12 @@ function scoreCompositeSlot(
   const againstPrevious = compareFor(slot, currency) === 'previous';
 
   const scored: ComponentResult[] = [];
-  let sawStale = false;
-
   for (const component of slot.components ?? []) {
     const event = resolveSeries(component, currency, events, compareFor(slot, currency), {
       now,
       maxAgeDays: maxAge,
     });
     if (!event || event.actual === null) continue;
-
-    if (ageInDays(event.dateUtc, now) > maxAge) {
-      sawStale = true;
-      continue;
-    }
 
     const reference = againstPrevious ? priorPrint(event) : event.consensus;
     if (reference === null || reference === undefined) continue;
@@ -520,10 +548,24 @@ function scoreCompositeSlot(
   }
 
   if (scored.length === 0) {
-    return sawStale
-      ? { ...base, status: 'stale', explanation: `${slot.label} prints are beyond the ${maxAge}-day window` }
-      : { ...base, status: 'no-data', explanation: `No ${slot.label} data for ${currency}` };
+    return { ...base, status: 'no-data', explanation: `No ${slot.label} data for ${currency}` };
   }
+
+  /**
+   * Whether any sub-series that ACTUALLY VOTED is past its window — display
+   * only, exactly as in `scoreSlot`.
+   *
+   * Read off `scored` rather than set inside the loop above, because a
+   * component can resolve old and then be dropped for want of a reference; it
+   * contributed nothing, so it must not put a stale note on a cell built
+   * entirely from fresh prints.
+   *
+   * Age used to `continue` here and drop the component outright, which is how
+   * CAD's PMI column went blank rather than reading the services print A1
+   * reads. The window still ranks candidates inside `resolveSeries`; it no
+   * longer discards the winner.
+   */
+  const sawStale = scored.some((c) => ageInDays(c.event.dateUtc, now) > maxAge);
 
   const sum = scored.reduce((total, c) => total + c.cell, 0);
   const bound = slot.maxCell ?? CELL_MAX;
@@ -540,6 +582,7 @@ function scoreCompositeSlot(
     event: newest.event,
     sigma: null, // A composite of two series has no single meaningful sigma.
     ageDays: Math.round(ageInDays(newest.event.dateUtc, now)),
+    stale: sawStale,
     explanation: scored.map((c) => c.explanation).join('  |  '),
     components: scored,
   };

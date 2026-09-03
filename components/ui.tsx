@@ -86,11 +86,23 @@ export function BiasPill({
   cell,
   maxCell,
   stale = false,
+  ageDays = null,
   partial = null,
 }: {
   cell: number | null;
   maxCell: number;
+  /**
+   * The print behind this cell is past its series' cadence.
+   *
+   * A MARKER, NOT A VERDICT. This used to replace the whole pill with the word
+   * "stale", because a print this old scored `null` and there was no verdict to
+   * show. Age no longer suppresses a cell — A1 scores a 125-day-old Canadian
+   * services PMI — so the pill now shows the reading it always had and says
+   * beside it how old the reading is.
+   */
   stale?: boolean;
+  /** Age of the print, so the marker can say how stale rather than just that. */
+  ageDays?: number | null;
   /**
    * The name of the leg that failed, when this cell was scored from the other
    * one alone. The pill keeps its verdict — the reading is still the best
@@ -99,31 +111,26 @@ export function BiasPill({
    */
   partial?: string | null;
 }) {
-  if (stale) {
-    return (
-      <span className="rounded px-1.5 py-0.5 text-[9px] text-[var(--color-faint)] italic">
-        stale
-      </span>
-    );
-  }
-
   const { label, tone } = cellBias(cell, maxCell);
+  const value = cell === null ? 'no value' : formatScore(cell);
 
-  if (partial) {
-    return (
-      <span
-        className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap bg-[var(--color-surface-2)] ${tone}`}
-        style={{ boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' }}
-        title={`${cell === null ? 'no value' : formatScore(cell)} on a ±${maxCell} column — the ${partial} leg is missing, so this is scored from the other leg alone`}
-      >
-        {cell !== null && <span className="tnum">{formatScore(cell)}</span>}
-        <span className="font-medium">{label}</span>
-        <span className="text-[var(--color-uncertain)]">◐</span>
-      </span>
-    );
-  }
-  const bg =
-    cell === null || cell === 0
+  // Both markers ride on the same pill, so a cell can be old AND one-legged
+  // without one caveat hiding the other.
+  const notes = [
+    partial ? `the ${partial} leg is missing, so this is scored from the other leg alone` : null,
+    stale
+      ? `the last print is ${ageDays === null ? 'past this series’ usual cadence' : `${ageDays} days old, past this series’ usual cadence`}`
+      : null,
+  ].filter(Boolean);
+
+  const title =
+    notes.length > 0
+      ? `${value} on a ±${maxCell} column — ${notes.join('; ')}`
+      : `${value} on a ±${maxCell} column`;
+
+  const bg = partial
+    ? 'bg-[var(--color-surface-2)]'
+    : cell === null || cell === 0
       ? 'bg-[var(--color-surface-2)]'
       : cell > 0
         ? 'bg-[var(--color-bull)]/12'
@@ -132,10 +139,13 @@ export function BiasPill({
   return (
     <span
       className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${bg} ${tone}`}
-      title={`${cell === null ? 'no value' : formatScore(cell)} on a ±${maxCell} column`}
+      style={partial ? { boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' } : undefined}
+      title={title}
     >
       {cell !== null && <span className="tnum">{formatScore(cell)}</span>}
       <span className="font-medium">{label}</span>
+      {partial && <span className="text-[var(--color-uncertain)]">◐</span>}
+      {stale && <span className="text-[var(--color-faint)]" aria-label="stale">··</span>}
     </span>
   );
 }

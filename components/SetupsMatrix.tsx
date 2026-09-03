@@ -69,7 +69,16 @@ function cellTooltip(label: string, cell: MatrixCell, mirrorWhy?: string): strin
     lines.push(`Not on FXStreet: ${[...foreign].join(', ')}.`);
   }
 
-  if (cell.cell === null && cell.status !== 'stale') {
+  /*
+   * Said on hover rather than drawn in the grid, and said even though the cell
+   * still counts. A reader deciding on this row is owed the fact that one leg
+   * describes a month that ended a while ago.
+   */
+  if (cell.stale) {
+    lines.push('One leg is past its usual publication cadence, and is scored anyway - as A1 does.');
+  }
+
+  if (cell.cell === null) {
     const looked = (cell.legs ?? [])
       .filter((l) => l.seriesName)
       .map((l) => `${l.currency} ${l.seriesName}`);
@@ -98,12 +107,15 @@ function cellTooltip(label: string, cell: MatrixCell, mirrorWhy?: string): strin
  * per-cell tooltip, and in the `+N◐` marker beside each row's coverage count.
  */
 function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProperties; text: string } {
-  if (cell.status === 'stale') {
-    return {
-      className: 'bg-[var(--color-surface-2)]/40 text-[var(--color-faint)] italic',
-      text: '·',
-    };
-  }
+  /**
+   * THERE USED TO BE A GREY ITALIC '·' HERE for a cell whose print had aged
+   * out, and it is gone because the state it rendered is gone: age no longer
+   * blanks a cell. A1 scores a 125-day-old Canadian services PMI, so an old
+   * print now shows its number here like any other, and `cell.stale` marks it
+   * in the tooltip and on the scorecard pill rather than in the grid — a grid
+   * this dense can only carry so many states, which is the same reason
+   * `partial` stopped drawing a ring.
+   */
   if (cell.cell === null) {
     return { className: 'bg-transparent text-[var(--color-faint)]', text: '' };
   }

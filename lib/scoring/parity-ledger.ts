@@ -1468,8 +1468,11 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'ISM PMI data for both manufacturing and services. Non-USD assets use Flash PMI Data"). Flash ' +
       'prints carry no consensus. The blank is structural, not a coverage gap either of us can fill.',
     productionAction:
-      'None — lib/scoring/discrete.ts already does exactly this, and this entry exists so the next ' +
-      'round does not re-litigate removing it for a third time. One nuance the capture adds: A1 DOES ' +
+      'DONE, and shipped in an earlier round rather than this one: the fallback lives in ' +
+      'lib/scoring/discrete.ts (scoreSlot, the `referenceLabel = previous` branch) and needed no ' +
+      'change. What this entry adds is the confirmation at SOURCE rather than in their arithmetic, ' +
+      'so the next round does not re-litigate removing it for a third time. One nuance the capture ' +
+      'adds: A1 DOES ' +
       'hold forecasts for the JP services FINAL prints and not for the flash, so the long-standing ' +
       'note that "A1 has a forecast for Jibun Bank Services PMI that our calendars do not carry" is ' +
       'true only of the final. Their most recent JP services cell is a flash, scored against the ' +
@@ -1564,6 +1567,48 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'MEASUREMENT: parity can now score the crowd column on crosses and say whether the remaining ' +
       'gap there is sourcing alone. Note the table is two providers blended - FX reports whole ' +
       'numbers, everything else two decimals - so a live replacement may need to be two feeds.',
+  },
+  {
+    key: 'staleness:the-age-gate-was-ours',
+    component: 'every economic column',
+    symbol: 'all',
+    date: '2026-09-03',
+    ours: 'a resolved print past maxAgeDays scored null and rendered blank',
+    a1: 'a resolved print scores at any age',
+    classification: 'FIXED',
+    evidence:
+      'A1 carries a Canada services PMI dated 1 mai 2026 on their board and scores it, 125 days after ' +
+      'publication. No captured A1 surface - eight country heatmaps, 51 Top Setups rows, six ' +
+      'scanners - has ever shown a row that RESOLVED to a series and was then suppressed for age. ' +
+      'Our 60-day default (120 for quarterly, 21 for weekly) was therefore modelling a rule only we ' +
+      'had. MEASURED BOTH SIDES AND IT MOVED NOTHING: TOTAL ABS GAP 114 before and 114 after, 51 of ' +
+      '51 symbols, 7 exact both times; leg parity 117 of 144 unchanged. That is not a weak result, ' +
+      'it is the explanation - a census of all 72 resolved economic legs puts the OLDEST at 0,75x ' +
+      'its window (NZD CPI, 45 of 60 days), and the same census on the rewound 2026-08-31 frame ' +
+      'leg-parity scores against finds 0 stale cells on all 51 rows. The gate could not have fired ' +
+      'on either frame, so the two numbers are identical by construction rather than by luck.',
+    confidence: 'PROVEN',
+    rootCause:
+      'The window was invented to stop a five-month-old print reading as a confident zero, which is ' +
+      'good economics and the wrong model: A1 does not make that judgement, and a cell we blank ' +
+      'while they score it is a guaranteed miss rather than a cautious one. What the window is FOR ' +
+      'survives untouched - resolveSeries still ranks a fresh unforecast print above a stale ' +
+      'forecast one, which is the tier order NZD retail sales established and which the removed gate ' +
+      'used to undo by rejecting the very print that ranking had just chosen.',
+    productionAction:
+      'DONE. The hard gate in scoreSlot and the per-component skip in scoreCompositeSlot are ' +
+      'deleted; maxAgeFor and every maxAgeDays value are KEPT and now do one job, ranking candidates ' +
+      'inside resolveSeries, plus a display-only SlotResult.stale that the scorecard pill, the ' +
+      'heatmap date column and the matrix tooltip read. The `stale` CellStatus is gone from the ' +
+      'union because nothing could produce it any more, and leaving an unreachable status would ' +
+      'have read as a state the board can still be in. scripts/overrides.ts was re-deriving the ' +
+      'window as `slot.maxAgeDays ?? 60`, skipping maxAgeDaysByCurrency, so its no-override arm ' +
+      'ranked NZD retail sales against 75 days where production uses 120; it now calls maxAgeFor. ' +
+      'THE OPEN QUESTION IS NOT CLOSED BY THIS: A1 drops a series SOMEWHERE - see ' +
+      'cnsmr-conf:a1-has-the-series-but-abandoned-them, where their own scanner publishes AUD ' +
+      'confidence 233 days stale and their heatmaps carry no row for it. Nothing observed locates ' +
+      'that limit, so nothing here guesses at one. If a capture ever shows a board cell fed by a ' +
+      'series that old, maxAgeFor is where the rule goes.',
   },
 ] as const;
 

@@ -39,6 +39,11 @@ export interface HeatmapRow {
   stocksImpact: number | null;
   status: string;
   ageDays: number | null;
+  /**
+   * The print is past this series' cadence — DISPLAY ONLY. The row is scored
+   * either way; see `maxAgeFor` for why age stopped being a gate.
+   */
+  stale: boolean;
   explanation: string;
 }
 
@@ -131,6 +136,7 @@ function toRow(
     stocksImpact: toStocksImpact(currencyImpact, slot.category),
     status: result.status,
     ageDays: result.ageDays,
+    stale: result.stale ?? false,
     explanation: result.explanation,
   };
 }
@@ -184,8 +190,9 @@ export function buildCurrencyHeatmap(
      *
      * The euro area has no nonfarm payrolls, no JOLTS and no PCE, and listing
      * them as empty rows is what made the EUR heatmap look broken — nine blanks
-     * reading as missing data when the series simply does not exist. A stale row
-     * stays, because "we had this and it aged out" IS information.
+     * reading as missing data when the series simply does not exist. An OLD row
+     * stays and now also scores, because "we had this and it aged out" is
+     * information A1 acts on rather than discards.
      */
     if (result.status === 'no-data' && result.event === null) continue;
 

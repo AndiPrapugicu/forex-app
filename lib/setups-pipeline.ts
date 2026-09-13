@@ -31,7 +31,7 @@ import {
   type EcoStrengthRow,
 } from '@/lib/scoring/eco-strength';
 import { fetchCotData, type CotSeries } from '@/lib/connectors/cftc';
-import { fetchRetailPositioning } from '@/lib/connectors/crowd';
+import { loadRetailPositioning } from '@/lib/crowd-feed';
 import type { RetailPositioning, RetailPositioningFeed } from '@/lib/scoring/crowd';
 import { fetchConferenceBoard } from '@/lib/connectors/conference-board';
 import { fetchFairEconomyCalendar, toForecastRows } from '@/lib/connectors/faireconomy';
@@ -236,8 +236,11 @@ export async function runSetupsPipeline(
        * to an error Result in a few microseconds without touching the network,
        * every symbol falls back to the CFTC contract read, and the health table
        * says why the column is blank on crosses.
+       *
+       * On a deployment this READS the copy the ingest job stored and never
+       * logs in; see lib/crowd-feed.ts for why a render must not fetch it.
        */
-      fetchRetailPositioning(),
+      loadRetailPositioning(now),
       /**
        * PMI actuals the calendar has nulled out: a committed seed from A1's
        * captured charts, plus every print this app has since observed and

@@ -12,6 +12,7 @@ import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import { buildSnapshots } from '@/lib/scoring/history';
 import { getStore, type Store } from '@/lib/db/client';
 import { fetchAllOptionChains } from '@/lib/connectors/yahoo-options';
+import { refreshStoredCrowdFeed } from '@/lib/crowd-feed';
 import { sessionDate, shouldCaptureOptions, toOptionsSnapshot } from '@/lib/scoring/options';
 
 // Always dynamic: this route has side effects and must never be cached.
@@ -92,6 +93,9 @@ async function handle(request: Request) {
   try {
     const result = await runPipeline({ deliverAlerts: true });
     const store = getStore();
+    // First, so the snapshot below scores off the refreshed feed. The only
+    // caller that logs in to the crowd provider; hourly at most.
+    const crowd = await refreshStoredCrowdFeed(store);
     const [history, options] = await Promise.all([captureHistory(store), captureOptions(store)]);
 
     // Configured is not the same as working. With credentials set but no schema,
@@ -111,6 +115,9 @@ async function handle(request: Request) {
       optionsSaved: options.saved,
       optionsSkipped: options.skipped,
       optionsError: options.error,
+      crowdSaved: crowd.saved,
+      crowdSkipped: crowd.skipped,
+      crowdError: crowd.error,
       // Snapshots in memory vanish between serverless invocations, so history
       // only accumulates for real once Supabase is configured.
       historyDurable: store.durable && storage.ok,

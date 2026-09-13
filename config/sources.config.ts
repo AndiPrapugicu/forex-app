@@ -409,6 +409,17 @@ export const MYFXBOOK = {
   name: 'Myfxbook Community Outlook',
   login: 'https://www.myfxbook.com/api/login.json',
   outlook: 'https://www.myfxbook.com/api/get-community-outlook.json',
+  /** "Invalidates the current session." Called after every ingest fetch. */
+  logout: 'https://www.myfxbook.com/api/logout.json',
+  /**
+   * How often the ingest job may refresh the STORED feed. Sessions are bound to
+   * the login IP and Vercel's egress IP changes between invocations, so a
+   * deployment cannot hold a session: each refresh is login + outlook + logout in
+   * one invocation. Hourly is 72 calls a day, under the free 100.
+   */
+  refreshMinutes: 60,
+  /** A stored feed older than this is not scored; the column falls back to CFTC. */
+  storedFeedMaxAgeHours: 26,
   /** 72 calls/day against a 100/day free quota. */
   cacheTtlSeconds: 1200,
   /** Sessions are IP-bound and live a month; re-login well before that. */

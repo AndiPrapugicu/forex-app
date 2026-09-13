@@ -57,6 +57,10 @@ async function main() {
   console.log(
     `  outlook        ${outlook.error ? `rejected — "${outlook.message ?? 'no message'}"` : `ok, ${outlook.symbols?.length ?? 0} symbols`}`,
   );
+  // End the session: a session left open counts against the account, and the
+  // next caller's login is refused while it lingers.
+  const logout = await fetch(`${MYFXBOOK.logout}?session=${sessionParam(login.session)}`).then((r) => r.ok).catch(() => false);
+  console.log(`  logout         ${logout ? 'ok' : 'not confirmed'}`);
   console.log('----------------------------------------------------------');
   console.log(outlook.error ? '\nFAIL: login works but the outlook call refuses the session.' : '\nPASS: Myfxbook crowd data is reachable.');
   process.exit(outlook.error ? 1 : 0);

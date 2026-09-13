@@ -150,6 +150,21 @@ export function clearCrowdSession() {
 export class MyfxbookProvider implements CrowdProvider {
   readonly name = MYFXBOOK.name;
 
+  /**
+   * `logoutAfterFetch`: end the session as soon as the outlook is read. For a
+   * serverless caller, where the next invocation may leave from a different IP
+   * and so could never reuse the session anyway.
+   */
+  constructor(private readonly options: { logoutAfterFetch?: boolean } = {}) {}
+
+  private async logout(session: string): Promise<void> {
+    cachedSession = null;
+    await fetchJson<unknown>(this.name, `${MYFXBOOK.logout}?session=${sessionParam(session)}`, {
+      timeoutMs: 5_000,
+      retries: 0,
+    }).catch(() => undefined);
+  }
+
   isConfigured(): boolean {
     return Boolean(process.env.MYFXBOOK_EMAIL && process.env.MYFXBOOK_PASSWORD);
   }
@@ -210,6 +225,7 @@ export class MyfxbookProvider implements CrowdProvider {
       `${MYFXBOOK.outlook}?session=${sessionParam(session.data)}`,
       { cacheTtlSeconds: MYFXBOOK.cacheTtlSeconds, cacheKey: 'myfxbook:outlook', retries: 1 },
     );
+    if (this.options.logoutAfterFetch) await this.logout(session.data);
     if (!res.ok) return fail(this.name, res.error);
 
     if (res.data.error) {

@@ -144,7 +144,7 @@ export function MetricBars({
               />
             )}
             {p.forecast != null && (
-              <circle cx={cx} cy={y(p.forecast)} r={3} fill="var(--color-head)" stroke="var(--color-bg)" strokeWidth={1} />
+              <circle cx={cx} cy={y(p.forecast)} r={3} fill="var(--color-text)" stroke="var(--color-bg)" strokeWidth={1} />
             )}
             {i % labelEvery === 0 && (
               <text x={cx} y={H - 6} textAnchor="middle" fontSize={10} fill="var(--color-faint)">

@@ -36,6 +36,12 @@ bias bands are ±4 and ±7. Economic legs are cut at the release date on a rewin
 | A1 page | Why |
 |---|---|
 | Market Spreads, Geopolitical Risk Tracker | no source |
-| Put-Call Ratio, Net Options Volume, Put & Call Walls | no public per-symbol option chain (`options:no-public-per-symbol-chain-passes-the-gate`) |
 | AAII Sentiment | AAII's terms forbid copying (`aaii:public-page-but-terms-forbid-copying`) |
 | Scenario Backtests as a page | `npm run backtest` — each page view would refetch every symbol's full daily history |
+| Chart, Trade Ideas | removed 2026-09-13 at the user's request |
+
+## Built on a non-A1 source, context only
+
+| A1 page | Our source | Note |
+|---|---|---|
+| Put-Call Ratio, Net Options Volume, Put & Call Walls | Yahoo option chains through tracking ETFs (SPY, QQQ, IWM, DIA, GLD, SLV, USO, UNG, UUP, FXE, FXB, FXY, FXA, FXC, FXF) | A1's 5-day average and 1.07 / 1.20 bands; history from `options_snapshots` (migration `lib/db/migrations/2026-09-13-options-snapshots.sql`) |

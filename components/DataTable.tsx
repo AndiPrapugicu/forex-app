@@ -15,7 +15,7 @@
  * Column explanations use `Explain`, never `title=`, so they open on a tap.
  */
 
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Explain } from '@/components/primitives';
 import { nextSort, sortRows, type SortDir, type SortValue } from '@/lib/ui/sort';
 
@@ -37,6 +37,11 @@ export interface Column<T> {
   hideOnCards?: boolean;
   /** Extra classes for this column's body cells. */
   className?: string;
+  /**
+   * Per-row cell paint, A1's heat highlighting (`lib/ui/heat.ts`). Applied to
+   * the cell itself so the fill covers its padding and wins over zebra/hover.
+   */
+  cellStyle?: (row: T) => CSSProperties;
 }
 
 export interface DataTableProps<T> {
@@ -180,7 +185,12 @@ export function DataTable<T>({
                       .map((c) => (
                         <div key={c.key} className="flex min-w-0 items-baseline justify-between gap-2">
                           <dt className="shrink-0 text-caption text-[var(--color-faint)]">{textOf(c)}</dt>
-                          <dd className={`tnum min-w-0 text-right text-small ${c.className ?? ''}`}>{c.render(row)}</dd>
+                          <dd
+                            className={`tnum min-w-0 text-right text-small ${c.cellStyle ? 'rounded px-1.5' : ''} ${c.className ?? ''}`}
+                            style={c.cellStyle?.(row)}
+                          >
+                            {c.render(row)}
+                          </dd>
                         </div>
                       ))}
                   </dl>
@@ -266,7 +276,10 @@ export function DataTable<T>({
                         className={`tnum border-b border-[var(--color-border)]/60 bg-[var(--color-surface)] px-2.5 py-2 whitespace-nowrap group-even:bg-[var(--color-zebra)] group-hover:bg-[var(--color-surface-2)] ${
                           ALIGN[c.align ?? 'right']
                         } ${c.sticky ? 'sticky left-0' : ''} ${c.className ?? ''}`}
-                        style={c.sticky ? { zIndex: 'var(--z-sticky)' } : undefined}
+                        style={{
+                          ...(c.sticky ? { zIndex: 'var(--z-sticky)' } : {}),
+                          ...(c.cellStyle?.(row) ?? {}),
+                        }}
                       >
                         {c.render(row)}
                       </td>

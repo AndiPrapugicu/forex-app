@@ -274,27 +274,40 @@ export interface NewsFeed {
 }
 
 /**
- * All verified reachable during planning. Deliberately spread across
- * organisations — corroboration is meaningless if three "sources" are one
- * newsroom syndicating itself.
+ * Forex desks and central banks only, re-chosen 2026-09-13.
+ *
+ * The first set was general world news (BBC World, Al Jazeera, CNBC, WSJ), which
+ * filled the alert feed with wildfires and island seizures that move no
+ * currency. Every feed below was fetched on that date and returned a dated item
+ * on every entry. ForexFactory has no usable news feed — its site is behind a
+ * Cloudflare challenge — so its calendar JSON stays the only FF source.
+ *
+ * Still spread across organisations: corroboration counts distinct domains, and
+ * three "sources" that are one newsroom syndicating itself prove nothing.
  */
 export const NEWS_FEEDS: NewsFeed[] = [
   {
-    name: 'BBC World',
-    url: 'https://feeds.bbci.co.uk/news/world/rss.xml',
-    domain: 'bbc.co.uk',
-    defaultCategory: 'geopolitics',
-  },
-  {
-    name: 'CNBC Markets',
-    url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html',
-    domain: 'cnbc.com',
+    name: 'FXStreet',
+    url: 'https://www.fxstreet.com/rss/news',
+    domain: 'fxstreet.com',
     defaultCategory: 'risk-sentiment',
   },
   {
-    name: 'WSJ Markets',
-    url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
-    domain: 'wsj.com',
+    name: 'investingLive',
+    url: 'https://investinglive.com/feed/',
+    domain: 'investinglive.com',
+    defaultCategory: 'risk-sentiment',
+  },
+  {
+    name: 'Investing.com Forex',
+    url: 'https://www.investing.com/rss/news_1.rss',
+    domain: 'investing.com',
+    defaultCategory: 'risk-sentiment',
+  },
+  {
+    name: 'FXEmpire',
+    url: 'https://www.fxempire.com/api/v1/en/articles/rss/news',
+    domain: 'fxempire.com',
     defaultCategory: 'risk-sentiment',
   },
   {
@@ -312,14 +325,8 @@ export const NEWS_FEEDS: NewsFeed[] = [
     official: true,
   },
   {
-    name: 'Al Jazeera',
-    url: 'https://www.aljazeera.com/xml/rss/all.xml',
-    domain: 'aljazeera.com',
-    defaultCategory: 'geopolitics',
-  },
-  {
-    name: 'Reuters World (Google News)',
-    url: 'https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com&hl=en-US&gl=US&ceid=US:en',
+    name: 'Reuters Business (Google News)',
+    url: 'https://news.google.com/rss/search?q=when:24h+allinurl:reuters.com/business&hl=en-US&gl=US&ceid=US:en',
     domain: 'reuters.com',
     defaultCategory: 'geopolitics',
   },

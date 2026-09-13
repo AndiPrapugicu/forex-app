@@ -22,14 +22,9 @@ import { MATRIX_SLOTS, SCORING_SLOTS, SLOT_CATEGORIES, type SlotCategory } from 
 import type { Bias } from '@/config/setups.config';
 import type { MirrorOverlay } from '@/lib/scoring/a1-mirror';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
+import { heatStyle } from '@/lib/ui/heat';
 
-const BIAS_STYLE: Record<string, string> = {
-  'Very Bullish': 'text-[var(--color-bull)] font-semibold',
-  Bullish: 'text-[var(--color-bull)]',
-  Neutral: 'text-[var(--color-muted)]',
-  Bearish: 'text-[var(--color-bear)]',
-  'Very Bearish': 'text-[var(--color-bear)] font-semibold',
-};
+type BiasFilter = 'all' | 'bullish' | 'bearish' | 'neutral';
 
 /**
  * The hover text for one cell: what it means, then where the numbers came from.
@@ -121,26 +116,26 @@ function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProp
     return { className: 'bg-transparent text-[var(--color-faint)]', text: '' };
   }
 
-  const v = cell.cell;
-  if (v === 0) {
-    return { className: 'bg-[var(--color-surface-2)]/70 text-[var(--color-muted)]', text: '0' };
-  }
+  /*
+   * A1's grid: the cell is painted solid — blue up, red down, grey for a
+   * measured zero — and the digit carries the magnitude. The old opacity ramp
+   * read as "weak" rather than "+1", which is not what the cell says.
+   */
+  return { className: 'font-semibold', style: heatStyle(cell.cell), text: String(cell.cell) };
+}
 
-  const positive = v > 0;
-  const magnitude = Math.abs(v);
-  // Trend reaches 3, so this is a three-step ramp rather than the old binary.
-  const intensity = magnitude >= 3 ? 0.72 : magnitude === 2 ? 0.55 : 0.28;
-  const rgb = positive
-    ? 'var(--color-bull-cell-rgb)'
-    : 'var(--color-bear-cell-rgb)';
-
+/**
+ * Symbol, score and bias share one tint: the row's own verdict, shaded by
+ * conviction. Layered over an opaque surface because the columns are sticky and
+ * the grid scrolls underneath them.
+ */
+function rowTint(score: number): React.CSSProperties {
+  const heat = heatStyle(score, { max: 10, zeroGrey: false });
+  if (!heat.backgroundColor) return { backgroundColor: 'var(--color-surface)' };
   return {
-    className: 'font-semibold',
-    style: {
-      backgroundColor: `rgb(${rgb} / ${intensity * 100}%)`,
-      color: magnitude >= 2 ? '#fff' : `rgb(${rgb})`,
-    },
-    text: `${positive ? '' : '-'}${magnitude}`,
+    backgroundColor: 'var(--color-surface)',
+    backgroundImage: `linear-gradient(${heat.backgroundColor}, ${heat.backgroundColor})`,
+    color: heat.color,
   };
 }
 
@@ -208,32 +203,42 @@ const INDICATOR_COL_WIDTH = 52;
  * Deriving the offsets from the widths makes that impossible.
  */
 const STICKY = {
-  symbol: 74,
-  score: 42,
-  bias: 112,
+  delta: 40,
+  symbol: 80,
+  bias: 104,
+  score: 46,
 } as const;
+/** A1's order: 1D Δ, Symbol, Bias, Score. */
 const STICKY_LEFT = {
-  symbol: 0,
-  score: STICKY.symbol,
-  bias: STICKY.symbol + STICKY.score,
+  delta: 0,
+  symbol: STICKY.delta,
+  bias: STICKY.delta + STICKY.symbol,
+  score: STICKY.delta + STICKY.symbol + STICKY.bias,
 } as const;
+const STICKY_TOTAL = STICKY.delta + STICKY.symbol + STICKY.bias + STICKY.score;
 
 export function SetupsMatrix({
   rows,
   cotReportDate,
   mirror,
   initialView = 'full',
+  dayDeltas,
 }: {
   rows: SymbolRow[];
   cotReportDate: string | null;
   initialView?: ViewKey;
+  /**
+   * Score now minus the score ~24h ago, per symbol, from `score_snapshots`.
+   * Absent until the ingest cron has a day of history; the column then reads "—".
+   */
+  dayDeltas?: Record<string, number | null>;
   /** Null when no capture of A1's board is on disk — the toggle then hides. */
   mirror?: MirrorOverlay | null;
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<SlotCategory | 'all'>('all');
   const [sort, setSort] = useState<SortKey>('score');
-  const [hideNeutral, setHideNeutral] = useState(false);
+  const [biasFilter, setBiasFilter] = useState<BiasFilter>('all');
   const [view, setViewState] = useState<ViewKey>(initialView);
   /**
    * A view is a link: `/?view=macro` is the Macro Only board. `replaceState`
@@ -300,10 +305,12 @@ export function SetupsMatrix({
       const q = query.trim().toUpperCase();
       out = out.filter((r) => r.symbol.includes(q) || r.label.toUpperCase().includes(q));
     }
-    if (hideNeutral) out = out.filter((r) => r.bias !== 'Neutral');
+    if (biasFilter === 'bullish') out = out.filter((r) => r.bias.includes('Bullish'));
+    if (biasFilter === 'bearish') out = out.filter((r) => r.bias.includes('Bearish'));
+    if (biasFilter === 'neutral') out = out.filter((r) => r.bias === 'Neutral');
     if (sort === 'symbol') out = [...out].sort((a, b) => a.symbol.localeCompare(b.symbol));
     return out;
-  }, [board, query, hideNeutral, sort]);
+  }, [board, query, biasFilter, sort]);
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -375,7 +382,7 @@ export function SetupsMatrix({
           onClick={() => setFiltersOpen((o) => !o)}
           className="min-h-9 rounded border border-[var(--color-border)] px-3 text-caption text-[var(--color-muted)] md:hidden"
         >
-          Filters{query || category !== 'all' || hideNeutral || sort !== 'score' ? ' •' : ''}
+          Filters{query || category !== 'all' || biasFilter !== 'all' || sort !== 'score' ? ' •' : ''}
         </button>
 
         {/*
@@ -417,15 +424,17 @@ export function SetupsMatrix({
           <option value="symbol">Sort by symbol</option>
         </select>
 
-        <label className="flex min-h-11 items-center gap-2 text-small text-[var(--color-muted)] md:min-h-0 md:text-caption">
-          <input
-            type="checkbox"
-            checked={hideNeutral}
-            onChange={(e) => setHideNeutral(e.target.checked)}
-            className="accent-[var(--color-bull)]"
-          />
-          Exclude neutral
-        </label>
+        <select
+          value={biasFilter}
+          aria-label="Bias"
+          onChange={(e) => setBiasFilter(e.target.value as BiasFilter)}
+          className="min-h-11 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-small outline-none md:min-h-0 md:flex-none md:rounded md:py-1 md:text-caption"
+        >
+          <option value="all">All biases</option>
+          <option value="bullish">Bullish</option>
+          <option value="bearish">Bearish</option>
+          <option value="neutral">Neutral</option>
+        </select>
         </div>
 
         <div className="flex rounded border border-[var(--color-border)] p-0.5 md:hidden" role="group" aria-label="Layout">
@@ -461,15 +470,17 @@ export function SetupsMatrix({
       <div
         className={`${layout === 'grid' ? 'block' : 'hidden md:block'} max-h-[calc(100dvh-13rem)] overflow-auto`}
       >
-        <table className="w-full border-separate border-spacing-0 text-center text-micro">
+        <table className="w-full border-separate border-spacing-0 text-center text-caption">
           <thead className="sticky top-0 z-30 bg-[var(--color-surface)]">
-            {/* Category band */}
+            {/* Category band, A1's: "Output" over the verdict columns, then each block. */}
             <tr>
               <th
-                style={{ left: 0, minWidth: STICKY.symbol + STICKY.score + STICKY.bias }}
-                className="sticky z-20 bg-[var(--color-surface)]"
-                colSpan={3}
-              />
+                style={{ left: 0, minWidth: STICKY_TOTAL }}
+                className="table-head sticky z-20 border-r border-b border-[var(--color-border)] px-2 py-1.5 text-small font-semibold"
+                colSpan={4}
+              >
+                Output
+              </th>
               {visibleCategories.map((cat) => {
                 const span = visibleSlots.filter((s) => s.category === cat.key).length;
                 if (span === 0) return null;
@@ -477,7 +488,7 @@ export function SetupsMatrix({
                   <th
                     key={cat.key}
                     colSpan={span}
-                    className="border-b border-l border-[var(--color-border)] px-2 py-1 text-micro font-semibold tracking-wider text-[var(--color-faint)] uppercase"
+                    className="table-head border-b border-l border-[var(--color-border)] px-2 py-1.5 text-small font-semibold"
                   >
                     {cat.label}
                   </th>
@@ -487,22 +498,29 @@ export function SetupsMatrix({
             {/* Column headers */}
             <tr>
               <th
+                style={{ left: STICKY_LEFT.delta, width: STICKY.delta, minWidth: STICKY.delta }}
+                className="sticky z-20 border-b border-[var(--color-border)] table-head px-1 py-1.5 text-micro font-semibold"
+                title="Score change over the last 24 hours"
+              >
+                1D Δ
+              </th>
+              <th
                 style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol }}
                 className="sticky z-20 border-b border-[var(--color-border)] table-head px-2 py-1.5 text-left text-micro font-semibold"
               >
                 Symbol
               </th>
               <th
-                style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
-                className="sticky z-20 border-b border-[var(--color-border)] table-head px-1 py-1.5 text-micro font-semibold"
-              >
-                Score
-              </th>
-              <th
                 style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
-                className="sticky z-20 border-r border-b border-[var(--color-border)] table-head px-2 py-1.5 text-left text-micro font-semibold"
+                className="sticky z-20 border-b border-[var(--color-border)] table-head px-2 py-1.5 text-left text-micro font-semibold"
               >
                 Bias
+              </th>
+              <th
+                style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
+                className="sticky z-20 border-r border-b border-[var(--color-border)] table-head px-1 py-1.5 text-micro font-semibold"
+              >
+                Score
               </th>
               {visibleSlots.map((slot) => (
                 <th
@@ -546,35 +564,41 @@ export function SetupsMatrix({
             {filtered.map((row) => (
               <tr key={row.symbol} className="group">
                 <td
-                  style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol }}
-                  className="sticky z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-left group-hover:bg-[var(--color-surface-2)]"
+                  style={{ left: STICKY_LEFT.delta, width: STICKY.delta, minWidth: STICKY.delta }}
+                  className="tnum sticky z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-1 text-[var(--color-muted)]"
+                >
+                  {(() => {
+                    const d = dayDeltas?.[row.symbol];
+                    if (d === null || d === undefined) return <span className="text-[var(--color-faint)]">—</span>;
+                    return (
+                      <span className={d > 0 ? 'text-[var(--color-bull)]' : d < 0 ? 'text-[var(--color-bear)]' : ''}>
+                        {d > 0 ? '+' : ''}
+                        {d}
+                      </span>
+                    );
+                  })()}
+                </td>
+
+                <td
+                  style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol, ...rowTint(row.totalScore) }}
+                  className="sticky z-10 border-b border-[var(--color-border)] px-2 py-1 text-left"
                 >
                   <Link
                     href={`/scorecard/${row.symbol}`}
-                    className="font-mono text-micro font-medium text-[var(--color-text)] hover:text-[var(--color-bull)] hover:underline"
+                    className="font-mono text-caption font-semibold underline decoration-1 underline-offset-2 hover:decoration-2"
                   >
                     {row.symbol}
                   </Link>
                 </td>
 
                 <td
-                  style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
-                  className="tnum sticky z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-0.5 font-bold group-hover:bg-[var(--color-surface-2)]"
+                  style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias, ...rowTint(row.totalScore) }}
+                  className="sticky z-10 border-b border-[var(--color-border)] px-2 py-1 text-left whitespace-nowrap"
                 >
-                  <span className={BIAS_STYLE[row.bias]}>
-                    {row.totalScore > 0 ? '+' : ''}
-                    {row.totalScore}
-                  </span>
-                </td>
-
-                <td
-                  style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
-                  className="sticky z-10 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-left whitespace-nowrap group-hover:bg-[var(--color-surface-2)]"
-                >
-                  <span className={`text-micro ${BIAS_STYLE[row.bias]}`}>{row.bias}</span>
+                  <span className="text-caption font-medium">{row.bias}</span>
                   {/* Populated count keeps a thin row from reading as confident. */}
                   <span
-                    className="ml-1.5 text-micro text-[var(--color-faint)]"
+                    className="ml-1.5 text-micro opacity-60"
                     title={`${row.populated} of ${SCORING_SLOTS.length} scored indicators resolved completely`}
                   >
                     {row.populated}
@@ -595,6 +619,14 @@ export function SetupsMatrix({
                   )}
                 </td>
 
+                <td
+                  style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score, ...rowTint(row.totalScore) }}
+                  className="tnum sticky z-10 border-r border-b border-[var(--color-border)] px-1 py-1 text-small font-bold"
+                >
+                  {row.totalScore > 0 ? '+' : ''}
+                  {row.totalScore}
+                </td>
+
                 {visibleSlots.map((slot) => {
                   const cell = row.cells[slot.key];
                   const s = cellStyle(cell);
@@ -613,7 +645,7 @@ export function SetupsMatrix({
                         cell,
                         swapped ? mirror?.conventions[slot.key]?.why : undefined,
                       )}
-                      className={`tnum border-b border-[var(--color-border)] px-0.5 py-0.5 text-center ${s.className}${
+                      className={`tnum border-b border-r border-[var(--color-bg)] px-0.5 py-1 text-center ${s.className}${
                         swapped ? ' outline outline-1 -outline-offset-1 outline-[var(--color-uncertain)]' : ''
                       }`}
                       style={{ ...s.style, width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
@@ -629,14 +661,8 @@ export function SetupsMatrix({
                     return (
                       <td
                         key={cat.key}
-                        style={{ minWidth: 78 }}
-                        className={`tnum border-b border-[var(--color-border)] px-2 py-0.5 text-center font-semibold ${
-                          value > 0
-                            ? 'text-[var(--color-bull-cell)]'
-                            : value < 0
-                              ? 'text-[var(--color-bear)]'
-                              : 'text-[var(--color-muted)]'
-                        }`}
+                        className="tnum border-r border-b border-[var(--color-bg)] px-2 py-1 text-center font-semibold"
+                        style={{ minWidth: 78, ...heatStyle(value, { max: 6 }) }}
                       >
                         {value > 0 ? '+' : ''}
                         {value}
@@ -657,16 +683,16 @@ export function SetupsMatrix({
 
       <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t md:flex border-[var(--color-border)] px-3 py-2 text-micro text-[var(--color-faint)]">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bull-cell-rgb) / 55%)' }} />
+          <span className="inline-block h-3 w-4 rounded-sm" style={heatStyle(1)} />
           bullish
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bear-cell-rgb) / 55%)' }} />
+          <span className="inline-block h-3 w-4 rounded-sm" style={heatStyle(-1)} />
           bearish
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/40" />
-          faded — older than its usual release cadence, still counted
+          <span className="inline-block h-3 w-4 rounded-sm" style={heatStyle(0)} />
+          measured, neutral
         </span>
         <span>blank = not published for that currency</span>
         {/* Only meaningful while some column is carried but not scored. */}

@@ -37,8 +37,16 @@
     column label read as a label and not as data — the single change that most
     separates their tables from ours.
   */
-  --color-head: #d7dae0;
-  --color-head-text: #15171b;
+  --color-head: #2a2c31;
+  --color-head-text: #d4d7dd;
+
+  /*
+    A1's heat scale (`lib/ui/heat.ts`): the cell is painted, not the number.
+    Solid for a discrete score, faded by magnitude for a continuous value.
+  */
+  --color-heat-bull-rgb: 64 72 214;
+  --color-heat-bear-rgb: 229 88 88;
+  --color-heat-zero: #3a3c43;
 
   /*
     TWO BULLISH COLOURS, ON PURPOSE — each defined once, here.

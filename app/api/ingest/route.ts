@@ -11,6 +11,8 @@ import { runPipeline } from '@/lib/pipeline';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import { buildSnapshots } from '@/lib/scoring/history';
 import { getStore, type Store } from '@/lib/db/client';
+import { fetchAllOptionChains } from '@/lib/connectors/yahoo-options';
+import { sessionDate, shouldCaptureOptions, toOptionsSnapshot } from '@/lib/scoring/options';
 
 // Always dynamic: this route has side effects and must never be cached.
 export const dynamic = 'force-dynamic';
@@ -60,6 +62,25 @@ async function captureHistory(store: Store): Promise<{ saved: number; error?: st
   }
 }
 
+/**
+ * One options row per underlying per US session, written after the close.
+ *
+ * A1's put-call measure is a 5-day average and Yahoo only serves today, so a
+ * session missed here is a gap in that average for a week. Same failure policy
+ * as `captureHistory`: report, never throw.
+ */
+async function captureOptions(store: Store, now = new Date()): Promise<{ saved: number; skipped?: string; error?: string }> {
+  if (!shouldCaptureOptions(now)) return { saved: 0, skipped: 'outside the post-close window (weekdays after 21:00 UTC)' };
+  try {
+    const { chains, failed } = await fetchAllOptionChains(now);
+    const date = sessionDate(now);
+    await store.saveOptionsSnapshots(chains.map((c) => toOptionsSnapshot(c, date)));
+    return { saved: chains.length, error: failed.length ? `no chain: ${failed.join(', ')}` : undefined };
+  } catch (err) {
+    return { saved: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 async function handle(request: Request) {
   const denied = authorize(request);
   if (denied) {
@@ -71,7 +92,7 @@ async function handle(request: Request) {
   try {
     const result = await runPipeline({ deliverAlerts: true });
     const store = getStore();
-    const history = await captureHistory(store);
+    const [history, options] = await Promise.all([captureHistory(store), captureOptions(store)]);
 
     // Configured is not the same as working. With credentials set but no schema,
     // every query fails and alerts are silently suppressed — so dedupe is only
@@ -87,6 +108,9 @@ async function handle(request: Request) {
       alertDedupeReliable: store.durable && storage.ok,
       snapshotsSaved: history.saved,
       snapshotError: history.error,
+      optionsSaved: options.saved,
+      optionsSkipped: options.skipped,
+      optionsError: options.error,
       // Snapshots in memory vanish between serverless invocations, so history
       // only accumulates for real once Supabase is configured.
       historyDurable: store.durable && storage.ok,

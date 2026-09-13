@@ -5,14 +5,18 @@ The design system added 2026-09-13. Presentation only — nothing here changes a
 ## Tokens — `app/globals.css`
 
 - **Surfaces:** `--color-bg`, `--color-surface`, `--color-surface-2`, `--color-zebra`, `--color-border`, `--color-border-bright`.
-- **Text:** `--color-text`, `--color-muted`, `--color-faint`. Table headers use `.table-head` (pale fill, dark text).
+- **Text:** `--color-text`, `--color-muted`, `--color-faint`. Table headers use `.table-head` (grey
+  `--color-head` fill, `--color-head-text` text — never a white bar).
+- **Heat scale:** `lib/ui/heat.ts` `heatStyle(value, { max?, zeroGrey?, deadband? })` is A1's cell colouring:
+  solid blue (`--color-heat-bull-rgb`) or red (`--color-heat-bear-rgb`) for discrete scores, grey
+  (`--color-heat-zero`) for a measured 0, transparent for null; with `max`, alpha runs 0.3→1 by |v|/max and text
+  turns white from 0.55. `DataTable` columns take `cellStyle: (row) => heatStyle(...)` to colour a cell.
 - **Direction:** `--color-bull` / `--color-bear` for status labels; `--color-bull-cell` / `--color-bear-cell` for
   cell fills and chart bars. Amber `--color-uncertain` means *uncertain*, never *slightly bad*.
 - **`-rgb` tokens are space-separated** — use `rgb(var(--x) / 55%)`, never `rgba(var(--x), .55)`.
 - **Type scale:** `text-micro`, `text-caption`, `text-small`, `text-body`, `text-title`. The floor rises below
   768px. Do not add `text-[Npx]`.
 - **Radius:** `--radius-card`, `--radius-control`, `--radius-pill`. **z-index:** `--z-sticky` … `--z-popover`.
-- Lightweight Charts (canvas) cannot read CSS variables; `PriceChart.tsx` keeps literal hex copies.
 
 ## Page shell
 

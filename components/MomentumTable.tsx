@@ -3,6 +3,7 @@
 /** Momentum & Volatility: where price sits against its moving averages, and how far it moves. */
 
 import Link from 'next/link';
+import { heatStyle } from '@/lib/ui/heat';
 import { DataTable, type Column } from '@/components/DataTable';
 import { formatPrice } from '@/components/ui';
 
@@ -25,11 +26,6 @@ export interface MomentumRow {
 
 const pct = (v: number | null, signed = true) => (v === null ? '—' : `${signed && v > 0 ? '+' : ''}${v.toFixed(2)}%`);
 
-/** Blue above the average, red below — the same blue/red the board's cells use. */
-function Distance({ v }: { v: number | null }) {
-  if (v === null) return <span className="text-[var(--color-faint)]">—</span>;
-  return <span className={v >= 0 ? 'text-[var(--color-bull-cell)]' : 'text-[var(--color-bear)]'}>{pct(v)}</span>;
-}
 
 const sma = (key: 'vs20' | 'vs50' | 'vs100' | 'vs200', n: number): Column<MomentumRow> => ({
   key,
@@ -37,7 +33,9 @@ const sma = (key: 'vs20' | 'vs50' | 'vs100' | 'vs200', n: number): Column<Moment
   textLabel: `vs ${n}-day average`,
   explain: `Percent above (+) or below (−) the ${n}-day simple moving average. Context only; the board's Trend cell reads the 3- and 14-day pair.`,
   sortValue: (r) => r[key],
-  render: (r) => <Distance v={r[key]} />,
+  // Shaded by distance: full strength 10% from the average.
+  cellStyle: (r) => heatStyle(r[key], { max: 10, zeroGrey: false }),
+  render: (r) => pct(r[key]),
 });
 
 const COLUMNS: Column<MomentumRow>[] = [
@@ -62,6 +60,8 @@ const COLUMNS: Column<MomentumRow>[] = [
     label: 'Above',
     explain: 'How many of the 20, 50, 100 and 200-day averages the price is above.',
     sortValue: (r) => r.aboveCount,
+    // 4 of 4 above is solid blue, 0 of 4 solid red, 2 of 4 grey.
+    cellStyle: (r) => heatStyle(r.aboveCount === null || r.smaCount === 0 ? null : r.aboveCount - r.smaCount / 2, { max: 2 }),
     render: (r) => (r.aboveCount === null ? '—' : `${r.aboveCount}/${r.smaCount}`),
   },
   sma('vs20', 20),

@@ -71,7 +71,12 @@ export function upcomingEventAlerts(events: NormalizedEvent[], now: Date): Alert
           `Forecast ${fmt(e.consensus)}, previous ${fmt(e.previous)}.`,
         affects: [e.currency] as Currency[],
         sources: e.sourceUrl ? [{ name: e.source, url: e.sourceUrl }] : [],
-        createdUtc: now.toISOString(),
+        /*
+         * When it ENTERED the heads-up window, not when this run happened. The
+         * dashboard re-evaluates every poll; stamping `now` made every alert
+         * read "now" forever.
+         */
+        createdUtc: new Date(new Date(e.dateUtc).getTime() - UPCOMING_WINDOW_MINUTES * 60_000).toISOString(),
         highConfidence: true, // a scheduled release is a fact, not a claim
         eventId: e.id,
       };
@@ -130,7 +135,8 @@ export function surpriseAlerts(
             (score.polarityConflict ? ' Note: source disagrees with our polarity rule.' : ''),
           affects: [event.currency] as Currency[],
           sources: event.sourceUrl ? [{ name: event.source, url: event.sourceUrl }] : [],
-          createdUtc: now.toISOString(),
+          // The release time: the surprise happened then, not at this poll.
+          createdUtc: new Date(event.dateUtc).toISOString(),
           highConfidence: score.confidence >= CONFIDENCE_FLOOR,
           eventId: event.id,
         },
@@ -188,7 +194,8 @@ export function newsAlerts(clusters: NewsCluster[], now: Date): Alert[] {
         : `SINGLE UNVERIFIED SOURCE (${cluster.items[0].sourceName}). Not corroborated by other outlets — treat with caution.`,
       affects: [...new Set(cluster.items.flatMap((i) => i.affects))],
       sources,
-      createdUtc: now.toISOString(),
+      // The newest report in the story — its real publication time.
+      createdUtc: new Date(cluster.lastSeenUtc).toISOString(),
       highConfidence: corroborated,
       eventId: null,
     });
@@ -251,13 +258,53 @@ export function currencyClusterAlerts(
         `Average score ${avg > 0 ? '+' : ''}${avg}.`,
       affects: [currency],
       sources: [],
-      createdUtc: now.toISOString(),
+      // The latest member release completed the cluster.
+      createdUtc: items.map((i) => new Date(i.event.dateUtc).toISOString()).sort().at(-1) as string,
       highConfidence: items.every((i) => i.score.confidence >= CONFIDENCE_FLOOR),
       eventId: null,
     });
   }
 
   return alerts;
+}
+
+/**
+ * Only these reach the feed or a phone. `info` is kept inside the engine (a
+ * low-confidence surprise still informs the dashboard's scores) but it is not an
+ * alert: an interruption has to be worth the interruption.
+ */
+export const DELIVERED_SEVERITIES: readonly AlertSeverity[] = ['critical', 'high', 'medium'];
+
+export function isDeliverable(alert: Alert): boolean {
+  return DELIVERED_SEVERITIES.includes(alert.severity);
+}
+
+/** How long a stored alert stays in the feed. Older than this is history, not an alert. */
+export const ALERT_DISPLAY_WINDOW_HOURS = 48;
+
+/**
+ * Whether a STORED alert still belongs in the feed.
+ *
+ * The store keeps every alert ever recorded, including ones stamped by older
+ * code and ones from news feeds that have since been removed. Neither should
+ * reappear: an alert has to be recent, and a news alert has to come from a feed
+ * we still trust.
+ */
+export function isCurrentAlert(
+  alert: Alert,
+  now: Date,
+  feedNames: ReadonlySet<string>,
+  windowHours = ALERT_DISPLAY_WINDOW_HOURS,
+): boolean {
+  if (!isDeliverable(alert)) return false;
+  const created = new Date(alert.createdUtc).getTime();
+  if (!Number.isFinite(created)) return false;
+  const ageHours = (now.getTime() - created) / 3_600_000;
+  if (ageHours > windowHours) return false;
+  if (alert.kind === 'geopolitical' || alert.kind === 'central-bank') {
+    return alert.sources.length > 0 && alert.sources.every((s) => feedNames.has(s.name));
+  }
+  return true;
 }
 
 /** Runs every rule and returns alerts ordered most severe first. */

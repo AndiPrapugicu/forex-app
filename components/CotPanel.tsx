@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import { cotTicker } from '@/config/symbols.config';
 import type { CotFlow } from '@/lib/scoring/cot-flow';
 import type { CotRowView } from '@/lib/scoring/cot-rows';
+import { heatStyle } from '@/lib/ui/heat';
 import { DataTable, type Column } from '@/components/DataTable';
 import { Legend } from '@/components/primitives';
 import { EmptyState, Panel } from '@/components/ui';
@@ -167,6 +168,22 @@ function PositioningBars({ rows }: { rows: CotRowView[] }) {
   );
 }
 
+/** A1-style cell shade for a continuous value; a zero stays unpainted. */
+const heat = (value: number | null | undefined, max: number) => heatStyle(value, { max, zeroGrey: false });
+
+/**
+ * A contract count as a percentage of open interest. Raw contracts do not
+ * compare — gold moves more in a quiet week than the franc in a busy one — so
+ * every shade on this table is sized against the contract's own market.
+ */
+function ofOpenInterest(row: CotRowView, contracts: number | null | undefined): number | null {
+  const oi = row.latest.openInterest;
+  if (contracts === null || contracts === undefined || !oi) return null;
+  return (contracts / oi) * 100;
+}
+
+const negate = (v: number | null) => (v === null ? null : -v);
+
 const COLUMNS: Column<CotRowView>[] = [
   {
     key: 'contract',
@@ -184,15 +201,18 @@ const COLUMNS: Column<CotRowView>[] = [
     key: 'dlong',
     label: 'Δ Long',
     explain:
-      'Contracts of longs added this week. Net rising on fresh longs is a different market from net rising on short covering.',
+      'Contracts of longs added this week. Net rising on fresh longs is a different market from net rising on short covering. Shaded by size against open interest.',
     sortValue: (r) => r.latest.specLongChange,
-    render: (r) => <span className={deltaClass(r.latest.specLongChange)}>{signed(r.latest.specLongChange)}</span>,
+    cellStyle: (r) => heat(ofOpenInterest(r, r.latest.specLongChange), 5),
+    render: (r) => signed(r.latest.specLongChange),
   },
   {
     key: 'dshort',
     label: 'Δ Short',
     sortValue: (r) => r.latest.specShortChange,
-    render: (r) => <span className={deltaClass(r.latest.specShortChange)}>{signed(r.latest.specShortChange)}</span>,
+    // More shorts is selling, so the shade is inverted.
+    cellStyle: (r) => heat(negate(ofOpenInterest(r, r.latest.specShortChange)), 5),
+    render: (r) => signed(r.latest.specShortChange),
   },
   {
     key: 'flow',
@@ -200,7 +220,8 @@ const COLUMNS: Column<CotRowView>[] = [
     explain:
       'Longs added minus shorts added. Both are accumulation, so a contract can be bought hard without a single new long. The default order.',
     sortValue: netFlow,
-    render: (r) => <span className={`font-semibold ${deltaClass(netFlow(r))}`}>{signed(netFlow(r))}</span>,
+    cellStyle: (r) => heat(ofOpenInterest(r, netFlow(r)), 5),
+    render: (r) => <span className="font-semibold">{signed(netFlow(r))}</span>,
     hideOnCards: true,
   },
   {
@@ -225,34 +246,44 @@ const COLUMNS: Column<CotRowView>[] = [
     key: 'longpct',
     label: 'Long %',
     sortValue: (r) => r.latest.specLongPct,
-    render: (r) => <span className="text-[var(--color-bull-cell)]">{r.latest.specLongPct.toFixed(1)}%</span>,
+    // Blue deepens as the long share climbs past 50%.
+    cellStyle: (r) => (r.latest.specLongPct > 50 ? heat(r.latest.specLongPct - 50, 50) : {}),
+    render: (r) => `${r.latest.specLongPct.toFixed(1)}%`,
+  },
+  {
+    key: 'shortpct',
+    label: 'Short %',
+    sortValue: (r) => 100 - r.latest.specLongPct,
+    cellStyle: (r) => (r.latest.specLongPct < 50 ? heat(r.latest.specLongPct - 50, 50) : {}),
+    render: (r) => `${(100 - r.latest.specLongPct).toFixed(1)}%`,
+    hideOnCards: true,
   },
   {
     key: 'wkchange',
     label: 'Δ Long %',
     explain: 'Weekly change in the long share — the measure the COT column on the board scores.',
     sortValue: (r) => r.latest.specLongPctChange,
+    cellStyle: (r) => heat(r.latest.specLongPctChange ?? null, 10),
     render: (r) => {
       const v = r.latest.specLongPctChange;
-      return <span className={deltaClass(v)}>{v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}`}</span>;
+      return v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
     },
   },
   {
     key: 'net',
     label: 'Net',
+    explain: 'Speculators’ net position. Shaded by its size against open interest.',
     sortValue: (r) => r.latest.specNet,
-    render: (r) => (
-      <span className={`font-semibold ${r.latest.specNet >= 0 ? 'text-[var(--color-bull-cell)]' : 'text-[var(--color-bear)]'}`}>
-        {signed(r.latest.specNet)}
-      </span>
-    ),
+    cellStyle: (r) => heat(ofOpenInterest(r, r.latest.specNet), 40),
+    render: (r) => <span className="font-semibold">{signed(r.latest.specNet)}</span>,
   },
   {
     key: 'pctile',
     label: 'Pctile',
     explain: "Where the net position sits in this contract's own 3-year range. Absolute size is not comparable across contracts.",
     sortValue: (r) => r.cotPercentile,
-    render: (r) => <span className="text-[var(--color-muted)]">{r.cotPercentile === null ? '—' : r.cotPercentile}</span>,
+    cellStyle: (r) => heat(r.cotPercentile === null ? null : r.cotPercentile - 50, 50),
+    render: (r) => (r.cotPercentile === null ? '—' : r.cotPercentile),
   },
   {
     key: 'retail',

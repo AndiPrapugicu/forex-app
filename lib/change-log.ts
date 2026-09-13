@@ -10,7 +10,15 @@
  */
 
 import { getStore } from '@/lib/db/client';
-import { buildChangeLog, latestPerSymbol, truncateToMinute, type ScoreChange } from '@/lib/scoring/history';
+import {
+  DAY_DELTA_TOLERANCE_MS,
+  buildChangeLog,
+  dayDeltas,
+  latestPerSymbol,
+  scoresAt,
+  truncateToMinute,
+  type ScoreChange,
+} from '@/lib/scoring/history';
 import type { SetupsMatrix } from '@/lib/scoring/setups';
 
 /**
@@ -47,5 +55,24 @@ export async function loadChangeLog(matrix: SetupsMatrix): Promise<ScoreChange[]
     return buildChangeLog(matrix.rows, previous);
   } catch {
     return [];
+  }
+}
+
+/** Look back a day plus the tolerance, so the query stays one day of rows. */
+const DAY_MS = 24 * 3600_000;
+
+/**
+ * 1D Δ for every row: score now against the latest snapshot ~24h ago.
+ * Never throws; an empty history returns null for every symbol.
+ */
+export async function loadDayDeltas(matrix: SetupsMatrix): Promise<Record<string, number | null>> {
+  try {
+    const now = new Date(matrix.generatedAtUtc).getTime();
+    const target = new Date(now - DAY_MS).toISOString();
+    const since = new Date(now - DAY_MS - DAY_DELTA_TOLERANCE_MS).toISOString();
+    const snapshots = await getStore().getAllSnapshots(since);
+    return dayDeltas(matrix.rows, scoresAt(snapshots, target));
+  } catch {
+    return dayDeltas(matrix.rows, new Map());
   }
 }

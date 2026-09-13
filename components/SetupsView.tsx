@@ -29,7 +29,10 @@ export function SetupsView({
   initialMirror,
   initialError,
   initialView = 'full',
+  initialDayDeltas = {},
 }: {
+  /** Score change over 24h per symbol, from stored snapshots. */
+  initialDayDeltas?: Record<string, number | null>;
   /** From `/?view=`; the matrix keeps the URL in step when the view changes. */
   initialView?: 'full' | 'simple' | 'macro';
   initial: Matrix | null;
@@ -44,6 +47,7 @@ export function SetupsView({
   const [changeLog, setChangeLog] = useState<ScoreChange[]>(initialChangeLog);
   const [mirror, setMirror] = useState<MirrorOverlay | null>(initialMirror);
   const [error, setError] = useState<string | null>(initialError);
+  const [dayDeltas, setDayDeltas] = useState<Record<string, number | null>>(initialDayDeltas);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
 
@@ -59,6 +63,7 @@ export function SetupsView({
       setHealth(data.health ?? []);
       setChangeLog(data.changeLog ?? []);
       setMirror(data.mirror ?? null);
+      setDayDeltas(data.dayDeltas ?? {});
       setError(null);
     } catch (err) {
       // Keep the last good matrix on screen; a failed refresh is no reason to
@@ -150,7 +155,7 @@ export function SetupsView({
       ) : (
         <>
           <ChangeLog changes={changeLog} />
-          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} mirror={mirror} initialView={initialView} />
+          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} mirror={mirror} initialView={initialView} dayDeltas={dayDeltas} />
         </>
       )}
     </div>

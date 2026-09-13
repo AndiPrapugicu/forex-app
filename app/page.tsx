@@ -7,7 +7,7 @@
  */
 
 import { loadLatestA1Capture } from '@/lib/a1-capture-file';
-import { loadChangeLog } from '@/lib/change-log';
+import { loadChangeLog, loadDayDeltas } from '@/lib/change-log';
 import { buildMirrorOverlay, type MirrorOverlay } from '@/lib/scoring/a1-mirror';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
 import { SetupsView } from '@/components/SetupsView';
@@ -33,6 +33,7 @@ export default async function TopSetupsPage({
   let matrix: SetupsMatrix | null = null;
   let health: SourceHealth[] = [];
   let changeLog: ScoreChange[] = [];
+  let dayDeltas: Record<string, number | null> = {};
   let mirror: MirrorOverlay | null = null;
   let error: string | null = null;
 
@@ -40,7 +41,7 @@ export default async function TopSetupsPage({
     const result = await runSetupsPipeline();
     matrix = result.matrix;
     health = result.health;
-    changeLog = await loadChangeLog(matrix);
+    [changeLog, dayDeltas] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
     mirror = buildMirrorOverlay(matrix.rows, loadLatestA1Capture() ?? undefined);
   } catch (err) {
     error = err instanceof Error ? err.message : 'Failed to build the scorecard';
@@ -54,6 +55,7 @@ export default async function TopSetupsPage({
       initialMirror={mirror}
       initialError={error}
       initialView={initialView}
+      initialDayDeltas={dayDeltas}
     />
   );
 }

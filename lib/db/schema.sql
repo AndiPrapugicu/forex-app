@@ -172,3 +172,25 @@ create index if not exists score_snapshots_symbol_idx
   on score_snapshots (symbol, captured_at desc);
 create index if not exists score_snapshots_time_idx
   on score_snapshots (captured_at desc);
+
+-- ---------------------------------------------------------------------------
+-- options_snapshots — one row per options underlying per US session.
+--
+-- A1's Put-Call Ratio is a 5-day moving average, and Yahoo's option chains are a
+-- snapshot of today only. The ingest cron writes a row after the US close, so
+-- the average can be built from real history. Added 2026-09-13; existing
+-- databases get it from lib/db/migrations/2026-09-13-options-snapshots.sql.
+-- ---------------------------------------------------------------------------
+create table if not exists options_snapshots (
+  symbol              text    not null,
+  session_date        date    not null,
+  call_volume         double precision not null default 0,
+  put_volume          double precision not null default 0,
+  call_open_interest  double precision not null default 0,
+  put_open_interest   double precision not null default 0,
+  captured_at         timestamptz not null default now(),
+  primary key (symbol, session_date)
+);
+
+create index if not exists options_snapshots_date_idx
+  on options_snapshots (session_date desc);

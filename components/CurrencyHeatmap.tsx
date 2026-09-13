@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { MAJORS, type CurrencyStrength, type PairScore } from '@/lib/types';
 import { ScoreBar } from '@/components/Gauge';
 import { CurrencyChip, EmptyState, Panel, formatScore, scoreColor } from '@/components/ui';
+import { heatStyle } from '@/lib/ui/heat';
 
 export function CurrencyStrengthPanel({ strengths }: { strengths: CurrencyStrength[] }) {
   // Strongest first — the ranking IS the information.
@@ -118,22 +119,16 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
                     // Intensity encodes magnitude; hue encodes direction. Low
                     // confidence goes amber so it cannot be misread as a
                     // confident call.
-                    const intensity = Math.min(Math.abs(c.score) / 6, 1);
                     const uncertain = c.confidence < 40;
-                    const rgb = uncertain
-                      ? 'var(--color-uncertain-rgb)'
-                      : c.score > 0
-                        ? 'var(--color-bull-rgb)'
-                        : 'var(--color-bear-cell-rgb)';
+                    const style = uncertain
+                      ? { backgroundColor: 'rgb(var(--color-uncertain-rgb) / 25%)', color: 'rgb(var(--color-uncertain-rgb))' }
+                      : heatStyle(c.score, { max: 6 });
 
                     return (
                       <td
                         key={quote}
                         className="tnum h-8 rounded text-micro font-semibold"
-                        style={{
-                          backgroundColor: `rgb(${rgb} / ${(0.08 + intensity * 0.42) * 100}%)`,
-                          color: intensity > 0.35 ? `rgb(${rgb})` : 'var(--color-muted)',
-                        }}
+                        style={style}
                         title={`${base}/${quote} score ${formatScore(c.score)}, confidence ${c.confidence}${uncertain ? ' (below threshold — treat as uncertain)' : ''}`}
                       >
                         {c.score === 0 ? '0' : formatScore(c.score)}

@@ -305,7 +305,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             <div className="max-h-[calc(100vh-13rem)] overflow-auto">
               <table className="w-full text-left text-micro">
                 <thead>
-                  <tr className="sticky top-0 z-10 bg-[var(--color-surface)] text-micro tracking-wider text-[var(--color-faint)] uppercase">
+                  <tr className="table-head sticky top-0 z-10 text-caption font-semibold">
                     <th className="px-3 py-1.5">Indicator</th>
                     <th className="px-2 py-1.5 text-center">Cell</th>
                     <th className="px-2 py-1.5 text-right">Actual</th>

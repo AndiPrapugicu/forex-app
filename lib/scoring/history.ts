@@ -261,3 +261,38 @@ export function latestPerSymbol(
 
   return out;
 }
+
+/** How far before the target a snapshot may sit and still count as "then". */
+export const DAY_DELTA_TOLERANCE_MS = 2 * 3600_000;
+
+/**
+ * Each symbol's score as it stood at `atUtc`: its latest snapshot at or before
+ * that moment, provided it is no older than `toleranceMs`.
+ *
+ * The tolerance is what makes "1D Δ" honest. Without it a symbol whose only
+ * snapshot is a week old would report a week's change under a one-day label.
+ */
+export function scoresAt(
+  snapshots: ScoreSnapshot[],
+  atUtc: string,
+  toleranceMs = DAY_DELTA_TOLERANCE_MS,
+): Map<string, number> {
+  const floor = new Date(new Date(atUtc).getTime() - toleranceMs).toISOString();
+  const held = new Map<string, ScoreSnapshot>();
+  for (const s of snapshots) {
+    if (s.capturedAtUtc > atUtc || s.capturedAtUtc < floor) continue;
+    const prior = held.get(s.symbol);
+    if (!prior || s.capturedAtUtc > prior.capturedAtUtc) held.set(s.symbol, s);
+  }
+  return new Map([...held].map(([symbol, s]) => [symbol, s.totalScore]));
+}
+
+/** Score now minus score then, per row; null where there is no "then". */
+export function dayDeltas(
+  rows: { symbol: string; totalScore: number }[],
+  then: Map<string, number>,
+): Record<string, number | null> {
+  return Object.fromEntries(
+    rows.map((r) => [r.symbol, then.has(r.symbol) ? r.totalScore - (then.get(r.symbol) as number) : null]),
+  );
+}

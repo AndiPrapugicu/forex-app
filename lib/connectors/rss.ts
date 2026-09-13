@@ -53,15 +53,20 @@ function linkOf(node: unknown): string {
   return '';
 }
 
-function parseDate(raw: unknown): string {
+/**
+ * Null for a missing or unparseable date, and the caller DROPS the item.
+ *
+ * This used to stamp undated items "just now", on the theory that a breaking
+ * headline with a malformed date is the one worth seeing. In practice it did the
+ * opposite: every undated item looked fresh on every fetch, passed the six-hour
+ * alert window forever, and the alert feed filled with "now" stories that were
+ * days old. A headline we cannot date is not one we can call breaking.
+ */
+export function parseDate(raw: unknown): string | null {
   const text = textOf(raw);
-  if (text) {
-    const d = new Date(text);
-    if (!Number.isNaN(d.getTime())) return d.toISOString();
-  }
-  // Undated items are treated as "just now" rather than dropped — a breaking
-  // headline with a malformed date is exactly the one worth seeing.
-  return new Date().toISOString();
+  if (!text) return null;
+  const d = new Date(text);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /** Strips markup and entities out of RSS description blobs. */
@@ -154,6 +159,7 @@ function parseFeed(xml: string, feed: NewsFeed): NewsItem[] {
 
     const url = linkOf(e.link) || textOf(e.guid);
     const published = parseDate(e.pubDate ?? e.published ?? e.updated ?? e['dc:date']);
+    if (!published) continue;
     const summary = clean(textOf(e.description ?? e.summary ?? e.content));
 
     // Scan title AND summary — the alarming word is often only in the body.

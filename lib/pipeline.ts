@@ -13,7 +13,8 @@
 import { resolveCalendar } from '@/lib/actuals/resolver';
 import { fetchNews } from '@/lib/connectors/rss';
 import { fetchPrices } from '@/lib/connectors/prices';
-import { evaluateAlerts } from '@/lib/alerts/rules';
+import { NEWS_FEEDS } from '@/config/sources.config';
+import { evaluateAlerts, isCurrentAlert, isDeliverable } from '@/lib/alerts/rules';
 import { sendAlerts } from '@/lib/alerts/telegram';
 import { getStore } from '@/lib/db/client';
 import { computeAssetScores } from '@/lib/scoring/assets';
@@ -33,6 +34,8 @@ export interface PipelineResult {
 const RECENT_WINDOW_HOURS = 48;
 /** How far ahead the upcoming panel looks. */
 const UPCOMING_WINDOW_HOURS = 72;
+/** The calendar panels show medium and high impact releases only. */
+const MARKET_MOVING = new Set(['HIGH', 'MEDIUM']);
 
 export async function runPipeline(
   options: { deliverAlerts?: boolean; now?: Date } = {},
@@ -99,7 +102,8 @@ export async function runPipeline(
   const marketMood = computeMarketMood(strengths);
 
   // --- 3. Alerts ----------------------------------------------------------
-  const candidates = evaluateAlerts({ events: calendar.events, scored, clusters, now });
+  // Medium and above only — the same filter for the feed and for Telegram.
+  const candidates = evaluateAlerts({ events: calendar.events, scored, clusters, now }).filter(isDeliverable);
 
   // Dedupe against history. This is what stops the 10-minute cron re-sending
   // the same alert forever; hasAlert failures are treated as "already seen" so
@@ -123,7 +127,9 @@ export async function runPipeline(
   const recentAlerts = await store.getRecentAlerts(25).catch(() => [] as Alert[]);
   // Merge history with anything new this run so the feed is current even before
   // the next cron writes it.
-  const alerts = [...new Map([...newAlerts, ...recentAlerts].map((a) => [a.hash, a])).values()]
+  const feedNames = new Set(NEWS_FEEDS.map((f) => f.name));
+  const current = recentAlerts.filter((a) => isCurrentAlert(a, now, feedNames));
+  const alerts = [...new Map([...newAlerts, ...current].map((a) => [a.hash, a])).values()]
     .sort((a, b) => b.createdUtc.localeCompare(a.createdUtc))
     .slice(0, 25);
 
@@ -132,6 +138,7 @@ export async function runPipeline(
 
   const upcoming = calendar.events
     .filter((e) => {
+      if (!MARKET_MOVING.has(e.impact)) return false;
       const t = new Date(e.dateUtc).getTime();
       return t > nowMs && t <= nowMs + UPCOMING_WINDOW_HOURS * 3_600_000;
     })
@@ -145,7 +152,7 @@ export async function runPipeline(
 
   const recent = scored
     .filter(({ event, score }) => {
-      if (event.actual === null || score.surprise === null) return false;
+      if (event.actual === null || score.surprise === null || !MARKET_MOVING.has(event.impact)) return false;
       const age = (nowMs - new Date(event.dateUtc).getTime()) / 3_600_000;
       return age >= 0 && age <= RECENT_WINDOW_HOURS;
     })

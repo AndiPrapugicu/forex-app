@@ -76,6 +76,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/sentiment', label: 'Retail Sentiment', hint: 'Crowd positioning, contrarian', icon: ICON.crowd },
       { href: '/sentiment/smart-money', label: 'Smart Money', hint: 'Institutions against the crowd', icon: ICON.cot },
+      { href: '/options/put-call', label: 'Put-Call Ratio', hint: '5-day average, A1 bands', icon: ICON.chart },
+      { href: '/options/volume', label: 'Net Options Volume', hint: 'Calls minus puts traded', icon: ICON.dial },
+      { href: '/options/walls', label: 'Put & Call Walls', hint: 'Open interest by strike', icon: ICON.data },
     ],
   },
   {
@@ -123,9 +126,8 @@ const GROUPS: NavGroup[] = [
     key: 'tools',
     label: 'Tools',
     items: [
-      { href: '/ideas', label: 'Trade Ideas', hint: 'Levels sized from volatility', icon: ICON.card },
-      { href: '/chart', label: 'Chart', hint: 'Structure, levels, setup plan', icon: ICON.chart },
-      { href: '/news', label: 'News & Alerts', hint: 'Market mood, calendar, alerts', icon: ICON.news },
+      { href: '/calendar', label: 'Economic Calendar', hint: 'Upcoming releases and surprises', icon: ICON.calendar },
+      { href: '/news', label: 'News & Alerts', hint: 'Alerts, headlines, market mood', icon: ICON.news },
     ],
   },
 ];

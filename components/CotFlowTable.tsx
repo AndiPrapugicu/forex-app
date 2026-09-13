@@ -8,6 +8,7 @@
 import { cotTicker } from '@/config/symbols.config';
 import type { CotFlow } from '@/lib/scoring/cot-flow';
 import { Sparkline } from '@/components/charts';
+import { heatStyle } from '@/lib/ui/heat';
 import { DataTable, type Column } from '@/components/DataTable';
 
 const signed = (n: number | null) => (n === null ? '—' : `${n > 0 ? '+' : ''}${n.toLocaleString()}`);
@@ -49,9 +50,17 @@ const VELOCITY_COLUMNS: Column<CotFlow>[] = [
     label: 'Pctile',
     explain: "Where this week's absolute net change sits among this contract's own weekly changes. The velocity, and the default order.",
     sortValue: (f) => f.percentile,
+    // How unusual, in the direction of the flow: a 95th-percentile week of selling is deep red.
+    cellStyle: (f) => heatStyle(f.direction === 'flat' ? null : (f.direction === 'buying' ? 1 : -1) * f.percentile, { max: 100, zeroGrey: false }),
     render: (f) => <span className={STRENGTH_TONE[f.strength]}>{f.percentile.toFixed(0)}</span>,
   },
-  { key: 'net', label: 'Δ Net', sortValue: (f) => f.netChange, render: (f) => <span className={`font-semibold ${tone(f.netChange)}`}>{signed(f.netChange)}</span> },
+  {
+    key: 'net',
+    label: 'Δ Net',
+    sortValue: (f) => f.netChange,
+    cellStyle: (f) => heatStyle(f.direction === 'flat' ? null : (f.direction === 'buying' ? 1 : -1) * f.percentile, { max: 100, zeroGrey: false }),
+    render: (f) => <span className="font-semibold">{signed(f.netChange)}</span>,
+  },
   { key: 'long', label: 'Δ Long', sortValue: (f) => f.longChange, render: (f) => <span className={tone(f.longChange)}>{signed(f.longChange)}</span> },
   { key: 'short', label: 'Δ Short', sortValue: (f) => f.shortChange, render: (f) => <span className={tone(f.shortChange)}>{signed(f.shortChange)}</span> },
   {
@@ -100,7 +109,10 @@ const horizon = (h: 1 | 4 | 13 | 26): Column<CotTrendRow> => ({
   label: `${h}w`,
   textLabel: `${h}-week change`,
   sortValue: (r) => r.change[h],
-  render: (r) => <span className={tone(r.change[h])}>{signed(r.change[h])}</span>,
+  // Sized against the position itself, so a small contract's big move reads as big.
+  cellStyle: (r) =>
+    heatStyle(r.change[h] === null ? null : (r.change[h]! / Math.max(1, Math.abs(r.net))) * 100, { max: 50, zeroGrey: false }),
+  render: (r) => signed(r.change[h]),
 });
 
 const TREND_COLUMNS: Column<CotTrendRow>[] = [

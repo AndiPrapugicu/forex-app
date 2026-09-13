@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { SCORING_SLOTS, SLOT_CATEGORIES, type SlotDefinition } from '@/config/setups.config';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
+import { heatStyle } from '@/lib/ui/heat';
 
 const BIAS_TONE: Record<string, string> = {
   'Very Bullish': 'text-[var(--color-bull)] font-semibold',
@@ -29,11 +30,7 @@ const BIAS_TONE: Record<string, string> = {
 
 /** The same sign-and-magnitude ramp the grid uses, so a card and a cell read alike. */
 function valueStyle(v: number | null): React.CSSProperties | undefined {
-  if (v === null || v === 0) return undefined;
-  const magnitude = Math.abs(v);
-  const rgb = v > 0 ? 'var(--color-bull-cell-rgb)' : 'var(--color-bear-cell-rgb)';
-  const intensity = magnitude >= 3 ? 72 : magnitude === 2 ? 55 : 28;
-  return { backgroundColor: `rgb(${rgb} / ${intensity}%)`, color: magnitude >= 2 ? '#fff' : `rgb(${rgb})` };
+  return v === null ? undefined : heatStyle(v);
 }
 
 function signed(v: number): string {

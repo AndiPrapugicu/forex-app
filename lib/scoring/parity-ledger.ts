@@ -1909,8 +1909,12 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
     confidence: 'STRONG',
     rootCause: 'No free, documented, permitted source of per-symbol option volume and open interest.',
     productionAction:
-      'None. The three options pages are not built rather than approximated with a market-wide ratio ' +
-      'under a per-symbol label. Reopen if a documented chain feed appears; a paid feed is the user\'s decision.',
+      'REOPENED 2026-09-13 at the user\'s decision: the pages are built on Yahoo option chains ' +
+      '(lib/connectors/yahoo-options.ts), read through the US ETF that tracks each A1 symbol, via the same ' +
+      'unofficial Yahoo host every price in the app already uses (cookie + crumb session). Cboe was not ' +
+      'used: its delayed-quote terms forbid automated extraction. A1\'s 5-day average is built from ' +
+      'options_snapshots written after each US close, and is not shown until five sessions exist. ' +
+      'Nothing on these pages feeds a score.',
   },
   {
     key: 'aaii:public-page-but-terms-forbid-copying',

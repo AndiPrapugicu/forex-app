@@ -19,6 +19,7 @@ import type { SovereignYield, YieldCurve } from '@/lib/connectors/yields';
 import type { Cluster } from '@/lib/scoring/correlation';
 import type { EcoStrengthRow } from '@/lib/scoring/eco-strength';
 import type { CarryRow, RiskGauge, StrengthRow, SurpriseIndex } from '@/lib/scoring/market';
+import { heatStyle } from '@/lib/ui/heat';
 import { DataTable, type Column } from '@/components/DataTable';
 import { DivergingRow } from '@/components/charts';
 import { Panel } from '@/components/ui';
@@ -254,6 +255,7 @@ export function EcoStrengthPanel({ rows, componentMax }: { rows: EcoStrengthRow[
       label: 'Real yield',
       explain: 'Policy rate minus headline CPI.',
       sortValue: (r) => r.realYield,
+      cellStyle: (r) => heatStyle(r.realYield, { max: 3, zeroGrey: false }),
       render: (r) => (
         <span className={r.realYield === null ? 'text-[var(--color-faint)]' : signColor(r.realYield)}>
           {pct(r.realYield, 2, true)}
@@ -359,6 +361,7 @@ const RATE_COLUMNS: Column<RateRow>[] = [
     label: 'Real yield',
     explain: 'Policy rate minus CPI — the actual return on holding the currency. 5% against 6% inflation is a negative real return.',
     sortValue: (r) => r.realYield,
+    cellStyle: (r) => heatStyle(r.realYield, { max: 3, zeroGrey: false }),
     render: (r) => (
       <span className={`font-semibold ${r.realYield === null ? 'text-[var(--color-faint)]' : signColor(r.realYield)}`}>
         {pct(r.realYield, 2, true)}
@@ -470,6 +473,7 @@ const CARRY_COLUMNS: Column<CarryRow>[] = [
     label: 'Carry',
     explain: 'Base rate minus quote rate, per year, signed against the pair as quoted.',
     sortValue: (r) => Math.abs(r.carry),
+    cellStyle: (r) => heatStyle(r.carry, { max: 5, zeroGrey: false }),
     render: (r) => <span className={`font-semibold ${signColor(r.carry)}`}>{pct(r.carry, 2, true)}</span>,
   },
   {

@@ -18,6 +18,7 @@
 import Link from 'next/link';
 import type { CurrencyHeatmap } from '@/lib/scoring/heatmap';
 import { Panel } from '@/components/ui';
+import { heatStyle } from '@/lib/ui/heat';
 import { MAJORS, type Currency } from '@/lib/types';
 
 function fmt(v: number | null, unit: string | null): string {
@@ -44,19 +45,11 @@ function surpriseStyle(
   if (surprise === null || surprise === 0 || stocksImpact === null || stocksImpact === 0) return {};
 
   const scale = reference && reference !== 0 ? Math.abs(surprise / reference) : Math.abs(surprise);
-  const intensity = Math.min(0.2 + scale * 2, 0.6);
-
-  return {
-    backgroundColor:
-      stocksImpact > 0 ? `rgb(var(--color-bull-cell-rgb) / ${intensity * 100}%)` : `rgb(var(--color-bear-cell-rgb) / ${intensity * 100}%)`,
-  };
+  // Full strength at a 20% miss relative to the reference.
+  return heatStyle(stocksImpact > 0 ? scale : -scale, { max: 0.2, zeroGrey: false });
 }
 
-const IMPACT_LABEL: Record<string, { text: string; className: string }> = {
-  '1': { text: 'Bullish', className: 'bg-[rgba(58,122,224,0.55)] text-white' },
-  '-1': { text: 'Bearish', className: 'bg-[rgba(242,80,110,0.55)] text-white' },
-  '0': { text: 'Neutral', className: 'bg-[var(--color-surface-2)] text-[var(--color-muted)]' },
-};
+const IMPACT_LABEL: Record<string, string> = { '1': 'Bullish', '-1': 'Bearish', '0': 'Neutral' };
 
 function ImpactBadge({ value, status }: { value: number | null; status: string }) {
   const impact = status === 'scored' && value !== null ? IMPACT_LABEL[String(value)] : null;
@@ -72,8 +65,8 @@ function ImpactBadge({ value, status }: { value: number | null; status: string }
   }
 
   return (
-    <span className={`inline-block w-16 rounded px-2 py-0.5 text-micro font-semibold ${impact.className}`}>
-      {impact.text}
+    <span className="inline-block w-16 rounded px-2 py-0.5 text-micro font-semibold" style={heatStyle(value)}>
+      {impact}
     </span>
   );
 }
@@ -196,7 +189,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
           <div className="overflow-x-auto">
             <table className="w-full text-right text-caption">
               <thead>
-                <tr className="border-b border-[var(--color-border)] text-micro tracking-wider text-[var(--color-faint)] uppercase">
+                <tr className="table-head border-b border-[var(--color-border)] text-caption font-semibold">
                   <th className="px-3 py-2 text-left">Indicator</th>
                   <th className="px-2 py-2 text-left">Released</th>
                   <th className="px-2 py-2">Surprise</th>

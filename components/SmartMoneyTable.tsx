@@ -7,6 +7,7 @@
 
 import { cotTicker } from '@/config/symbols.config';
 import type { SmartMoneyRow } from '@/lib/scoring/market';
+import { heatStyle } from '@/lib/ui/heat';
 import { DataTable, type Column } from '@/components/DataTable';
 
 function signed(v: number): string {
@@ -58,14 +59,16 @@ const COLUMNS: Column<SmartMoneyRow>[] = [
     label: 'Institutions',
     explain: 'Large speculators’ net position as a share of their own book, −100 to +100.',
     sortValue: (r) => r.specNetPct,
-    render: (r) => <span className={tone(r.specNetPct)}>{signed(r.specNetPct)}</span>,
+    cellStyle: (r) => heatStyle(r.specNetPct, { max: 60, zeroGrey: false }),
+    render: (r) => signed(r.specNetPct),
   },
   {
     key: 'retail',
     label: 'Crowd',
     explain: 'Small traders’ net position as a share of theirs.',
     sortValue: (r) => r.retailNetPct,
-    render: (r) => <span className={tone(r.retailNetPct)}>{signed(r.retailNetPct)}</span>,
+    cellStyle: (r) => heatStyle(r.retailNetPct, { max: 60, zeroGrey: false }),
+    render: (r) => signed(r.retailNetPct),
   },
   {
     key: 'bars',
@@ -79,7 +82,8 @@ const COLUMNS: Column<SmartMoneyRow>[] = [
     label: 'Spread',
     explain: 'Institutions minus crowd. Positive means institutions are the more bullish side.',
     sortValue: (r) => Math.abs(r.spread),
-    render: (r) => <span className={`font-semibold ${tone(r.spread)}`}>{r.spread > 0 ? '+' : ''}{r.spread.toFixed(1)}</span>,
+    cellStyle: (r) => heatStyle(r.spread, { max: 80, zeroGrey: false }),
+    render: (r) => <span className="font-semibold">{r.spread > 0 ? '+' : ''}{r.spread.toFixed(1)}</span>,
   },
   {
     key: 'divergent',

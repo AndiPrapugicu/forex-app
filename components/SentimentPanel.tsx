@@ -14,7 +14,8 @@
  *      first.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { heatStyle } from '@/lib/ui/heat';
 import {
   CROWD_BANDS,
   RETAIL_HISTORY_WEEKS,
@@ -116,6 +117,87 @@ function RetailSparkline({ history }: { history: number[] }) {
   );
 }
 
+const CATEGORY_OF: Record<string, 'Currencies' | 'Commodities' | 'Indices' | 'Crypto'> = {
+  EUR: 'Currencies', GBP: 'Currencies', JPY: 'Currencies', AUD: 'Currencies', NZD: 'Currencies',
+  CAD: 'Currencies', CHF: 'Currencies', USD: 'Currencies', ZAR: 'Currencies',
+  GOLD: 'Commodities', SILVER: 'Commodities', PLATINUM: 'Commodities', USOil: 'Commodities', COPPER: 'Commodities',
+  SPX: 'Indices', NASDAQ: 'Indices', DOW: 'Indices', RUSSELL: 'Indices', NIKKEI: 'Indices',
+  BTC: 'Crypto', ETH: 'Crypto',
+};
+const CATEGORIES = ['All', 'Currencies', 'Commodities', 'Indices', 'Crypto'] as const;
+
+/**
+ * A1's Retail Sentiment chart: one 100% bar per market, long share in blue and
+ * short share in red, sorted most-long first. The label chip carries the
+ * CONTRARIAN signal — red where the crowd is long past the band (bearish), blue
+ * where it is short past it (bullish), grey in between — so the colour of the
+ * name and the colour of the bar deliberately disagree when the crowd is crowded.
+ */
+function CrowdBars({ rows }: { rows: CrowdRow[] }) {
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('All');
+  const shown = useMemo(
+    () =>
+      rows
+        .filter((r) => category === 'All' || CATEGORY_OF[r.ticker] === category)
+        .sort((a, b) => b.retailLongPct - a.retailLongPct),
+    [rows, category],
+  );
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1 border-b border-[var(--color-border)] px-3 py-2" role="group" aria-label="Category">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={category === c}
+            onClick={() => setCategory(c)}
+            className={`min-h-9 rounded-[var(--radius-control)] px-3 text-caption ${
+              category === c ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <ul className="flex flex-col gap-1 p-3">
+        {shown.map((r) => {
+          const long = Math.max(0, Math.min(100, r.retailLongPct));
+          return (
+            <li key={r.contract} className="grid grid-cols-[5.5rem_1fr] items-stretch gap-1 md:grid-cols-[8rem_1fr]">
+              <span
+                className="flex items-center justify-end rounded-sm px-2 text-small font-medium"
+                style={heatStyle(r.cell)}
+                title={r.explanation}
+              >
+                {r.ticker}
+              </span>
+              <div
+                role="img"
+                aria-label={`${r.ticker}: ${long.toFixed(1)}% long, ${(100 - long).toFixed(1)}% short`}
+                className="flex h-8 overflow-hidden rounded-sm text-caption font-semibold text-white"
+              >
+                <span
+                  className="tnum flex items-center justify-end px-2"
+                  style={{ width: `${long}%`, backgroundColor: 'rgb(var(--color-heat-bull-rgb))' }}
+                >
+                  {long >= 12 ? `${long.toFixed(1)}%` : ''}
+                </span>
+                <span
+                  className="tnum flex flex-1 items-center justify-end px-2"
+                  style={{ backgroundColor: 'rgb(var(--color-heat-bear-rgb))' }}
+                >
+                  {100 - long >= 8 ? `${(100 - long).toFixed(1)}%` : ''}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 const COLUMNS: Column<CrowdRow>[] = [
   {
     key: 'ticker',
@@ -210,8 +292,16 @@ export function SentimentPanel({ rows, reportDate }: { rows: CrowdRow[]; reportD
         }
       />
 
+      <Panel
+        title="Contrarian signal"
+        subtitle="Small traders' long (blue) and short (red) share. The name is coloured by the contrarian read."
+        className="mb-4"
+      >
+        <CrowdBars rows={rows} />
+      </Panel>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel title="Retail positioning" subtitle="Long share, with the scoring bands drawn on">
+        <Panel title="Details" subtitle="Long share with the scoring bands, history, percentile and the gap to institutions">
           <DataTable
             caption="Retail positioning"
             columns={COLUMNS}

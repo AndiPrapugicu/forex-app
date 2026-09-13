@@ -405,3 +405,14 @@ export interface DashboardData {
   marketMood: { score: number; label: string; confidence: number };
   generatedAtUtc: string;
 }
+
+/** One options underlying's totals for one US session date. See lib/scoring/options.ts. */
+export interface OptionsSnapshot {
+  symbol: string;
+  /** `YYYY-MM-DD`, the US session the volume belongs to. */
+  date: string;
+  callVolume: number;
+  putVolume: number;
+  callOpenInterest: number;
+  putOpenInterest: number;
+}

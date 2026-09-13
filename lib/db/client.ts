@@ -63,6 +63,11 @@ export interface Store {
    * through `getSnapshots` would be 51 round trips on every page render.
    */
   getAllSnapshots(sinceUtc: string): Promise<ScoreSnapshot[]>;
+
+  /** One row per options underlying per US session. Idempotent on (symbol, date). */
+  saveOptionsSnapshots(rows: OptionsSnapshot[]): Promise<void>;
+  /** Every options row on or after `sinceDate` (`YYYY-MM-DD`), oldest first. */
+  getOptionsSnapshots(sinceDate: string): Promise<OptionsSnapshot[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +87,8 @@ const mem = {
   ai: new Map<string, unknown>(),
   /** Keyed `symbol|capturedAt`, mirroring the table's composite primary key. */
   snapshots: new Map<string, ScoreSnapshot>(),
+  /** Keyed `symbol|date`. */
+  options: new Map<string, OptionsSnapshot>(),
 };
 
 class MemoryStore implements Store {
@@ -180,6 +187,16 @@ class MemoryStore implements Store {
     return [...mem.snapshots.values()]
       .filter((s) => s.capturedAtUtc >= sinceUtc)
       .sort((a, b) => a.capturedAtUtc.localeCompare(b.capturedAtUtc));
+  }
+
+  async saveOptionsSnapshots(rows: OptionsSnapshot[]) {
+    for (const r of rows) mem.options.set(`${r.symbol}|${r.date}`, r);
+  }
+
+  async getOptionsSnapshots(sinceDate: string) {
+    return [...mem.options.values()]
+      .filter((r) => r.date >= sinceDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 }
 
@@ -515,7 +532,42 @@ class SupabaseStore implements Store {
     if (error) throw new Error(`getAllSnapshots: ${error.message}`);
     return (data ?? []).map(rowToSnapshot);
   }
+
+  async saveOptionsSnapshots(rows: OptionsSnapshot[]) {
+    if (!rows.length) return;
+    const { error } = await this.db.from('options_snapshots').upsert(
+      rows.map((r) => ({
+        symbol: r.symbol,
+        session_date: r.date,
+        call_volume: r.callVolume,
+        put_volume: r.putVolume,
+        call_open_interest: r.callOpenInterest,
+        put_open_interest: r.putOpenInterest,
+      })),
+      { onConflict: 'symbol,session_date' },
+    );
+    if (error) throw new Error(`saveOptionsSnapshots: ${error.message}`);
+  }
+
+  async getOptionsSnapshots(sinceDate: string) {
+    const { data, error } = await this.db
+      .from('options_snapshots')
+      .select('*')
+      .gte('session_date', sinceDate)
+      .order('session_date', { ascending: true });
+    if (error) throw new Error(`getOptionsSnapshots: ${error.message}`);
+    return (data ?? []).map((r: Record<string, unknown>) => ({
+      symbol: r.symbol as string,
+      date: String(r.session_date).slice(0, 10),
+      callVolume: Number(r.call_volume),
+      putVolume: Number(r.put_volume),
+      callOpenInterest: Number(r.call_open_interest),
+      putOpenInterest: Number(r.put_open_interest),
+    }));
+  }
 }
+
+type OptionsSnapshot = import('@/lib/types').OptionsSnapshot;
 
 // ---------------------------------------------------------------------------
 // Selection

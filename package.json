@@ -45,7 +45,8 @@
     "seasonality-probe": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/seasonality-probe.ts",
     "momentum-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/momentum-parity.ts",
     "seasonality-parity": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/seasonality-parity.ts",
-    "check:myfxbook": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-myfxbook.ts"
+    "check:myfxbook": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-myfxbook.ts",
+    "check:oanda": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-oanda.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

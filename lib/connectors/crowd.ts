@@ -28,7 +28,8 @@
  * A1's, so treat the first run as a measurement and not as a parity improvement.
  */
 
-import { MYFXBOOK } from '@/config/sources.config';
+import { MYFXBOOK, OANDA_POSITION_BOOK } from '@/config/sources.config';
+import { ALL_SYMBOLS } from '@/config/symbols.config';
 import { fetchJson } from '@/lib/connectors/base';
 import type { RetailPositioning, RetailPositioningFeed } from '@/lib/scoring/crowd';
 import { fail, ok, type Result } from '@/lib/types';
@@ -91,12 +92,59 @@ function asPercent(raw: unknown): number | null {
   return n;
 }
 
+/**
+ * RFC 3986 query encoding. `encodeURIComponent` leaves `! ' ( ) * ~` raw, and a
+ * password containing one of them reaches a strict server as a different
+ * string. Percent-encoding them is always valid, so there is no case where
+ * this is worse.
+ */
+export function strictEncode(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*~]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+/**
+ * The session as a query value, encoded EXACTLY once.
+ *
+ * Myfxbook's login returns the session ALREADY percent-encoded
+ * (`Hf6j...%2F%2F...%3D%3D`). Passing that through `encodeURIComponent` turned
+ * every `%2F` into `%252F`, so the outlook call received a different string and
+ * answered "Invalid session." — which was recorded for weeks as a server-side
+ * fault. Decoding first makes this correct whether or not a session arrives
+ * encoded: base64 never contains `%`, so a raw session decodes to itself.
+ */
+export function sessionParam(session: string): string {
+  let raw = session;
+  try {
+    raw = decodeURIComponent(session);
+  } catch {
+    // A malformed escape: send what we were given, encoded once.
+  }
+  return encodeURIComponent(raw);
+}
+
 /** Cached session id, so a 20-minute refresh does not re-login 72 times a day. */
 let cachedSession: { id: string; expiresAt: number } | null = null;
 
-/** Test seam: drop the memoised session so a case can start from a clean state. */
+/**
+ * After a rejected login, no new login until this time.
+ *
+ * MEASURED 2026-09-13: with the right credentials, `login.json` passed once and
+ * then answered "Wrong email/password." to the next attempt, while a deployment
+ * running the pre-fix code was re-logging in on every refresh. Myfxbook reports
+ * throttling with the same message as a bad password, so a failing caller that
+ * keeps retrying locks out every other caller on the account. One attempt per
+ * window is the most a broken configuration is allowed to cost.
+ */
+let loginBlockedUntil = 0;
+export const MYFXBOOK_LOGIN_BACKOFF_MS = 30 * 60_000;
+
+/** Test seam: drop the memoised session and backoff so a case can start clean. */
 export function clearCrowdSession() {
   cachedSession = null;
+  loginBlockedUntil = 0;
 }
 
 export class MyfxbookProvider implements CrowdProvider {
@@ -119,14 +167,22 @@ export class MyfxbookProvider implements CrowdProvider {
       return ok(this.name, cachedSession.id);
     }
 
+    if (Date.now() < loginBlockedUntil) {
+      return fail(
+        this.name,
+        `login paused after a rejection, retrying after ${new Date(loginBlockedUntil).toISOString().slice(11, 16)} UTC`,
+      );
+    }
+
     const email = process.env.MYFXBOOK_EMAIL ?? '';
     const password = process.env.MYFXBOOK_PASSWORD ?? '';
-    const url = `${MYFXBOOK.login}?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
+    const url = `${MYFXBOOK.login}?email=${strictEncode(email)}&password=${strictEncode(password)}`;
 
     // Never cached: the response carries a credential.
     const res = await fetchJson<MyfxbookLogin>(this.name, url, { timeoutMs: 10_000, retries: 1 });
     if (!res.ok) return fail(this.name, `login failed: ${res.error}`);
     if (res.data.error || !res.data.session) {
+      loginBlockedUntil = Date.now() + MYFXBOOK_LOGIN_BACKOFF_MS;
       return fail(this.name, `login rejected: ${res.data.message ?? 'no session returned'}`);
     }
 
@@ -151,7 +207,7 @@ export class MyfxbookProvider implements CrowdProvider {
 
     const res = await fetchJson<MyfxbookOutlook>(
       this.name,
-      `${MYFXBOOK.outlook}?session=${encodeURIComponent(session.data)}`,
+      `${MYFXBOOK.outlook}?session=${sessionParam(session.data)}`,
       { cacheTtlSeconds: MYFXBOOK.cacheTtlSeconds, cacheKey: 'myfxbook:outlook', retries: 1 },
     );
     if (!res.ok) return fail(this.name, res.error);
@@ -193,8 +249,182 @@ export function parseOutlook(payload: MyfxbookOutlook, source: string): RetailPo
   return feed;
 }
 
-/** The provider the pipeline uses. One today; the interface is the seam. */
-export const CROWD_PROVIDER: CrowdProvider = new MyfxbookProvider();
+interface OandaBucket {
+  price?: string;
+  longCountPercent?: string | number;
+  shortCountPercent?: string | number;
+}
+
+interface OandaPositionBook {
+  positionBook?: { instrument?: string; time?: string; buckets?: OandaBucket[] };
+}
+
+/**
+ * One OANDA position book -> one symbol's long share.
+ *
+ * The book is a histogram: each price bucket holds the percentage of OANDA
+ * clients long and short there. The whole-instrument long share is the long
+ * mass over the total mass. Exported for tests: this shape is what drifts.
+ */
+export function parsePositionBook(
+  payload: OandaPositionBook,
+  symbol: string,
+  source: string,
+): RetailPositioning | null {
+  let long = 0;
+  let short = 0;
+  for (const bucket of payload.positionBook?.buckets ?? []) {
+    const l = Number(bucket.longCountPercent);
+    const s = Number(bucket.shortCountPercent);
+    if (Number.isFinite(l) && l >= 0) long += l;
+    if (Number.isFinite(s) && s >= 0) short += s;
+  }
+  const total = long + short;
+  if (!(total > 0)) return null;
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const time = payload.positionBook?.time;
+  return {
+    symbol,
+    longPct: round1((long / total) * 100),
+    shortPct: round1((short / total) * 100),
+    source,
+    observedAt: (time && !Number.isNaN(Date.parse(time)) ? new Date(time) : new Date()).toISOString().slice(0, 10),
+  };
+}
+
+/** `EURUSD` -> `EUR_USD`, OANDA's instrument name. */
+const toOandaInstrument = (symbol: string) => `${symbol.slice(0, 3)}_${symbol.slice(3)}`;
+
+/**
+ * OANDA's per-instrument position book, read with the user's own API token.
+ *
+ * FX only, through the same `isFxPairName` filter as Myfxbook, so the metals
+ * keep the CFTC read that reproduces A1 exactly. An instrument OANDA publishes
+ * no book for answers 404 and is simply absent from the feed.
+ */
+export class OandaPositionBookProvider implements CrowdProvider {
+  readonly name = OANDA_POSITION_BOOK.name;
+
+  constructor(
+    private readonly symbols: readonly string[] = ALL_SYMBOLS
+      .filter((d) => d.kind === 'fx')
+      .map((d) => d.symbol)
+      .filter(isFxPairName),
+  ) {}
+
+  isConfigured(): boolean {
+    return Boolean(process.env.OANDA_API_TOKEN);
+  }
+
+  async fetchPositioning(): Promise<Result<RetailPositioningFeed>> {
+    if (!this.isConfigured()) {
+      return fail(this.name, 'not configured — set OANDA_API_TOKEN to read OANDA client positioning.');
+    }
+
+    const base = process.env.OANDA_ENV === 'live' ? OANDA_POSITION_BOOK.liveBase : OANDA_POSITION_BOOK.practiceBase;
+    // The token travels in a header only; it is never part of a URL or a cache key.
+    const headers = { Authorization: `Bearer ${process.env.OANDA_API_TOKEN}` };
+    const feed: RetailPositioningFeed = new Map();
+    const missing: string[] = [];
+
+    for (let i = 0; i < this.symbols.length; i += OANDA_POSITION_BOOK.batch) {
+      const batch = this.symbols.slice(i, i + OANDA_POSITION_BOOK.batch);
+      await Promise.all(
+        batch.map(async (symbol) => {
+          const instrument = toOandaInstrument(symbol);
+          const res = await fetchJson<OandaPositionBook>(this.name, `${base}/${instrument}/positionBook`, {
+            headers,
+            timeoutMs: 10_000,
+            retries: 0,
+            cacheTtlSeconds: OANDA_POSITION_BOOK.cacheTtlSeconds,
+            cacheKey: `oanda:positionBook:${instrument}`,
+          });
+          if (!res.ok) {
+            missing.push(`${instrument}: ${res.error}`);
+            return;
+          }
+          const entry = parsePositionBook(res.data, symbol, this.name);
+          if (entry) feed.set(symbol, entry);
+          else missing.push(`${instrument}: empty book`);
+        }),
+      );
+    }
+
+    if (feed.size === 0) {
+      return fail(
+        this.name,
+        `no position book returned${missing.length > 0 ? ` (${missing[0]}${missing.length > 1 ? `, and ${missing.length - 1} more` : ''})` : ''}`,
+      );
+    }
+    return ok(this.name, feed, missing.length > 0 ? `${missing.length} instrument(s) without a book` : undefined);
+  }
+}
+
+/**
+ * Every configured provider, merged; the first listed wins a symbol both cover.
+ *
+ * Myfxbook goes first because it aggregates many brokers, which is closer to
+ * A1's population than one broker's book; OANDA fills what Myfxbook does not
+ * answer, or all of it while Myfxbook is failing. One provider failing is a
+ * degraded note, not a failure, as long as another answered.
+ */
+export class FallbackCrowdProvider implements CrowdProvider {
+  readonly name: string;
+
+  constructor(private readonly providers: readonly CrowdProvider[]) {
+    this.name = providers.map((p) => p.name).join(' + ');
+  }
+
+  isConfigured(): boolean {
+    return this.providers.some((p) => p.isConfigured());
+  }
+
+  async fetchPositioning(): Promise<Result<RetailPositioningFeed>> {
+    const configured = this.providers.filter((p) => p.isConfigured());
+    if (configured.length === 0) {
+      return fail(
+        this.name,
+        'not configured — set MYFXBOOK_EMAIL and MYFXBOOK_PASSWORD, or OANDA_API_TOKEN, to score the Crowd ' +
+          'column on crosses. Without one, crosses stay blank and dollar pairs fall back to CFTC.',
+      );
+    }
+
+    const results = await Promise.all(
+      configured.map((p) =>
+        p.fetchPositioning().catch((err: unknown) =>
+          fail<RetailPositioningFeed>(p.name, err instanceof Error ? err.message : String(err)),
+        ),
+      ),
+    );
+
+    const feed: RetailPositioningFeed = new Map();
+    const answered: string[] = [];
+    const notes: string[] = [];
+    for (const res of results) {
+      if (!res.ok) {
+        notes.push(`${res.source}: ${res.error}`);
+        continue;
+      }
+      answered.push(res.source);
+      if (res.degraded) notes.push(`${res.source}: ${res.degraded}`);
+      for (const [symbol, entry] of res.data) {
+        if (!feed.has(symbol)) feed.set(symbol, entry);
+      }
+    }
+
+    // Named after the providers that were actually tried, so an unconfigured
+    // one is never reported as "down" in the source strip.
+    if (answered.length === 0) return fail(configured.map((p) => p.name).join(' + '), notes.join('; '));
+    return ok(answered.join(' + '), feed, notes.length > 0 ? notes.join('; ') : undefined);
+  }
+}
+
+/** The provider the pipeline uses: Myfxbook, then OANDA. */
+export const CROWD_PROVIDER: CrowdProvider = new FallbackCrowdProvider([
+  new MyfxbookProvider(),
+  new OandaPositionBookProvider(),
+]);
 
 /**
  * Fetch retail positioning, degrading to an empty feed.

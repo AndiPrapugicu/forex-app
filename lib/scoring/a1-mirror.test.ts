@@ -130,6 +130,27 @@ describe('mirrorBoard', () => {
     expect(mirrorDiffCount(rows)).toBe(1);
   });
 
+  /**
+   * The user's AUDUSD: we score Australian retail sales, A1 carries no series,
+   * so their pair cell is the USD leg alone. The `a1` profile board holds that
+   * cell; the mirror takes it and says why.
+   */
+  it("applies A1's coverage gaps from the a1-profile board", () => {
+    const ours = row('AUDUSD', { 'retail-sales': 2, cpi: 1 });
+    const theirGaps = row('AUDUSD', { 'retail-sales': 1, cpi: 1 });
+    const [mirrored] = mirrorBoard([ours], undefined, [theirGaps]);
+    expect(mirrored.cells['retail-sales'].cell).toBe(1);
+    expect(mirrored.cells['retail-sales'].mirror).toMatchObject({ tier: 'coverage', ours: 2, mirrored: 1 });
+    expect(mirrored.cells['retail-sales'].mirror?.why).toContain('AUD');
+    expect(mirrored.totalScore).toBe(2);
+    expect(mirrored.cells.cpi.mirror).toBeUndefined();
+  });
+
+  it('leaves coverage columns ours when no a1-profile board is given', () => {
+    const [mirrored] = mirrorBoard([row('AUDUSD', { 'retail-sales': 2 })]);
+    expect(mirrored.cells['retail-sales'].cell).toBe(2);
+  });
+
   it('reports no difference when their convention lands on the same number', () => {
     const rows = mirrorBoard([row('EURUSD', { ppi: 0 })]);
     expect(mirrorDiffCount(rows)).toBe(0);

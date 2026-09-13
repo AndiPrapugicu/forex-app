@@ -1877,7 +1877,9 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'the free Market Sentiment widget load their numbers by script; the site invites free EMBEDDING of ' +
       'the widget but documents no data endpoint, and the only documented programmatic access is ' +
       'IDataService.getFXSentimentIndex in the JForex API, which requires a Dukascopy account. Checked ' +
-      '2026-09-13. FXSSI (licensing) and Myfxbook (server-side broken) were already rejected.',
+      '2026-09-13. FXSSI (licensing) was already rejected. Myfxbook was recorded as server-side broken; CORRECTED ' +
+      '2026-09-13: its login returns the session already percent-encoded and we encoded it a second time, ' +
+      'so "Invalid session." was our bug (fixed by `sessionParam`).',
     confidence: 'STRONG',
     rootCause:
       'CFTC has no cross contracts, SCORING-CONTRACT.md forbids synthesising a cross from two dollar-pair ' +
@@ -1885,10 +1887,39 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'The dated cross history that would have let us validate one was lost when A1\'s access window ' +
       'closed on 2026-09-07.',
     productionAction:
-      'None. Crosses stay null and the Crowd column keeps its 40-point gap, which the mirror residual ' +
-      'reports as unexplained rather than hiding. Do not scrape the Dukascopy widget or IG\'s logged-in ' +
-      'pages, and do not move the crowd bands. Reopen only if a documented, permitted feed appears; a ' +
-      'paid feed is the user\'s decision, not this repository\'s.',
+      'REOPENED 2026-09-13: OANDA\'s v20 position book is a documented endpoint read with a token from ' +
+      'the user\'s own (free practice) account, so it passes part 1. Built as `OandaPositionBookProvider` ' +
+      'behind Myfxbook in `FallbackCrowdProvider`; inert until OANDA_API_TOKEN is set. Parts 2 and 3 ' +
+      '(cross coverage, agreement with A1) are UNMEASURED until `npm run check:oanda` runs with a token. ' +
+      'Still: do not scrape the Dukascopy widget or IG\'s logged-in pages, and do not move the crowd bands.',
+  },
+  {
+    key: 'trend:video-board-aud-rows-read-before-thursday',
+    component: 'Trend',
+    symbol: 'AUDUSD, AUDCAD, AUDX',
+    date: '2026-09-13',
+    ours: 'AUDUSD -1, AUDCAD -1, AUDX +1 (Friday 2026-09-11 22:00 UTC close)',
+    a1: '+2, +2, +2',
+    classification: 'UNKNOWN',
+    evidence:
+      "Board transcribed from TraderNick's video d2gh2cCuhEo, posted 2026-09-13, 23 legible rows " +
+      '(fixtures/a1-video-top-setups-2026-09-13.csv; cells hidden by the player overlay left blank). Moment ' +
+      'not observed, so both sides were scored with `npm run board-parity -- <fixture> --at` at three cuts. ' +
+      'COT agrees 9/23 at 09-09 and 09-10 but 22/23 at 09-11 22:00, so the board postdates Friday\'s COT ' +
+      'release. At that cut Trend agrees 20/23 and the three misses are exactly the AUD rows. Our rule gives ' +
+      "A1's +2 on AUDUSD and AUDCAD only at the 09-09 close (AUDUSD SMA3 0.72199 vs SMA14 0.71846), but at " +
+      'that cut five OTHER rows miss (USDZAR, USDCAD, DXY, XAGUSD, XCUUSD), so no uniform lag explains it. ' +
+      'AUDUSD sits 0.03% below its SMA14 on Friday (knife-edge); AUDCAD 0.12% (not).',
+    confidence: 'WEAK',
+    rootCause:
+      "Undetermined. Consistent with A1's AUD price series missing the Thursday 09-10 drop (AUDUSD " +
+      '0.72176 -> 0.71582 on Yahoo), but AUDX is AUDUSD by construction, so this is two correlated cells ' +
+      'on one board, not three observations.',
+    productionAction:
+      'NONE. The trend rule stays as published (`trend:fitted-on-one-day-picks-the-wrong-rule`); no 4H, EMA ' +
+      'or lag change is licensed by this entry. (Independently, and display only, a trend cell within 0.05% ' +
+      'of flipping now states its margin.) Upgrade to STRONG only if another dated capture shows AUD rows ' +
+      'lagging again.',
   },
   {
     key: 'options:no-public-per-symbol-chain-passes-the-gate',

@@ -14,6 +14,7 @@
  */
 
 import { MYFXBOOK } from '@/config/sources.config';
+import { sessionParam, strictEncode } from '@/lib/connectors/crowd';
 
 async function main() {
   const email = process.env.MYFXBOOK_EMAIL?.trim();
@@ -28,8 +29,13 @@ async function main() {
     process.exit(1);
   }
 
-  const loginUrl = `${MYFXBOOK.login}?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-  const login = (await fetch(loginUrl).then((r) => r.json())) as { error?: boolean; message?: string; session?: string };
+  const specials = /[!'()*~]/.test(password);
+  console.log(`  password has one of ! ' ( ) * ~   ${specials ? 'yes (sent percent-encoded)' : 'no'}`);
+
+  const loginUrl = `${MYFXBOOK.login}?email=${strictEncode(email)}&password=${strictEncode(password)}`;
+  const response = await fetch(loginUrl);
+  console.log(`  http           ${response.status} ${response.headers.get('content-type') ?? ''}`);
+  const login = (await response.json()) as { error?: boolean; message?: string; session?: string };
   console.log(`  login          ${login.error ? `rejected — "${login.message ?? 'no message'}"` : 'ok'}`);
   console.log(`  session        ${login.session ? 'returned' : 'none'}`);
 
@@ -43,7 +49,7 @@ async function main() {
     process.exit(1);
   }
 
-  const outlook = (await fetch(`${MYFXBOOK.outlook}?session=${encodeURIComponent(login.session)}`).then((r) => r.json())) as {
+  const outlook = (await fetch(`${MYFXBOOK.outlook}?session=${sessionParam(login.session)}`).then((r) => r.json())) as {
     error?: boolean;
     message?: string;
     symbols?: unknown[];

@@ -415,6 +415,32 @@ export const MYFXBOOK = {
   sessionTtlSeconds: 86_400,
 } as const;
 
+/**
+ * OANDA position book — the second retail-positioning provider.
+ *
+ * WHY IT PASSES THE GATE THE OTHERS FAILED. It is a documented endpoint of
+ * OANDA's public v20 REST API, read with a token from the user's OWN account
+ * (a free practice account works), so it is "documented and permitted" in the
+ * sense `crowd:no-public-cross-feed-passes-the-gate` required. It is one
+ * broker's book rather than a multi-broker aggregate like A1's, so treat its
+ * agreement with A1 as a measurement, not a given.
+ *
+ * ONE REQUEST PER INSTRUMENT. There is no bulk call, and the book exists only
+ * for a subset of pairs — an instrument without one answers 404 and is simply
+ * not covered. `npm run check:oanda` prints which of ours it answers for.
+ *
+ * Env: OANDA_API_TOKEN (required), OANDA_ENV = practice | live (default practice).
+ */
+export const OANDA_POSITION_BOOK = {
+  name: 'OANDA Position Book',
+  practiceBase: 'https://api-fxpractice.oanda.com/v3/instruments',
+  liveBase: 'https://api-fxtrade.oanda.com/v3/instruments',
+  /** OANDA refreshes the book every 20 minutes; asking more often gets the same book. */
+  cacheTtlSeconds: 1200,
+  /** Concurrent requests per wave, well inside OANDA's per-second limit. */
+  batch: 6,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Actuals cross-check
 // ---------------------------------------------------------------------------

@@ -130,6 +130,30 @@ export interface SetupsPayload {
   clusters: Cluster[];
 }
 
+/**
+ * The same board under A1's proven data gaps, for the mirror's coverage tier.
+ *
+ * Rebuilt from the payload rather than fetched twice: every input is already in
+ * hand, so this is CPU only. Never stored and never measured — mirror mode is
+ * presentation (see `lib/scoring/a1-mirror.ts`).
+ */
+export function buildA1ProfileRows(
+  payload: Pick<
+    Awaited<ReturnType<typeof runSetupsPipeline>>,
+    'events' | 'cot' | 'technicals' | 'sovereignYields' | 'yield2y' | 'retailPositioning'
+  >,
+) {
+  return buildSetupsMatrix({
+    events: payload.events,
+    cot: payload.cot,
+    technicals: payload.technicals,
+    sovereignYields: payload.sovereignYields,
+    yield2y: payload.yield2y,
+    retailPositioning: payload.retailPositioning,
+    profile: 'a1',
+  }).rows;
+}
+
 function toHealth(res: Result<unknown>): SourceHealth {
   return {
     source: res.source,

@@ -70,7 +70,19 @@ import type { Currency } from '@/lib/types';
  * describing the present: their board moved 31 of 54 rows in five hours on
  * 2026-09-01, so "the 09-01 capture" was already two different boards.
  */
-const FIXTURE = process.argv[2] ?? listCaptures()[0]?.file ?? 'a1-top-setups-2026-09-01.csv';
+const ARGS = process.argv.slice(2);
+const AT_FLAG = ARGS.indexOf('--at');
+/**
+ * `--at <ISO>` overrides the moment read from the filename.
+ *
+ * For a capture whose moment was NOT observed — a frame from a video, posted
+ * after it was recorded — the honest way to date it is to score both sides at
+ * several candidate cuts and see which one their technical columns agree with.
+ * The filename then records the answer, or the ledger records UNKNOWN.
+ */
+const AT_OVERRIDE = AT_FLAG >= 0 ? ARGS[AT_FLAG + 1] : undefined;
+const POSITIONAL = ARGS.filter((_a, i) => AT_FLAG < 0 || (i !== AT_FLAG && i !== AT_FLAG + 1));
+const FIXTURE = POSITIONAL[0] ?? listCaptures()[0]?.file ?? 'a1-top-setups-2026-09-01.csv';
 
 /**
  * The moment to rewind BOTH sides to, read out of the filename.
@@ -81,6 +93,11 @@ const FIXTURE = process.argv[2] ?? listCaptures()[0]?.file ?? 'a1-top-setups-202
  * exactly the ones a whole-day rewind gets wrong.
  */
 const CAPTURED_AT = (() => {
+  if (AT_OVERRIDE) {
+    const at = new Date(AT_OVERRIDE);
+    if (Number.isNaN(at.getTime())) throw new Error(`--at is not a date: ${AT_OVERRIDE}`);
+    return at;
+  }
   const m = /(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?\.csv$/.exec(FIXTURE);
   if (!m) throw new Error(`cannot read a capture moment out of ${FIXTURE}`);
   return m[2]

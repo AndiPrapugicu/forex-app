@@ -651,6 +651,12 @@ export function SetupsMatrix({
                       style={{ ...s.style, width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
                     >
                       {s.text}
+                      {/* A crossover within a hair of flipping: same score, far less settled. */}
+                      {cell?.nearFlip && (
+                        <span aria-label="close to flipping" className="ml-0.5 align-super text-[0.6em] opacity-80">
+                          ~
+                        </span>
+                      )}
                     </td>
                   );
                 })}

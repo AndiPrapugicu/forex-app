@@ -11,21 +11,22 @@ import { NextResponse } from 'next/server';
 import { loadLatestA1Capture } from '@/lib/a1-capture-file';
 import { loadChangeLog, loadDayDeltas } from '@/lib/change-log';
 import { buildMirrorOverlay } from '@/lib/scoring/a1-mirror';
-import { runSetupsPipeline } from '@/lib/setups-pipeline';
+import { buildA1ProfileRows, runSetupsPipeline } from '@/lib/setups-pipeline';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function GET() {
   try {
-    const { matrix, health } = await runSetupsPipeline();
+    const payload = await runSetupsPipeline();
+    const { matrix, health } = payload;
     const [changeLog, dayDeltas] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
     /**
      * A compact diff, not a second board: see `buildMirrorOverlay`. Built here
      * rather than in the browser because the capture lives on disk and the
      * sum-and-band rule must not be restated client-side.
      */
-    const mirror = buildMirrorOverlay(matrix.rows, loadLatestA1Capture() ?? undefined);
+    const mirror = buildMirrorOverlay(matrix.rows, loadLatestA1Capture() ?? undefined, buildA1ProfileRows(payload));
     return NextResponse.json(
       { ...matrix, health, changeLog, mirror, dayDeltas },
       { headers: { 'Cache-Control': 'no-store' } },

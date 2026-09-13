@@ -30,13 +30,37 @@
  * returns a COPY for exactly that reason.
  */
 
+import { A1_COVERAGE } from '@/config/profiles.config';
 import { biasFromScore, SLOTS } from '@/config/setups.config';
 import type { SlotCategory } from '@/config/setups.config';
 import { NAME_MAP } from '@/lib/scoring/a1-symbol-map';
 import type { A1Capture } from '@/lib/scoring/a1-pair-legs';
 import type { MatrixCell, SymbolRow } from '@/lib/scoring/setups';
 
-export type MirrorTier = 'derived' | 'captured' | 'ours';
+/**
+ * `coverage` is a fourth tier: the cell A1's own DATA GAPS produce — a series
+ * they do not carry, or read from another economy — taken from the same engine
+ * run under the `a1` profile (config/profiles.config.ts). Like `derived`, it is
+ * our data under their constraint, not a transcription.
+ */
+export type MirrorTier = 'derived' | 'captured' | 'ours' | 'coverage';
+
+/** Per-column explanation for the coverage tier, built from the proven gaps. */
+export const COVERAGE_CONVENTIONS: Record<string, { tier: MirrorTier; why: string }> = Object.fromEntries(
+  [...new Set(A1_COVERAGE.map((e) => e.slotKey))].map((slotKey) => [
+    slotKey,
+    {
+      tier: 'coverage' as MirrorTier,
+      why: A1_COVERAGE.filter((e) => e.slotKey === slotKey)
+        .map((e) =>
+          e.rule.kind === 'blank'
+            ? `A1 carries no ${e.currency} series here, so that leg is blank on their board.`
+            : `A1 reads ${e.rule.currency}'s series for ${e.currency} here.`,
+        )
+        .join(' '),
+    },
+  ]),
+);
 
 /** What mirror mode did to one cell, and why. */
 export interface MirrorNote {
@@ -110,8 +134,14 @@ const negate = (n: number) => Math.max(-2, Math.min(2, -n));
  * was available. That matters because captures age and the toggle must not
  * quietly become a viewer for a stale fixture.
  */
-export function mirrorBoard(rows: SymbolRow[], capture?: A1Capture): MirroredRow[] {
+export function mirrorBoard(
+  rows: SymbolRow[],
+  capture?: A1Capture,
+  /** The same board built under the `a1` profile. Optional: without it, coverage stays ours. */
+  a1ProfileRows?: SymbolRow[],
+): MirroredRow[] {
   const scoring = new Map(SLOTS.filter((s) => s.scoring).map((s) => [s.key, s]));
+  const profileBySymbol = new Map((a1ProfileRows ?? []).map((r) => [r.symbol, r]));
 
   /** A1 row name for one of our symbols — the inverse of the shared NAME_MAP. */
   const a1Name = new Map<string, string>();
@@ -133,8 +163,15 @@ export function mirrorBoard(rows: SymbolRow[], capture?: A1Capture): MirroredRow
     for (const [key, cell] of Object.entries(row.cells)) {
       const convention = PAIR_CONVENTIONS[key];
       let mirrored: MirroredCell = { ...cell };
+      const coverage = COVERAGE_CONVENTIONS[key];
+      const underTheirGaps = coverage ? profileBySymbol.get(row.symbol)?.cells[key] : undefined;
 
-      if (convention?.tier === 'derived' && key === 'ppi' && cell.cell !== null) {
+      if (underTheirGaps && underTheirGaps.cell !== cell.cell) {
+        mirrored = {
+          ...underTheirGaps,
+          mirror: { tier: 'coverage', ours: cell.cell, mirrored: underTheirGaps.cell, why: coverage.why },
+        };
+      } else if (convention?.tier === 'derived' && key === 'ppi' && cell.cell !== null) {
         const value = negate(cell.cell);
         mirrored = {
           ...cell,
@@ -224,8 +261,12 @@ export interface MirrorOverlay {
   moved: number;
 }
 
-export function buildMirrorOverlay(rows: SymbolRow[], capture?: A1Capture): MirrorOverlay {
-  const mirrored = mirrorBoard(rows, capture);
+export function buildMirrorOverlay(
+  rows: SymbolRow[],
+  capture?: A1Capture,
+  a1ProfileRows?: SymbolRow[],
+): MirrorOverlay {
+  const mirrored = mirrorBoard(rows, capture, a1ProfileRows);
   const cells: MirrorOverlay['cells'] = {};
   const totals: MirrorOverlay['totals'] = {};
 
@@ -243,7 +284,7 @@ export function buildMirrorOverlay(rows: SymbolRow[], capture?: A1Capture): Mirr
     capturedFrom: capture?.label ?? null,
     cells,
     totals,
-    conventions: PAIR_CONVENTIONS,
+    conventions: { ...COVERAGE_CONVENTIONS, ...PAIR_CONVENTIONS },
     moved: mirrorDiffCount(mirrored),
   };
 }

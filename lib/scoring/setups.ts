@@ -112,6 +112,8 @@ export interface MatrixCell {
   legs?: CellLeg[];
   /** Extra note the cell carries beyond its legs, e.g. the CPI level band. */
   note?: string;
+  /** Trend only: the crossover is within a hair of flipping. Display only. */
+  nearFlip?: boolean;
   /**
    * A contributing leg's print is older than its cadence window — DISPLAY
    * ONLY, and never a reason the cell is blank.
@@ -498,6 +500,7 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
         cell = score
           ? { slotKey: slot.key, cell: score.cell, status: 'scored', explanation: score.explanation }
           : { slotKey: slot.key, cell: null, status: 'no-data', explanation: 'Insufficient price history' };
+        if (score && 'nearFlip' in score && score.nearFlip) cell.nearFlip = true;
       } else if (slot.kind === 'sentiment') {
         if (slot.key === 'crowd') {
           /**

@@ -25,8 +25,23 @@ export interface TrendScore {
   slope: number;
   /** True when crossover and slope disagree, which costs a point. */
   conflicted: boolean;
+  /** (fast − slow) / slow, in percent. How far the crossover is from flipping. */
+  marginPct: number;
+  /**
+   * True when |marginPct| is inside TREND_NEAR_FLIP_PCT. DISPLAY ONLY — it never
+   * changes the cell. It exists because a 2-pip crossover is the same score as a
+   * 200-pip one, and a board read a session apart can flip on it.
+   */
+  nearFlip: boolean;
   explanation: string;
 }
+
+/**
+ * A crossover this close can flip on the next close. Presentation threshold,
+ * not a scoring one: measured on AUDUSD 2026-09-11, SMA3 sat 0.03% under SMA14
+ * and A1's board, read two sessions earlier, printed +2 against our -1.
+ */
+export const TREND_NEAR_FLIP_PCT = 0.05;
 
 export interface SeasonalityScore {
   cell: number;
@@ -137,19 +152,25 @@ export function scoreTrend(tech: Technicals | undefined): TrendScore | null {
   const cell = conflicted ? crossover - Math.sign(crossover) : crossover;
 
   const { fast, slow } = TREND_SMA;
+  const marginPct = ((tech.smaFast - tech.smaSlow) / tech.smaSlow) * 100;
+  const nearFlip = Math.abs(marginPct) < TREND_NEAR_FLIP_PCT;
   return {
     cell,
     crossover,
     slope,
     conflicted,
+    marginPct,
+    nearFlip,
     explanation:
-      `${fast}-day average is ${crossover > 0 ? 'above' : 'below'} the ${slow}-day, ` +
+      `${fast}-day average is ${crossover > 0 ? 'above' : 'below'} the ${slow}-day ` +
+      `by ${Math.abs(marginPct).toFixed(2)}%, ` +
       `and the ${slow}-day is ${slope > 0 ? 'rising' : 'flat or falling'}` +
       (conflicted
         ? slope > 0
           ? ' — the dip is against a rising average, so it scores mildly.'
           : ' — the rally is against a falling average, so it scores mildly.'
-        : '.'),
+        : '.') +
+      (nearFlip ? ' The crossover is close enough to flip on the next close.' : ''),
   };
 }
 

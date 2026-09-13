@@ -65,14 +65,14 @@ function ImpactBadge({ value, status }: { value: number | null; status: string }
   // IMPACT_LABEL like any other. Its age is marked in the date column instead.
   if (!impact) {
     return (
-      <span className="text-[10px] text-[var(--color-faint)]">
+      <span className="text-micro text-[var(--color-faint)]">
         {status === 'not-released' ? 'awaiting' : 'no data'}
       </span>
     );
   }
 
   return (
-    <span className={`inline-block w-16 rounded px-2 py-0.5 text-[10px] font-semibold ${impact.className}`}>
+    <span className={`inline-block w-16 rounded px-2 py-0.5 text-micro font-semibold ${impact.className}`}>
       {impact.text}
     </span>
   );
@@ -133,7 +133,7 @@ function ImpactGauge({ label, pct }: { label: string; pct: number | null }) {
       <div className={`tnum text-sm font-bold`} style={{ color }}>
         {pct === null ? '—' : `${pct}%`}
       </div>
-      <div className="text-[9px] tracking-wide text-[var(--color-faint)] uppercase">{label}</div>
+      <div className="text-micro tracking-wide text-[var(--color-faint)] uppercase">{label}</div>
     </div>
   );
 }
@@ -158,9 +158,9 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
         : 'text-[var(--color-muted)]';
 
   return (
-    <div className="px-4 py-4">
+    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
       <header className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-bold">{data.currency} Economic Heatmap</h1>
+        <h1 className="text-title font-semibold tracking-tight">{data.currency} Economic Heatmap</h1>
 
         <div className="flex items-baseline gap-2">
           <span className={`tnum text-2xl font-bold ${color}`}>
@@ -168,7 +168,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
             {data.macroScore}
           </span>
           <span className={`text-sm font-medium ${color}`}>{label}</span>
-          <span className="text-[11px] text-[var(--color-faint)]">
+          <span className="text-micro text-[var(--color-faint)]">
             from {data.scored} of {data.total} indicators
           </span>
         </div>
@@ -179,7 +179,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
               key={c}
               href={`/heatmap?currency=${c}`}
               aria-current={c === data.currency ? 'page' : undefined}
-              className={`rounded px-2.5 py-1 font-mono text-[11px] transition-colors ${
+              className={`rounded px-2.5 py-1 font-mono text-micro transition-colors ${
                 c === data.currency
                   ? 'bg-[var(--color-bull)]/15 font-semibold text-[var(--color-bull)]'
                   : 'text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]'
@@ -194,9 +194,9 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
       <div className="flex flex-col gap-3 xl:flex-row">
         <Panel className="min-w-0 flex-1">
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-[12px]">
+            <table className="w-full text-right text-caption">
               <thead>
-                <tr className="border-b border-[var(--color-border)] text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+                <tr className="border-b border-[var(--color-border)] text-micro tracking-wider text-[var(--color-faint)] uppercase">
                   <th className="px-3 py-2 text-left">Indicator</th>
                   <th className="px-2 py-2 text-left">Released</th>
                   <th className="px-2 py-2">Surprise</th>
@@ -219,17 +219,17 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
                       {row.eventName && (
                         // Naming the exact series matters: "CPI YoY" for EUR is
                         // the euro-area HICP, not any member state's CPI.
-                        <span className="ml-2 text-[10px] text-[var(--color-faint)]">
+                        <span className="ml-2 text-micro text-[var(--color-faint)]">
                           {row.eventName}
                         </span>
                       )}
                     </td>
 
-                    <td className="px-2 py-1.5 text-left text-[11px] whitespace-nowrap text-[var(--color-muted)]">
+                    <td className="px-2 py-1.5 text-left text-micro whitespace-nowrap text-[var(--color-muted)]">
                       {row.dateUtc ? row.dateUtc.slice(0, 10) : '—'}
                       {row.stale && (
                         <span
-                          className="ml-1.5 text-[9px] text-[var(--color-uncertain)] italic"
+                          className="ml-1.5 text-micro text-[var(--color-uncertain)] italic"
                           title={`${row.ageDays ?? '?'} days old — past this series' usual cadence, and scored anyway, as A1 does`}
                         >
                           {row.ageDays === null ? 'stale' : `${row.ageDays}d`}
@@ -291,7 +291,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
             </table>
           </div>
 
-          <p className="border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+          <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
             The same release, read two ways. {data.currency} Impact is stated for the currency itself
             — on a pair it applies inverted when {data.currency} is the quote leg. Stocks Impact is
             the risk-asset reading, which is why cooler inflation can be bearish for the currency and
@@ -306,7 +306,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
             <ImpactGauge label={`${data.currency} impact`} pct={data.currencyImpactPct} />
             <ImpactGauge label="Stocks impact" pct={data.stocksImpactPct} />
           </div>
-          <p className="border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+          <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
             Share of resolved releases reading bullish. 50% is balanced. Neutral prints count in the
             denominator — landing exactly on forecast is an outcome, not a missing data point.
           </p>

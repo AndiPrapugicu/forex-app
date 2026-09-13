@@ -442,6 +442,11 @@ export const SOURCE_CONFIDENCE = {
   dbnomics: 80,
   faireconomy: 70,
   'ai-extracted': 55,
+  // Read off A1's own rendered chart rather than from a calendar feed: the value
+  // is a real published print, but it reached us through a third party's
+  // presentation layer and cannot be re-fetched now their access window has
+  // closed. Below TradingView, above an LLM extraction.
+  'a1-capture': 65,
   fixture: 60,
 } as const;
 

@@ -17,7 +17,19 @@ import type { SourceHealth } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TopSetupsPage() {
+const VIEW_PARAMS = ['full', 'simple', 'macro'] as const;
+type ViewParam = (typeof VIEW_PARAMS)[number];
+
+export default async function TopSetupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  // `/?view=macro` and `/?view=simple` are A1's Macro Only and Compact boards:
+  // the same matrix, linkable. Anything unrecognised falls back to the full board.
+  const requested = (await searchParams).view;
+  const initialView: ViewParam = VIEW_PARAMS.find((v) => v === requested) ?? 'full';
+
   let matrix: SetupsMatrix | null = null;
   let health: SourceHealth[] = [];
   let changeLog: ScoreChange[] = [];
@@ -41,6 +53,7 @@ export default async function TopSetupsPage() {
       initialChangeLog={changeLog}
       initialMirror={mirror}
       initialError={error}
+      initialView={initialView}
     />
   );
 }

@@ -16,6 +16,8 @@
  *              rather than being built out of two dollar pairs.
  */
 
+import { coverageFor, DEFAULT_PROFILE, type BoardProfile } from '@/config/profiles.config';
+import { applyCoverage } from '@/lib/scoring/coverage';
 import {
   MATRIX_SLOTS,
   SLOTS,
@@ -317,12 +319,21 @@ export interface BuildMatrixInput {
    */
   retailPositioning?: RetailPositioningFeed;
   now?: Date;
+  /**
+   * `ours` (the default) is the product. `a1` applies A1's proven data gaps from
+   * `config/profiles.config.ts` — what parity measures. See that file.
+   */
+  profile?: BoardProfile;
 }
 
 export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
   const now = input.now ?? new Date();
 
-  const currencyScores = scoreAllCurrencies(input.events, now);
+  // Coverage is applied to finished results, never inside the scorer.
+  const currencyScores = applyCoverage(
+    scoreAllCurrencies(input.events, now),
+    coverageFor(input.profile ?? DEFAULT_PROFILE),
+  );
   const cotByCurrency = scoreCotByCurrency(input.cot);
 
   // Rate expectations per currency, computed once and reused across all 28 pairs.

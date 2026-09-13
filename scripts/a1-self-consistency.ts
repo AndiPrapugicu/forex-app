@@ -104,7 +104,7 @@ async function main() {
   const at = new Date('2026-08-24T23:59:59.000Z');
   const payload = await runSetupsPipeline(new Date(), { pricesAsOf: at });
   const trimmed = asOf(
-    { events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() } as never,
+    { events: payload.rewindPool, cot: payload.cot, bars: new Map(), seasonality: new Map() } as never,
     at,
   );
   const ours = new Map<string, OurRelease>();

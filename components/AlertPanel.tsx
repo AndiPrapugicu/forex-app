@@ -19,7 +19,7 @@ export function AlertPanel({ alerts, now }: { alerts: Alert[]; now: number }) {
       subtitle={alerts.length ? `${alerts.length} recent` : undefined}
       action={
         alerts.some((a) => a.severity === 'critical') ? (
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[var(--color-critical)]">
+          <span className="flex items-center gap-1.5 text-micro font-semibold text-[var(--color-critical)]">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-[var(--color-critical)]" />
             CRITICAL
           </span>
@@ -36,26 +36,26 @@ export function AlertPanel({ alerts, now }: { alerts: Alert[]; now: number }) {
               <li key={a.hash} className={`border-l-2 px-4 py-2.5 ${style.border}`}>
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm leading-snug font-medium text-[var(--color-text)]">{a.title}</p>
-                  <span className="tnum shrink-0 text-[10px] text-[var(--color-faint)]">
+                  <span className="tnum shrink-0 text-micro text-[var(--color-faint)]">
                     {timeAgo(a.createdUtc, now)}
                   </span>
                 </div>
 
-                <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-muted)]">{a.body}</p>
+                <p className="mt-1 text-micro leading-relaxed text-[var(--color-muted)]">{a.body}</p>
 
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <span className={`text-[10px] font-semibold ${style.text}`}>{style.label}</span>
+                  <span className={`text-micro font-semibold ${style.text}`}>{style.label}</span>
 
                   {/* The corroboration state is the most important thing on the
                       row after the headline itself. */}
                   {a.highConfidence ? (
-                    <span className="text-[10px] text-[var(--color-bull)]">✓ corroborated</span>
+                    <span className="text-micro text-[var(--color-bull)]">✓ corroborated</span>
                   ) : (
-                    <span className="text-[10px] text-[var(--color-uncertain)]">⚠ single source</span>
+                    <span className="text-micro text-[var(--color-uncertain)]">⚠ single source</span>
                   )}
 
                   {a.affects.length > 0 && (
-                    <span className="font-mono text-[10px] text-[var(--color-faint)]">
+                    <span className="font-mono text-micro text-[var(--color-faint)]">
                       {a.affects.join(' ')}
                     </span>
                   )}
@@ -66,7 +66,7 @@ export function AlertPanel({ alerts, now }: { alerts: Alert[]; now: number }) {
                       href={s.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
+                      className="text-micro text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
                     >
                       {s.name}
                     </a>
@@ -104,7 +104,7 @@ export function MarketMood({
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
       <div className="flex items-baseline justify-between">
         <div>
-          <span className="text-[10px] tracking-wider text-[var(--color-faint)] uppercase">
+          <span className="text-micro tracking-wider text-[var(--color-faint)] uppercase">
             Market mood
           </span>
           <div className="mt-0.5 flex items-baseline gap-2">
@@ -118,10 +118,10 @@ export function MarketMood({
           </div>
         </div>
         <div className="text-right">
-          <span className="tnum block text-[10px] text-[var(--color-faint)]">
+          <span className="tnum block text-micro text-[var(--color-faint)]">
             conf {mood.confidence}
           </span>
-          <span className="tnum block text-[10px] text-[var(--color-faint)]">
+          <span className="tnum block text-micro text-[var(--color-faint)]">
             {generatedAtUtc.slice(11, 16)} UTC
           </span>
         </div>
@@ -135,7 +135,7 @@ export function MarketMood({
         />
       </div>
 
-      <div className="mt-1 flex justify-between text-[9px] tracking-wide text-[var(--color-faint)] uppercase">
+      <div className="mt-1 flex justify-between text-micro tracking-wide text-[var(--color-faint)] uppercase">
         <span>Risk-off</span>
         <span>Risk-on</span>
       </div>
@@ -156,7 +156,7 @@ export function SourceHealthBar({ health }: { health: SourceHealth[] }) {
 
   if (down.length === 0 && degraded.length === 0) {
     return (
-      <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-faint)]">
+      <div className="flex items-center gap-1.5 text-micro text-[var(--color-faint)]">
         <span className="live-dot h-1.5 w-1.5 rounded-full bg-[var(--color-bull)]" />
         All {health.length} sources live
       </div>
@@ -164,7 +164,7 @@ export function SourceHealthBar({ health }: { health: SourceHealth[] }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-micro">
       {down.map((h) => (
         <span key={h.source} className="flex items-center gap-1 text-[var(--color-bear)]" title={h.detail}>
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-bear)]" />
@@ -198,15 +198,15 @@ export function NewsPanel({ clusters, now }: { clusters: NewsCluster[]; now: num
                   href={c.items[0].url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[13px] leading-snug text-[var(--color-text)] hover:underline"
+                  className="text-small leading-snug text-[var(--color-text)] hover:underline"
                 >
                   {c.headline}
                 </a>
-                <span className="tnum shrink-0 text-[10px] text-[var(--color-faint)]">
+                <span className="tnum shrink-0 text-micro text-[var(--color-faint)]">
                   {timeAgo(c.lastSeenUtc, now)}
                 </span>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-micro">
                 <span
                   className={
                     c.domainCount >= 3

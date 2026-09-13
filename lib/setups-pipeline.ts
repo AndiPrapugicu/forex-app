@@ -15,6 +15,7 @@ import { MAJORS } from '@/lib/types';
 import { resolvePolicyRates } from '@/lib/scoring/rates';
 import { resolveSeries } from '@/lib/scoring/discrete';
 import { SLOTS } from '@/config/setups.config';
+import { DEFAULT_PROFILE, type BoardProfile } from '@/config/profiles.config';
 import { FAIRECONOMY } from '@/config/sources.config';
 import {
   buildRiskGauge,
@@ -35,6 +36,13 @@ import type { RetailPositioning, RetailPositioningFeed } from '@/lib/scoring/cro
 import { fetchConferenceBoard } from '@/lib/connectors/conference-board';
 import { fetchFairEconomyCalendar, toForecastRows } from '@/lib/connectors/faireconomy';
 import { fetchFxStreetHistory } from '@/lib/connectors/fxstreet';
+import {
+  accumulatePmiActuals,
+  fetchPmiHistory,
+  pmiHistoryNote,
+  unionPmiHistory,
+} from '@/lib/connectors/pmi-history';
+import { dropSupersededSeed } from '@/lib/scoring/pmi-seed-precedence';
 import {
   backfillConsensus,
   fetchTradingViewActuals,
@@ -61,9 +69,24 @@ import type { Currency, NormalizedEvent, Result, SourceHealth } from '@/lib/type
 
 export interface SetupsPayload {
   matrix: SetupsMatrix;
+  /**
+   * Echoed so a caller that rebuilds the matrix from this payload builds the
+   * SAME board — the `yield2y` lesson, applied before it can bite.
+   */
+  profile: BoardProfile;
   health: SourceHealth[];
   /** Retained so the scorecard page can show per-slot release detail. */
   events: NormalizedEvent[];
+  /**
+   * The pool BEFORE the PMI seed's precedence was settled against today — what
+   * a rewinding caller must pass to `asOf`.
+   *
+   * `events` has already dropped every seed row a live print supersedes, which
+   * is right for the live board and wrong for a replay: rewind it to
+   * 2026-09-02 and the seed rows that were the only reading that day are
+   * already gone. `asOf` re-applies the precedence rule for its own frame.
+   */
+  rewindPool: NormalizedEvent[];
   cot: Map<string, CotSeries>;
   technicals: Map<string, Technicals>;
   sovereignYields: Map<Currency, SovereignYield>;
@@ -135,6 +158,8 @@ function toHealth(res: Result<unknown>): SourceHealth {
 export interface PipelineOptions {
   /** Drop price bars after this instant. Defaults to `now`, which drops none. */
   pricesAsOf?: Date;
+  /** Which board to build. `ours` unless a parity script asks for `a1`. */
+  profile?: BoardProfile;
 }
 
 export async function runSetupsPipeline(
@@ -143,7 +168,7 @@ export async function runSetupsPipeline(
 ): Promise<SetupsPayload> {
   const [
     history, cot, technicals, prices, yield2y, yields, curve,
-    conferenceBoard, tvForecasts, ffCalendar, tvActuals, retail,
+    conferenceBoard, tvForecasts, ffCalendar, tvActuals, retail, pmiHistory,
   ] =
     await Promise.all([
       fetchFxStreetHistory(now),
@@ -189,6 +214,12 @@ export async function runSetupsPipeline(
        * says why the column is blank on crosses.
        */
       fetchRetailPositioning(),
+      /**
+       * PMI actuals the calendar has nulled out: a committed seed from A1's
+       * captured charts, plus every print this app has since observed and
+       * stored. A store read, so it stays parallel with the fetches.
+       */
+      fetchPmiHistory(now),
     ]);
 
   /**
@@ -231,7 +262,13 @@ export async function runSetupsPipeline(
    */
   const ffForecasts = ffCalendar.ok ? toForecastRows(ffCalendar.data) : [];
   const ffBackfill = backfillConsensus(backfill.events, ffForecasts, FAIRECONOMY.name);
-  const events = ffBackfill.events;
+  /**
+   * PMI history is appended AFTER both forecast backfills, so neither can lend
+   * a borrowed consensus to a seeded row. Precedence is then settled for the
+   * live board only; `rewindPool` keeps the unsettled pool for replays.
+   */
+  const rewindPool = unionPmiHistory(ffBackfill.events, pmiHistory.ok ? pmiHistory.data : []);
+  const events = dropSupersededSeed(rewindPool);
 
   /**
    * How many forecasts actually landed, next to how many were offered.
@@ -287,6 +324,7 @@ export async function runSetupsPipeline(
     ffHealth,
     toHealth(tvActuals),
     retailHealth,
+    { ...toHealth(pmiHistory), note: pmiHistoryNote(pmiHistory.counts) },
   ];
   const cotData = cot.ok ? cot.data : new Map<string, CotSeries>();
   const techData = technicals.ok ? technicals.data : new Map<string, Technicals>();
@@ -323,6 +361,7 @@ export async function runSetupsPipeline(
     sovereignYields: yieldData,
     retailPositioning: retailFeed,
     now,
+    profile: options.profile,
   });
 
   /**
@@ -373,10 +412,16 @@ export async function runSetupsPipeline(
     got.forEach((b, k) => { if (b) bars.set(batch[k].symbol, b); });
   }
 
+  // Fire-and-forget: persisting what we observed must never delay or fail a
+  // render. The laundering guard inside refuses every A1-sourced row.
+  void accumulatePmiActuals(events, now).catch(() => {});
+
   return {
     matrix,
+    profile: options.profile ?? DEFAULT_PROFILE,
     health,
     events,
+    rewindPool,
     cot: cotData,
     technicals: techData,
     sovereignYields: yieldData,

@@ -42,7 +42,7 @@ const padS = (s: unknown, n: number) => String(s ?? '').padStart(n);
 async function boardAt(at: Date): Promise<Map<string, SymbolRow>> {
   const payload = await runSetupsPipeline(new Date(), { pricesAsOf: at });
   const trimmed = asOf(
-    { events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() },
+    { events: payload.rewindPool, cot: payload.cot, bars: new Map(), seasonality: new Map() },
     at,
   );
   const matrix = buildSetupsMatrix({

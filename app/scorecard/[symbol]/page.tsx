@@ -196,14 +196,14 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
 
                 return (
                   <div key={cat.key} className="flex items-center justify-between px-4 py-2">
-                    <dt className="text-[11px] text-[var(--color-muted)]">{cat.label}</dt>
+                    <dt className="text-micro text-[var(--color-muted)]">{cat.label}</dt>
                     <dd
                       className={`tnum text-sm font-semibold ${tone}`}
                       title={`${value > 0 ? '+' : ''}${value} out of a possible ±${blockMax}`}
                     >
                       {value > 0 ? '+' : ''}
                       {value}
-                      <span className="ml-1 text-[9px] font-normal text-[var(--color-faint)]">
+                      <span className="ml-1 text-micro font-normal text-[var(--color-faint)]">
                         /{blockMax}
                       </span>
                     </dd>
@@ -211,7 +211,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 );
               })}
               <div className="flex items-center justify-between bg-[var(--color-surface-2)]/40 px-4 py-2">
-                <dt className="text-[11px] font-semibold">Total</dt>
+                <dt className="text-micro font-semibold">Total</dt>
                 <dd className={`tnum text-base font-bold ${BIAS_COLOR[row.bias]}`}>
                   {row.totalScore > 0 ? '+' : ''}
                   {row.totalScore}
@@ -236,12 +236,12 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                   >
                     {tradeIdea.direction}
                   </span>
-                  <span className="text-[10px] text-[var(--color-faint)]">
+                  <span className="text-micro text-[var(--color-faint)]">
                     {tradeIdea.rewardRisk}:1 · {tradeIdea.dailyMovePct}% avg daily move
                   </span>
                 </div>
 
-                <dl className="space-y-1 text-[11px]">
+                <dl className="space-y-1 text-micro">
                   {[
                     { label: 'Entry', value: `${tradeIdea.entryMin} – ${tradeIdea.entryMax}`, color: '' },
                     { label: 'Target', value: tradeIdea.target, color: 'text-[var(--color-bull)]' },
@@ -261,11 +261,11 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 */}
                 {eventRisk.length > 0 && (
                   <div className="mt-2 border-t border-[var(--color-border)] pt-2">
-                    <div className="mb-1 text-[10px] font-semibold tracking-wide text-[var(--color-uncertain)] uppercase">
+                    <div className="mb-1 text-micro font-semibold tracking-wide text-[var(--color-uncertain)] uppercase">
                       {eventRisk.length} high-impact release{eventRisk.length > 1 ? 's' : ''} before this resolves
                     </div>
                     {eventRisk.slice(0, 4).map((e) => (
-                      <div key={`${e.dateUtc}${e.name}`} className="flex items-baseline gap-2 text-[10px]">
+                      <div key={`${e.dateUtc}${e.name}`} className="flex items-baseline gap-2 text-micro">
                         <span className="tnum w-12 shrink-0 text-[var(--color-uncertain)]">
                           {e.hoursAway < 1 ? '<1h' : `${Math.round(e.hoursAway)}h`}
                         </span>
@@ -276,7 +276,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                   </div>
                 )}
 
-                <p className="mt-2 border-t border-[var(--color-border)] pt-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+                <p className="mt-2 border-t border-[var(--color-border)] pt-2 text-micro leading-relaxed text-[var(--color-faint)]">
                   Sized from the average daily move alone.
                   {eventRisk.length > 0
                     ? ' The stop comes from realised volatility, which has not seen the releases above.'
@@ -303,9 +303,9 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             subtitle={`Every slot, and the release it resolved to${matrix.cotReportDate ? ` · COT as of ${matrix.cotReportDate}` : ''}`}
           >
             <div className="max-h-[calc(100vh-13rem)] overflow-auto">
-              <table className="w-full text-left text-[11px]">
+              <table className="w-full text-left text-micro">
                 <thead>
-                  <tr className="sticky top-0 z-10 bg-[var(--color-surface)] text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+                  <tr className="sticky top-0 z-10 bg-[var(--color-surface)] text-micro tracking-wider text-[var(--color-faint)] uppercase">
                     <th className="px-3 py-1.5">Indicator</th>
                     <th className="px-2 py-1.5 text-center">Cell</th>
                     <th className="px-2 py-1.5 text-right">Actual</th>
@@ -320,7 +320,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                       <tr key={`cat-${cat.key}`} className="bg-[var(--color-surface-2)]/40">
                         <td
                           colSpan={5}
-                          className="px-3 py-1 text-[9px] font-semibold tracking-wider text-[var(--color-faint)] uppercase"
+                          className="px-3 py-1 text-micro font-semibold tracking-wider text-[var(--color-faint)] uppercase"
                         >
                           {cat.label}
                         </td>
@@ -339,13 +339,13 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                               <div className="whitespace-nowrap">
                                 {slot.label}
                                 {!slot.scoring && (
-                                  <span className="ml-1 text-[9px] text-[var(--color-faint)] italic">context</span>
+                                  <span className="ml-1 text-micro text-[var(--color-faint)] italic">context</span>
                                 )}
                               </div>
                               {/* The resolved series, per leg. Naming it matters:
                                   "CPI YoY" for EUR is the euro-area HICP. */}
                               {legs.map((leg, i) => (
-                                <div key={i} className="text-[9px] leading-tight text-[var(--color-faint)]">
+                                <div key={i} className="text-micro leading-tight text-[var(--color-faint)]">
                                   {multiCurrency ? `${leg.currency} · ` : ''}
                                   {leg.seriesName}
                                 </div>
@@ -384,7 +384,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                               exactly the part that explains the score.
                             */}
                             {legs.length === 0 ? (
-                              <td colSpan={3} className="px-2 py-1.5 text-[10px] leading-snug text-[var(--color-muted)]">
+                              <td colSpan={3} className="px-2 py-1.5 text-micro leading-snug text-[var(--color-muted)]">
                                 {cell.explanation}
                               </td>
                             ) : (
@@ -393,7 +393,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                                   {legs.map((leg, i) => (
                                     <div
                                       key={i}
-                                      className={`tnum text-[10px] leading-tight ${
+                                      className={`tnum text-micro leading-tight ${
                                         field === 'actual'
                                           ? `font-semibold ${cellColor(leg.cell)}`
                                           : 'text-[var(--color-muted)]'
@@ -418,7 +418,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 </tbody>
               </table>
             </div>
-            <p className="border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+            <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
               The Forecast column is what the cell was actually scored against — for PMI that is the
               previous print, not the consensus, which is A1&rsquo;s rule. Pair cells are base minus
               quote: a currency that publishes no payrolls still shows a value there, inheriting the
@@ -436,24 +436,24 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
               <div className="grid grid-cols-1 gap-px bg-[var(--color-border)] sm:grid-cols-2">
                 {cotDetail && (
                   <div className="bg-[var(--color-surface)] px-4 py-3">
-                    <div className="text-[10px] tracking-wide text-[var(--color-faint)] uppercase">
+                    <div className="text-micro tracking-wide text-[var(--color-faint)] uppercase">
                       Large speculators
                     </div>
                     <div className="tnum mt-1 text-lg font-bold">
                       {cotDetail.net > 0 ? '+' : ''}
                       {cotDetail.net.toLocaleString()}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                    <div className="mt-0.5 text-micro text-[var(--color-muted)]">
                       {cotDetail.percentile}th percentile of {cotDetail.sampleSize} weeks
                     </div>
-                    <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-faint)]">
+                    <p className="mt-1.5 text-micro leading-relaxed text-[var(--color-faint)]">
                       {cotDetail.explanation}
                     </p>
                   </div>
                 )}
                 {crowdDetail && (
                   <div className="bg-[var(--color-surface)] px-4 py-3">
-                    <div className="flex items-baseline gap-2 text-[10px] tracking-wide text-[var(--color-faint)] uppercase">
+                    <div className="flex items-baseline gap-2 text-micro tracking-wide text-[var(--color-faint)] uppercase">
                       Small traders (contrarian)
                       <Link
                         href="/sentiment"
@@ -463,17 +463,17 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                       </Link>
                     </div>
                     <div className="tnum mt-1 text-lg font-bold">{crowdDetail.retailLongPct}% long</div>
-                    <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                    <div className="mt-0.5 text-micro text-[var(--color-muted)]">
                       Read as {crowdDetail.cell > 0 ? 'bullish' : crowdDetail.cell < 0 ? 'bearish' : 'neutral'}
                     </div>
-                    <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-faint)]">
+                    <p className="mt-1.5 text-micro leading-relaxed text-[var(--color-faint)]">
                       {crowdDetail.explanation}
                     </p>
                   </div>
                 )}
               </div>
               {crowdDetail?.divergence && (
-                <p className="border-t border-[var(--color-border)] px-4 py-2 text-[10px] text-[var(--color-uncertain)]">
+                <p className="border-t border-[var(--color-border)] px-4 py-2 text-micro text-[var(--color-uncertain)]">
                   Retail and large speculators are positioned on opposite sides — the setup this panel
                   exists to surface.
                 </p>

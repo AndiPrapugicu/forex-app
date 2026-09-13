@@ -93,7 +93,7 @@ export default async function HistoryPage({
             <Link
               key={r.key}
               href={`/history/${def.symbol}?range=${r.key}`}
-              className={`rounded border px-2 py-1 text-[11px] transition-colors ${
+              className={`rounded border px-2 py-1 text-micro transition-colors ${
                 r.key === range.key
                   ? 'border-[var(--color-border-bright)] bg-[var(--color-surface-2)] text-[var(--color-text)]'
                   : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -120,7 +120,7 @@ export default async function HistoryPage({
               <Panel title={`Change over ${range.label}`}>
                 <dl className="divide-y divide-[var(--color-border)]">
                   <div className="flex items-center justify-between px-4 py-2">
-                    <dt className="text-[11px] text-[var(--color-muted)]">Score</dt>
+                    <dt className="text-micro text-[var(--color-muted)]">Score</dt>
                     <dd className="tnum text-sm font-semibold">
                       {change.from > 0 ? '+' : ''}
                       {change.from} → {change.to > 0 ? '+' : ''}
@@ -128,7 +128,7 @@ export default async function HistoryPage({
                     </dd>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2">
-                    <dt className="text-[11px] text-[var(--color-muted)]">Move</dt>
+                    <dt className="text-micro text-[var(--color-muted)]">Move</dt>
                     <dd
                       className={`tnum text-sm font-semibold ${
                         change.delta > 0
@@ -143,7 +143,7 @@ export default async function HistoryPage({
                     </dd>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2">
-                    <dt className="text-[11px] text-[var(--color-muted)]">Bias</dt>
+                    <dt className="text-micro text-[var(--color-muted)]">Bias</dt>
                     <dd className="text-xs">
                       {change.fromBias} → <span className="font-semibold">{change.toBias}</span>
                     </dd>
@@ -151,7 +151,7 @@ export default async function HistoryPage({
                 </dl>
 
                 {change.flipped && (
-                  <p className="border-t border-[var(--color-border)] px-4 py-2 text-[11px] text-[var(--color-bear)]">
+                  <p className="border-t border-[var(--color-border)] px-4 py-2 text-micro text-[var(--color-bear)]">
                     Bias flipped sign during this window.
                   </p>
                 )}
@@ -159,7 +159,7 @@ export default async function HistoryPage({
             )}
 
             <Panel title="Reading this">
-              <p className="px-4 py-3 text-[11px] leading-relaxed text-[var(--color-muted)]">
+              <p className="px-4 py-3 text-micro leading-relaxed text-[var(--color-muted)]">
                 Shaded bands are the bias thresholds: ±4 for Bullish, ±7 for Very Bullish.
                 They are absolute cuts, not a share of the ±{maxScoreForKind(def.kind)} maximum, so a
                 score deep into the shading is genuinely far past the threshold.

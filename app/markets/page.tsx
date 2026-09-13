@@ -1,6 +1,6 @@
 /**
- * Markets moved to /macro when it grew the rates and curve panels and lost the
- * smart-money table to /sentiment.
+ * Markets moved to /macro, which is now the index of the /scanners/* routes.
+ * Institutional-versus-retail positioning lives at /sentiment/smart-money.
  *
  * A redirect rather than a deletion: the carry table and the concentration
  * panel both link out to scorecards, this app has been open in tabs for weeks

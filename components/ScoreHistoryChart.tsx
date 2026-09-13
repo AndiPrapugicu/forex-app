@@ -172,7 +172,7 @@ export function ScoreHistoryChart({
         </text>
       </svg>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[10px] text-[var(--color-faint)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-micro text-[var(--color-faint)]">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-0.5 w-4 bg-[var(--color-bull)]" /> score
         </span>

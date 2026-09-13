@@ -1710,6 +1710,229 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'rows - and the derivation must be checked against an independent capture before it is ' +
       'believed, as the EURUSD series was, 6 of 6.',
   },
+  {
+    key: 'retail-sales:AUD-a1-has-no-series',
+    component: 'Retail Sales',
+    symbol: 'AUD (every AUD leg)',
+    date: '2026-09-03',
+    ours: 'Australian retail sales, scored',
+    a1: 'blank - no series',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      "A1's Retail Sales scanner returns no AUD series; the capture header records 'AUD no series at " +
+      "all, which is why their AU heatmap has no retail row' " +
+      '(fixtures/a1-full-access/a1-econ-retail-sales-2026-09-03-1040.csv). Their AU heatmap ' +
+      '(a1-econ-heatmaps-2026-09-03-0527.csv) lists GDP, PMIs, CPI, PPI and unemployment and no retail ' +
+      'row, and the AU-DOLLAR row on the 2026-09-02 board prints RetailSales 0.',
+    confidence: 'PROVEN',
+    rootCause: 'A1 carries no Australian retail-sales series, so the leg is empty on their board.',
+    productionAction:
+      'None in `ours` - we hold a real print and keep scoring it. Entry in the `a1` coverage table ' +
+      '(config/profiles.config.ts) as a blank, so parity measures reproduction rather than coverage.',
+  },
+  {
+    key: 'profile:cad-nzd-spmi-blank-rejected',
+    component: 'Services PMI',
+    symbol: 'CAD, NZD',
+    date: '2026-09-13',
+    ours: 'Ivey (CAD) -1; BusinessNZ PSI (NZD)',
+    a1: 'CA-DOLLAR +1, NZ-DOLLAR -1 on the 2026-09-02 board',
+    classification: 'A1_INCONSISTENCY',
+    evidence:
+      'Proposed for the a1 coverage table as blanks, because A1 publishes no CAD or NZD services chart ' +
+      '(spmi:cad-nzd-have-no-series). Rejected on the board capture ' +
+      'fixtures/a1-top-setups-2026-09-02-1446.csv: their CA-DOLLAR row prints sPMI +1 and NZ-DOLLAR ' +
+      'prints -1, the signs of the heatmap rows frozen at 2026-05-01 (CA 50.6 vs 49.2, NZ 47.5 vs 48.7). ' +
+      'A blank would move us away from their board on every CAD and NZD row.',
+    confidence: 'PROVEN',
+    rootCause:
+      'Their scanner and their board disagree about whether the series exists. The scanner being empty is ' +
+      'evidence about their pipeline, not about their cell.',
+    productionAction:
+      'None. Not added to the coverage table, and not reproduced in `ours` either: scoring a 125-day-old ' +
+      'frozen print would copy a bug. After the PMI seed (2026-09-13) every remaining sPMI disagreement ' +
+      'in `npm run parity` is a CAD row, and this finding is why; it is not a work item.',
+  },
+  {
+    key: 'retail:cad-a1-heatmap-is-the-statcan-advance-estimate',
+    component: 'Retail Sales',
+    symbol: 'CAD (every CAD leg)',
+    date: '2026-09-13',
+    ours: '+1 — June +0.6 against a +0.4 consensus',
+    a1: '-1 — heatmap actual -0,8 against a previous of 1,0',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'Statistics Canada, The Daily, 2026-08-21 (dq260821a): "Retail sales increased 0.6% to $74.3 ' +
+      'billion in June"; core retail (ex gasoline and motor vehicles) "up 1.2% in June"; and "an advance ' +
+      'estimate of retail sales, which suggests that sales decreased 0.8% in July." A1\'s CA heatmap ' +
+      'actual of -0,8 is therefore the ADVANCE ESTIMATE for July, published inside the June release, and ' +
+      'not core retail — which refutes the candidate recorded in retail:cad-two-surfaces-two-series. ' +
+      'Their board agrees with the heatmap: CA-DOLLAR prints RetailSales -1 on the 2026-09-02 capture, ' +
+      'the sign of -0.8 against the prior 1.0. Their scanner\'s -0,10 matches none of the three published ' +
+      'figures and remains unexplained.',
+    confidence: 'PROVEN',
+    rootCause:
+      'A1 scores StatCan\'s advance estimate for the following month; we score the confirmed month. Both ' +
+      'are genuine StatCan publications from the same release, so neither side has a rule wrong.',
+    productionAction:
+      'None in `ours`: the confirmed +0.6 is the better reading, and the 2026-08-31 retail-sales:CAD-basis ' +
+      'triangulation already established that our leg is right on it. Not added to the a1 coverage ' +
+      'table either — that table models A1\'s data GAPS, and this is a different series, which would need ' +
+      'a feed carrying StatCan\'s advance estimate. None of ours does today. The scanner figure is not ' +
+      'actionable and should not be chased further now A1\'s access window has closed.',
+  },
+  {
+    key: 'trend:metals-sma100-is-not-a-futures-roll',
+    component: 'Trend (SMA states)',
+    symbol: 'XAGUSD, XPTUSD, XAUUSD',
+    date: '2026-09-13',
+    ours: 'SMA100 Bearish on silver, platinum and gold',
+    a1: 'SMA100 Bullish on all three (a1-momentum-heatmap-2026-09-02-1455.csv)',
+    classification: 'UNKNOWN',
+    evidence:
+      'Tested the futures-roll hypothesis by comparing our front-month futures against roll-free ETFs, ' +
+      'both cut at 2026-09-02 14:55Z. Silver: SI=F -5.11% from its 100-day average, SLV -4.11%. Platinum: ' +
+      'PL=F -2.89%, PPLT -2.73%. Both instruments agree on Bearish for both metals, so a roll cannot explain ' +
+      'a 3-5% disagreement with A1. The largest one-day move in the silver window (-9.13% on 2026-05-15) ' +
+      'appears in the ETF too, so it is the market rather than a contract change. Gold is the exception: ' +
+      'GC=F reads -0.25% (Bearish) and GLD +0.28% (Bullish, A1\'s side) - a knife-edge the futures basis ' +
+      'can decide, on one symbol. Yahoo does not serve XAGUSD=X, XAUUSD=X or XPTUSD=X daily bars at all.',
+    confidence: 'STRONG',
+    rootCause:
+      'UNKNOWN. Not the roll. With price and a roll-free average both 3-5% below the line, A1 is reading a ' +
+      'different price, a different average, or a stale state; their page does not publish the values, ' +
+      'only the Bullish/Bearish label, and their access window has closed.',
+    productionAction:
+      'None. Do not swap GC=F for GLD to win the gold cell: one symbol inside a 0.5% band is a coin flip, ' +
+      'and the same swap moves nothing on silver or platinum, where the gap actually is. This closes the ' +
+      'roll lead from the 2026-09-12 plan (section 1.5).',
+  },
+  {
+    key: 'trend:index-rows-agree-usdchf-is-a-flat-slope',
+    component: 'Trend',
+    symbol: 'EURX, GBPX, CHFX, AUDX, NZDX, JPYX, CADX; USDCHF',
+    date: '2026-09-13',
+    ours: 'every index row equal to A1; USDCHF +1',
+    a1: 'USDCHF +2',
+    classification: 'TIMING',
+    evidence:
+      'On the 2026-09-02 14:46 rewound frame, all seven index rows score Trend exactly as A1 prints, and ' +
+      'the dollar-pair identity (a1-index-row-trend-is-the-dollar-pair) holds on both boards for six of ' +
+      'seven. The 2026-09-12 plan said EURX/GBPX/CHFX read -1 where A1 reads +2; that is no longer true ' +
+      'on this frame. The one break is USDCHF: fast 0.81070 above slow 0.80621 (crossover +2), but the ' +
+      'slow average sits 0.00008 BELOW its prior 0.80629, so the slope reads down and docks to +1. CHFX ' +
+      'on the same frame has its slow average falling (1.24239 vs 1.24250), which for the inverse pair ' +
+      'means rising - A1\'s +2.',
+    confidence: 'STRONG',
+    rootCause:
+      'A near-zero slope on the spot USDCHF series, where eight-hundred-thousandths decide the sign. Our ' +
+      'USDCHF (spot, rebuilt from hourly bars) and CHFX (6S=F futures) disagree about the direction of a ' +
+      'flat average.',
+    productionAction:
+      'None. The trend rule stays as published (trend-rule-fitted-and-left-alone). Deriving pair slopes ' +
+      'from the futures index rows would fix this one cell by importing a second price source into every ' +
+      'pair, on a single observation.',
+  },
+  {
+    key: 'seasonality:ethereum-is-a-different-history',
+    component: 'Seasonality',
+    symbol: 'ETHUSD',
+    date: '2026-09-13',
+    ours: 'Feb +4.26, Jan +14.70, Oct +6.73, Dec +7.13 (ETH-USD, 9 years)',
+    a1: 'Feb -30.59, Jan -5.37, Oct -5.06, Dec -4.63 (their tenYearAvgPct)',
+    classification: 'UNKNOWN',
+    evidence:
+      'Four of the 18 seasonality flips at |their average| >= 0.5pp are ETHEREUM (npm run ' +
+      'seasonality-parity, 2026-09-13). Our Yahoo ETH-USD daily history starts 2017-11-09, giving nine ' +
+      'February returns: 2018 -23.5, 2019 +27.7, 2020 +22.0, 2021 +7.7, 2022 +8.6, 2023 +1.2, 2024 +46.4, ' +
+      '2025 -32.1, 2026 -19.6 (mean +4.26). No contiguous window of those returns averages -30.59: the ' +
+      'closest are 2025 alone (-32.1) and 2025-2026 (-25.9). A1 also prints July +33.29 and a ' +
+      '"ten-year" average for an asset with under nine years of history. The rule is not in question - ' +
+      'sign(tenYearAvgPct) reproduces their printed cell 7/7 (seasonality-is-a-coin-flip).',
+    confidence: 'STRONG',
+    rootCause:
+      'UNKNOWN. A1 is averaging a different history for Ethereum - a much shorter window, a different ' +
+      'instrument (their COT contract is CME ETHER CASH SETTLED, listed 2021), or a different month ' +
+      'boundary. Their scanner publishes only the average, never the years behind it, and access has closed.',
+    productionAction:
+      'None. Do not shorten the lookback or swap the ticker for one symbol to win four cells: that is a ' +
+      'per-symbol fit against one snapshot. Recorded so the next round does not re-derive it.',
+  },
+  {
+    key: 'crowd:no-public-cross-feed-passes-the-gate',
+    component: 'Crowd Sentiment',
+    symbol: 'the 21 crosses',
+    date: '2026-09-13',
+    ours: 'null on every cross',
+    a1: 'scored from their retail sentiment feed',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'Two candidate feeds evaluated against a three-part gate - (1) publicly documented and permitted, ' +
+      '(2) covers the crosses, (3) agrees with a1-retail-sentiment-2026-09-03-1053.csv. Both fail part 1 ' +
+      'before parts 2 and 3 can be tested. IG CLIENT SENTIMENT: dailyfx.com/sentiment now 301-redirects to ' +
+      'an IG explainer that states "Client sentiment data is displayed directly on the deal ticket and ' +
+      'market overview page for every market we offer. To access it, log in to your IG account" - no ' +
+      'public numbers and no documented feed. The only public copies found are third-party republishers ' +
+      '(forexclientsentiment.com) with no stated licence from IG. DUKASCOPY SWFX: the sentiment page and ' +
+      'the free Market Sentiment widget load their numbers by script; the site invites free EMBEDDING of ' +
+      'the widget but documents no data endpoint, and the only documented programmatic access is ' +
+      'IDataService.getFXSentimentIndex in the JForex API, which requires a Dukascopy account. Checked ' +
+      '2026-09-13. FXSSI (licensing) and Myfxbook (server-side broken) were already rejected.',
+    confidence: 'STRONG',
+    rootCause:
+      'CFTC has no cross contracts, SCORING-CONTRACT.md forbids synthesising a cross from two dollar-pair ' +
+      'readings, and no free retail-positioning source that covers crosses is both public and permitted. ' +
+      'The dated cross history that would have let us validate one was lost when A1\'s access window ' +
+      'closed on 2026-09-07.',
+    productionAction:
+      'None. Crosses stay null and the Crowd column keeps its 40-point gap, which the mirror residual ' +
+      'reports as unexplained rather than hiding. Do not scrape the Dukascopy widget or IG\'s logged-in ' +
+      'pages, and do not move the crowd bands. Reopen only if a documented, permitted feed appears; a ' +
+      'paid feed is the user\'s decision, not this repository\'s.',
+  },
+  {
+    key: 'options:no-public-per-symbol-chain-passes-the-gate',
+    component: 'Options (Put-Call Ratio, Net Options Volume, Put & Call Walls)',
+    symbol: 'GOLD, SPX500 and the other symbols A1 publishes options pages for',
+    date: '2026-09-13',
+    ours: 'no page',
+    a1: 'per-symbol put-call ratio, 5-day MA banded at 1.07 / 1.20, plus volume and strike walls',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'Same three-part gate as the crowd feed. YAHOO OPTION CHAINS: query1 and query2 ' +
+      '/v7/finance/options/{SPY,GLD} both answer 401 {"code":"Unauthorized","description":"Invalid Crumb"} ' +
+      'to a plain request; reaching them needs a cookie-and-crumb handshake against an undocumented ' +
+      'endpoint, which fails part 1. CBOE: the daily market statistics page is public and governed by the ' +
+      'Cboe website terms, but it publishes MARKET-WIDE total/index/equity ratios, not the per-symbol ' +
+      'ratio A1 draws, so it fails part 2; its archive CSVs (indexpcarchive.csv, equitypc.csv) are frozen ' +
+      'in 2012 and 2016. Checked 2026-09-13.',
+    confidence: 'STRONG',
+    rootCause: 'No free, documented, permitted source of per-symbol option volume and open interest.',
+    productionAction:
+      'None. The three options pages are not built rather than approximated with a market-wide ratio ' +
+      'under a per-symbol label. Reopen if a documented chain feed appears; a paid feed is the user\'s decision.',
+  },
+  {
+    key: 'aaii:public-page-but-terms-forbid-copying',
+    component: 'AAII Sentiment',
+    symbol: 'US equities (market-wide survey)',
+    date: '2026-09-13',
+    ours: 'no page',
+    a1: 'weekly bullish / neutral / bearish percentages with history',
+    classification: 'SOURCE_DIFFERENCE',
+    evidence:
+      'Gate parts 2 and 3 would pass: www.aaii.com/sentimentsurvey/sent_results answers a plain request ' +
+      'with HTTP 200 and a server-rendered table (latest row Sep 9: 38.0% / 22.7% / 39.3%), and the path is ' +
+      'not disallowed in robots.txt. Part 1 fails: the AAII terms at /privacy/tos state that no part of the ' +
+      'contents of the website may be copied or forwarded to anyone else. The full-history spreadsheet ' +
+      '(/files/surveys/sentiment.xls) is under /files/*, which robots.txt disallows, and is members-only. ' +
+      'Checked 2026-09-13.',
+    confidence: 'STRONG',
+    rootCause: 'The data is publicly visible but its publisher does not permit copying it.',
+    productionAction:
+      'None. No connector and no page, and no forward accumulation — storing the weekly numbers is copying ' +
+      'them. Reopen only with written permission from AAII or a licensed feed; that is the user\'s decision.',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {

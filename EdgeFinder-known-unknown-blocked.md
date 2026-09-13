@@ -866,6 +866,23 @@ doing (`AGENTS.md`-adjacent session rule: never create an account silently). Not
 flagged for the user instead of assumed. No new EURCHF/cross retail-sentiment screenshots arrived
 either, so the single-point 48%-vs-+1 contradiction (see Crowd above) is still unresolved.
 
+### Update 2026-09-13 — full-access era, supersedes the crowd verdicts above
+
+Re-checked against a three-part gate: (1) publicly documented and permitted, (2) covers the symbols A1
+scores, (3) agrees with a full-access A1 capture. Ledger entries carry the detail.
+
+| Source | For | Verdict | Why |
+|---|---|---|---|
+| IG client sentiment | Crowd, crosses | **BLOCKED** | dailyfx.com/sentiment now redirects to an IG explainer saying the data is shown to logged-in IG account holders. The REST API still needs an account; creating one is the user's decision. Fails (1). |
+| Dukascopy SWFX | Crowd, crosses | **BLOCKED** | Numbers are loaded by the embeddable widget's script; the only documented access is the JForex API, which needs an account. Fails (1). |
+| Yahoo option chains | Put-Call, Net Options Volume, Walls | **BLOCKED** | `/v7/finance/options/*` answers 401 "Invalid Crumb" without an undocumented cookie handshake. Fails (1). |
+| CBOE daily statistics | Put-Call | **BLOCKED for parity** | Public, but market-wide totals only; A1's page is per symbol. Fails (2). Archive CSVs frozen 2012/2016. |
+| AAII survey | AAII Sentiment | **BLOCKED** | Page is public and not robots-disallowed, but AAII's terms (`/privacy/tos`) forbid copying site contents; the history file is under a disallowed `/files/` path. Fails (1). |
+
+No page was built for any of them. Crosses stay `null` on the Crowd column; the options and AAII pages do
+not exist. Ledger keys: `crowd:no-public-cross-feed-passes-the-gate`,
+`options:no-public-per-symbol-chain-passes-the-gate`, `aaii:public-page-but-terms-forbid-copying`.
+
 ### Historical 2-year sovereign yields (GBP, JPY, CAD, AUD, NZD, CHF)
 
 This subsection was research-only (documentation review, no live fetch) as of the prior round.

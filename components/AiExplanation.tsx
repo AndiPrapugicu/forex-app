@@ -52,7 +52,7 @@ export function AiExplanation({ eventId, released }: { eventId: string; released
             type="button"
             onClick={load}
             disabled={loading || !released}
-            className="rounded border border-[var(--color-border)] px-2 py-1 text-[10px] text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)] disabled:opacity-40"
+            className="rounded border border-[var(--color-border)] px-2 py-1 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)] disabled:opacity-40"
           >
             {loading ? 'Generating…' : 'Explain'}
           </button>
@@ -73,7 +73,7 @@ export function AiExplanation({ eventId, released }: { eventId: string; released
           <p className="text-xs text-[var(--color-muted)]">
             {state.reason ?? 'Unavailable'}
             {state.reason === 'No AI provider configured' && (
-              <span className="mt-1 block text-[10px] text-[var(--color-faint)]">
+              <span className="mt-1 block text-micro text-[var(--color-faint)]">
                 Set OPENAI_API_KEY in .env.local, or run Ollama locally with AI_PROVIDER=ollama.
               </span>
             )}
@@ -84,11 +84,11 @@ export function AiExplanation({ eventId, released }: { eventId: string; released
               {state.text}
             </p>
             <div className="mt-2.5 flex items-center gap-2">
-              <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-faint)]">
+              <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-micro font-medium text-[var(--color-faint)]">
                 AI · {state.model}
               </span>
               {state.uncertain && (
-                <span className="text-[10px] text-[var(--color-uncertain)]">
+                <span className="text-micro text-[var(--color-uncertain)]">
                   flagged uncertain
                 </span>
               )}

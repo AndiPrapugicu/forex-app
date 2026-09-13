@@ -64,6 +64,14 @@ export type SourceKind =
   | 'dbnomics'
   | 'tradingview' // the Conference Board series, which no other free feed populates
   | 'ai-extracted' // parsed out of a headline by the LLM — always flagged
+  // A historical print read off A1's own published chart, seeded from a capture
+  // in `fixtures/a1-full-access/`. It exists because FXStreet's calendar carries
+  // every non-USD PMI release with `actual: null` once the print is no longer
+  // current, so rewinding the board a week leaves those columns with nothing to
+  // score. Scored cells that depend on it are EXCLUDED from the clean parity
+  // headline — see `lib/scoring/provenance.ts` — because a number taken from A1
+  // cannot be evidence that we reproduce A1.
+  | 'a1-capture'
   | 'fixture'; // offline sample data
 
 /** Classification buckets, shared by macro events and news. */

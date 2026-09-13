@@ -9,19 +9,28 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a0d14',
+  themeColor: '#111214',
+  // Lets content reach under the iPhone home indicator; the tab bar pads itself.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        {/* Column on small screens (nav collapses to a top bar), row from lg up. */}
-        <div className="flex min-h-screen flex-col lg:flex-row">
+        {/*
+          Column on small screens (top bar + bottom tab bar), row from lg up.
+          `dvh` rather than `vh`: on mobile Safari 100vh includes the collapsing
+          address bar, so a full-height layout overflowed by its height.
+        */}
+        <div className="flex min-h-dvh flex-col lg:flex-row">
           <Sidebar />
           {/* min-w-0 is load-bearing: without it the wide setups matrix forces
-              the flex row to overflow instead of scrolling inside its own panel. */}
-          <div className="grid-bg min-w-0 flex-1">{children}</div>
+              the flex row to overflow instead of scrolling inside its own panel.
+              The bottom padding clears the mobile tab bar. */}
+          <div className="grid-bg min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+            {children}
+          </div>
         </div>
       </body>
     </html>

@@ -1,0 +1,1945 @@
+{
+  "builtAtUtc": "2026-09-12T13:43:12.326Z",
+  "builtBy": "scripts/build-pmi-seed.ts",
+  "sourceCaptures": [
+    "fixtures/a1-full-access/a1-econ-manufacturing-pmi-2026-09-03-1023.csv",
+    "fixtures/a1-full-access/a1-econ-services-pmi-2026-09-03-1033.csv",
+    "fixtures/a1-full-access/a1-econ-heatmaps-2026-09-03-0527.csv"
+  ],
+  "excluded": [
+    {
+      "currency": "AUD",
+      "slotKey": "spmi",
+      "reason": "A1 renders this chart with 33 points against fewer axis labels, so every row was captured as UNALIGNED. The VALUES are exact but no date can be attached to them without guessing, and a guessed date is a guessed score.",
+      "points": 33
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "spmi",
+      "reason": "A1 publishes NO Canadian services chart at all — the page returns empty under a filter code that works on the manufacturing page. Their heatmap nevertheless still scores a CA services row frozen at 2026-05-01, 125 days stale on the day of capture. Seeding that would import their staleness into our board, where the live Ivey survey is a better reading.",
+      "points": 0
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "spmi",
+      "reason": "A1's Swiss services series is byte-identical to the euro area's on all 24 captured points, and their heatmap prints CH services as 51.7/51.5 — the EU row exactly. That is a SUBSTITUTION A1 performs, not a Swiss observation, so it belongs in the a1 profile rather than in our history. Our own slot reads the KOF leading indicator and says in config that it is a proxy.",
+      "points": 0
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "spmi",
+      "reason": "Same as CAD: no chart, and a heatmap row frozen at 2026-05-01. Our own slot reads the BusinessNZ PSI, which is live.",
+      "points": 0
+    }
+  ],
+  "rows": [
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-09-22",
+      "actual": 51.6,
+      "consensus": null,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-09-30",
+      "actual": 51.4,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-10-23",
+      "actual": 49.7,
+      "consensus": null,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-11-02",
+      "actual": 49.7,
+      "consensus": null,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-11-20",
+      "actual": 51.6,
+      "consensus": null,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-11-30",
+      "actual": 51.6,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2025-12-15",
+      "actual": 52.2,
+      "consensus": null,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-01-01",
+      "actual": 51.6,
+      "consensus": 52.2,
+      "previous": 52.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-01-22",
+      "actual": 52.4,
+      "consensus": null,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-02-01",
+      "actual": 52.3,
+      "consensus": 52.4,
+      "previous": 52.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-02-19",
+      "actual": 51.5,
+      "consensus": null,
+      "previous": 52.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-03-01",
+      "actual": 51,
+      "consensus": 51.5,
+      "previous": 51.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-03-23",
+      "actual": 50.1,
+      "consensus": null,
+      "previous": 51,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-03-31",
+      "actual": 49.8,
+      "consensus": 50.1,
+      "previous": 50.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-04-22",
+      "actual": 51,
+      "consensus": null,
+      "previous": 49.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-04-30",
+      "actual": 51.3,
+      "consensus": 51,
+      "previous": 51,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-05-20",
+      "actual": 50.2,
+      "consensus": null,
+      "previous": 51.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 50.7,
+      "consensus": 50.2,
+      "previous": 50.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-06-22",
+      "actual": 51.2,
+      "consensus": null,
+      "previous": 50.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-06-30",
+      "actual": 51.5,
+      "consensus": 51.2,
+      "previous": 51.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-07-23",
+      "actual": 51.7,
+      "consensus": null,
+      "previous": 51.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-08-02",
+      "actual": 52,
+      "consensus": 51.7,
+      "previous": 51.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-08-20",
+      "actual": 52,
+      "consensus": null,
+      "previous": 52,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "mpmi",
+      "day": "2026-08-31",
+      "actual": 52,
+      "consensus": 52,
+      "previous": 52,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "AUD",
+      "slotKey": "spmi",
+      "day": "2026-08-20",
+      "actual": 52.9,
+      "consensus": 53.6,
+      "previous": null,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2025-09-02",
+      "actual": 48.3,
+      "consensus": null,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2025-10-01",
+      "actual": 47.7,
+      "consensus": null,
+      "previous": 48.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2025-11-03",
+      "actual": 49.6,
+      "consensus": 48.2,
+      "previous": 47.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2025-12-01",
+      "actual": 48.4,
+      "consensus": null,
+      "previous": 49.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-01-02",
+      "actual": 48.6,
+      "consensus": null,
+      "previous": 48.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-02-02",
+      "actual": 50.4,
+      "consensus": null,
+      "previous": 48.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-03-02",
+      "actual": 51,
+      "consensus": null,
+      "previous": 50.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 50,
+      "consensus": null,
+      "previous": 51,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-05-01",
+      "actual": 53.3,
+      "consensus": null,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 52.9,
+      "consensus": null,
+      "previous": 53.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-07-02",
+      "actual": 53,
+      "consensus": null,
+      "previous": 52.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-08-04",
+      "actual": 53.5,
+      "consensus": 52.2,
+      "previous": 53,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CAD",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 53,
+      "consensus": 53.5,
+      "previous": 53.5,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2025-09-01",
+      "actual": 49,
+      "consensus": 46.9,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2025-10-01",
+      "actual": 46.3,
+      "consensus": 47.9,
+      "previous": 49,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2025-11-03",
+      "actual": 48.2,
+      "consensus": 47.7,
+      "previous": 46.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2025-12-04",
+      "actual": 49.7,
+      "consensus": 48.9,
+      "previous": 48.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-01-05",
+      "actual": 45.8,
+      "consensus": 49.9,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-02-02",
+      "actual": 48.8,
+      "consensus": 47.2,
+      "previous": 45.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-03-02",
+      "actual": 47.4,
+      "consensus": 49.8,
+      "previous": 48.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 53.3,
+      "consensus": 47.2,
+      "previous": 47.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-05-04",
+      "actual": 54.5,
+      "consensus": 52,
+      "previous": 53.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 57.3,
+      "consensus": 54,
+      "previous": 54.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-07-01",
+      "actual": 54.3,
+      "consensus": 56.4,
+      "previous": 57.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-08-03",
+      "actual": 53.2,
+      "consensus": 54.5,
+      "previous": 54.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "CHF",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 57.1,
+      "consensus": 54.1,
+      "previous": 53.2,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-09-01",
+      "actual": 50.7,
+      "consensus": 50.5,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-09-23",
+      "actual": 49.5,
+      "consensus": 50.7,
+      "previous": 50.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-10-01",
+      "actual": 49.8,
+      "consensus": 49.5,
+      "previous": 49.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-10-24",
+      "actual": 50,
+      "consensus": 49.8,
+      "previous": 49.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-11-03",
+      "actual": 50,
+      "consensus": 50,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-11-21",
+      "actual": 49.7,
+      "consensus": 50.1,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-12-01",
+      "actual": 49.6,
+      "consensus": 49.7,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2025-12-16",
+      "actual": 49.2,
+      "consensus": 49.9,
+      "previous": 49.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-01-02",
+      "actual": 48.8,
+      "consensus": 49.2,
+      "previous": 49.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-01-23",
+      "actual": 49.4,
+      "consensus": 49.1,
+      "previous": 48.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-02-02",
+      "actual": 49.5,
+      "consensus": 49.4,
+      "previous": 49.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-02-20",
+      "actual": 50.8,
+      "consensus": 49.9,
+      "previous": 49.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-03-02",
+      "actual": 50.8,
+      "consensus": 50.8,
+      "previous": 50.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-03-24",
+      "actual": 51.4,
+      "consensus": 49.4,
+      "previous": 50.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 51.6,
+      "consensus": 51.4,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-04-23",
+      "actual": 52.2,
+      "consensus": 50.9,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-05-04",
+      "actual": 52.2,
+      "consensus": 52.2,
+      "previous": 52.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-05-21",
+      "actual": 51.4,
+      "consensus": 51.7,
+      "previous": 52.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 51.6,
+      "consensus": 51.4,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-06-23",
+      "actual": 51.3,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-07-01",
+      "actual": 51.4,
+      "consensus": 51.3,
+      "previous": 51.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-07-24",
+      "actual": 52,
+      "consensus": 51.5,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-08-03",
+      "actual": 51.9,
+      "consensus": 52,
+      "previous": 52,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-08-21",
+      "actual": 52.8,
+      "consensus": 51.8,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 52.7,
+      "consensus": 52.8,
+      "previous": 52.8,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-09-03",
+      "actual": 50.5,
+      "consensus": 50.7,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-09-23",
+      "actual": 51.4,
+      "consensus": 50.6,
+      "previous": 50.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-10-03",
+      "actual": 51.3,
+      "consensus": 51.4,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-10-24",
+      "actual": 52.6,
+      "consensus": 51.2,
+      "previous": 51.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-11-05",
+      "actual": 53,
+      "consensus": 52.6,
+      "previous": 52.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-11-21",
+      "actual": 53.1,
+      "consensus": 52.8,
+      "previous": 53,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-12-03",
+      "actual": 53.6,
+      "consensus": 53.1,
+      "previous": 53.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2025-12-16",
+      "actual": 52.6,
+      "consensus": 53.3,
+      "previous": 53.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-01-06",
+      "actual": 52.4,
+      "consensus": 52.6,
+      "previous": 52.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-01-23",
+      "actual": 51.9,
+      "consensus": 52.6,
+      "previous": 52.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-02-04",
+      "actual": 51.6,
+      "consensus": 51.9,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-02-20",
+      "actual": 51.8,
+      "consensus": 51.9,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-03-04",
+      "actual": 51.9,
+      "consensus": 51.8,
+      "previous": 51.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-03-24",
+      "actual": 50.1,
+      "consensus": 51.1,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-04-07",
+      "actual": 50.2,
+      "consensus": 50.1,
+      "previous": 50.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-04-23",
+      "actual": 47.4,
+      "consensus": 49.8,
+      "previous": 50.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-05-06",
+      "actual": 47.6,
+      "consensus": 47.4,
+      "previous": 47.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-05-21",
+      "actual": 46.4,
+      "consensus": 47.8,
+      "previous": 47.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-06-03",
+      "actual": 47.7,
+      "consensus": 46.4,
+      "previous": 46.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-06-23",
+      "actual": 48.9,
+      "consensus": 48.6,
+      "previous": 47.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-07-03",
+      "actual": 49.4,
+      "consensus": 48.9,
+      "previous": 48.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-07-24",
+      "actual": 51.6,
+      "consensus": 49.8,
+      "previous": 49.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-08-05",
+      "actual": 51.7,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "EUR",
+      "slotKey": "spmi",
+      "day": "2026-08-21",
+      "actual": 51.7,
+      "consensus": 51.5,
+      "previous": 51.7,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-09-01",
+      "actual": 47,
+      "consensus": 47.3,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-09-23",
+      "actual": 46.2,
+      "consensus": 47.1,
+      "previous": 47,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-10-01",
+      "actual": 46.2,
+      "consensus": 46.2,
+      "previous": 46.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-10-24",
+      "actual": 49.6,
+      "consensus": 46.6,
+      "previous": 46.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-11-03",
+      "actual": 49.7,
+      "consensus": 49.6,
+      "previous": 49.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-11-21",
+      "actual": 50.2,
+      "consensus": 49.3,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-12-01",
+      "actual": 50.2,
+      "consensus": 50.2,
+      "previous": 50.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2025-12-16",
+      "actual": 51.2,
+      "consensus": 50.3,
+      "previous": 50.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-01-02",
+      "actual": 50.6,
+      "consensus": 51.2,
+      "previous": 51.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-01-23",
+      "actual": 51.6,
+      "consensus": 50.6,
+      "previous": 50.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-02-02",
+      "actual": 51.8,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-02-20",
+      "actual": 52,
+      "consensus": 51.5,
+      "previous": 51.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-03-02",
+      "actual": 51.7,
+      "consensus": 52,
+      "previous": 52,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-03-24",
+      "actual": 51.4,
+      "consensus": 50,
+      "previous": 51.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 51,
+      "consensus": 51.4,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-04-23",
+      "actual": 53.6,
+      "consensus": 50.3,
+      "previous": 51,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-05-01",
+      "actual": 53.7,
+      "consensus": 53.6,
+      "previous": 53.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-05-21",
+      "actual": 53.7,
+      "consensus": 52.9,
+      "previous": 53.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 53.9,
+      "consensus": 53.7,
+      "previous": 53.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-06-23",
+      "actual": 53.1,
+      "consensus": 53.5,
+      "previous": 53.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-07-01",
+      "actual": 52.5,
+      "consensus": 53.1,
+      "previous": 53.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-07-24",
+      "actual": 52.8,
+      "consensus": 52,
+      "previous": 52.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-08-03",
+      "actual": 51.9,
+      "consensus": 52.8,
+      "previous": 52.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-08-21",
+      "actual": 51.5,
+      "consensus": 51.6,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 51.7,
+      "consensus": 51.5,
+      "previous": 51.5,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-09-03",
+      "actual": 54.2,
+      "consensus": 53.6,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-09-23",
+      "actual": 51.9,
+      "consensus": 53.4,
+      "previous": 54.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-10-03",
+      "actual": 50.8,
+      "consensus": 51.9,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-10-24",
+      "actual": 51.1,
+      "consensus": 51,
+      "previous": 50.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-11-05",
+      "actual": 52.3,
+      "consensus": 51.1,
+      "previous": 51.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-11-21",
+      "actual": 50.5,
+      "consensus": 51.9,
+      "previous": 52.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-12-03",
+      "actual": 51.3,
+      "consensus": 50.5,
+      "previous": 50.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2025-12-16",
+      "actual": 52.1,
+      "consensus": 51.6,
+      "previous": 51.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-01-06",
+      "actual": 51.4,
+      "consensus": 52.1,
+      "previous": 52.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-01-23",
+      "actual": 54.3,
+      "consensus": 51.7,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-02-04",
+      "actual": 54,
+      "consensus": 54.3,
+      "previous": 54.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-02-20",
+      "actual": 53.9,
+      "consensus": 53.5,
+      "previous": 54,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-03-04",
+      "actual": 53.9,
+      "consensus": 53.9,
+      "previous": 53.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-03-24",
+      "actual": 51.2,
+      "consensus": 52.8,
+      "previous": 53.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-04-07",
+      "actual": 50.5,
+      "consensus": 51.2,
+      "previous": 51.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-04-23",
+      "actual": 52,
+      "consensus": 50,
+      "previous": 50.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-05-06",
+      "actual": 52.7,
+      "consensus": 52,
+      "previous": 52,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-05-21",
+      "actual": 47.9,
+      "consensus": 51.7,
+      "previous": 52.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-06-03",
+      "actual": 49.3,
+      "consensus": 47.9,
+      "previous": 47.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-06-23",
+      "actual": 48.7,
+      "consensus": 50.1,
+      "previous": 49.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-07-03",
+      "actual": 48.8,
+      "consensus": 48.7,
+      "previous": 48.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-07-24",
+      "actual": 51.8,
+      "consensus": 49.4,
+      "previous": 48.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-08-05",
+      "actual": 52.1,
+      "consensus": 51.8,
+      "previous": 51.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "GBP",
+      "slotKey": "spmi",
+      "day": "2026-08-21",
+      "actual": 52.8,
+      "consensus": 51.8,
+      "previous": 52.1,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2025-09-23",
+      "actual": 48.4,
+      "consensus": 49.5,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2025-10-23",
+      "actual": 48.5,
+      "consensus": 48.4,
+      "previous": 48.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2025-11-20",
+      "actual": 48.3,
+      "consensus": 48.8,
+      "previous": 48.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2025-12-15",
+      "actual": 48.2,
+      "consensus": 48.3,
+      "previous": 48.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-01-22",
+      "actual": 48.8,
+      "consensus": 48.8,
+      "previous": 48.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-02-19",
+      "actual": 48.7,
+      "consensus": 48.8,
+      "previous": 48.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-03-01",
+      "actual": 49.7,
+      "consensus": 49,
+      "previous": 48.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-03-24",
+      "actual": 50,
+      "consensus": 49.7,
+      "previous": 49.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 51.5,
+      "consensus": 50.1,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-04-23",
+      "actual": 51.5,
+      "consensus": 51.5,
+      "previous": 51.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-05-01",
+      "actual": 52.8,
+      "consensus": 51.3,
+      "previous": 51.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-05-21",
+      "actual": 52.8,
+      "consensus": 51.3,
+      "previous": 52.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-06-22",
+      "actual": 53,
+      "consensus": 52.8,
+      "previous": 52.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-06-30",
+      "actual": 51.4,
+      "consensus": 53.2,
+      "previous": 53,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-07-23",
+      "actual": 51.4,
+      "consensus": 53.2,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-08-02",
+      "actual": 51.6,
+      "consensus": 51.6,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-08-21",
+      "actual": 51.6,
+      "consensus": 51.6,
+      "previous": 51.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 54.9,
+      "consensus": 55.1,
+      "previous": 55.1,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-05-07",
+      "actual": 51,
+      "consensus": 51.2,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-05-20",
+      "actual": 50,
+      "consensus": null,
+      "previous": 51,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-06-03",
+      "actual": 50,
+      "consensus": 50,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-06-22",
+      "actual": 51.8,
+      "consensus": null,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-07-02",
+      "actual": 52.2,
+      "consensus": 51.8,
+      "previous": 51.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-07-23",
+      "actual": 51.9,
+      "consensus": null,
+      "previous": 52.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-08-04",
+      "actual": 51.2,
+      "consensus": 51.9,
+      "previous": 51.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "JPY",
+      "slotKey": "spmi",
+      "day": "2026-08-21",
+      "actual": 52.3,
+      "consensus": 51.2,
+      "previous": 51.2,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2025-09-11",
+      "actual": 49.9,
+      "consensus": null,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2025-10-09",
+      "actual": 49.9,
+      "consensus": null,
+      "previous": 49.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2025-11-13",
+      "actual": 51.4,
+      "consensus": null,
+      "previous": 49.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2025-12-11",
+      "actual": 51.4,
+      "consensus": null,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-01-15",
+      "actual": 56.1,
+      "consensus": null,
+      "previous": 51.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-02-12",
+      "actual": 55.2,
+      "consensus": null,
+      "previous": 56.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-03-12",
+      "actual": 55,
+      "consensus": null,
+      "previous": 55.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-04-09",
+      "actual": 53.2,
+      "consensus": null,
+      "previous": 55,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-05-14",
+      "actual": 50.5,
+      "consensus": null,
+      "previous": 53.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-06-11",
+      "actual": 49.9,
+      "consensus": null,
+      "previous": 50.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-07-08",
+      "actual": 59.7,
+      "consensus": null,
+      "previous": 49.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "NZD",
+      "slotKey": "mpmi",
+      "day": "2026-08-14",
+      "actual": 54.3,
+      "consensus": 59.7,
+      "previous": 59.7,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2025-09-02",
+      "actual": 48.7,
+      "consensus": 49,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2025-10-01",
+      "actual": 49.1,
+      "consensus": 49,
+      "previous": 48.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2025-11-03",
+      "actual": 48.7,
+      "consensus": 49.4,
+      "previous": 49.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2025-12-01",
+      "actual": 48.2,
+      "consensus": 49,
+      "previous": 48.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-01-05",
+      "actual": 47.9,
+      "consensus": 48.3,
+      "previous": 48.2,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-02-02",
+      "actual": 52.6,
+      "consensus": 48.5,
+      "previous": 47.9,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-03-02",
+      "actual": 52.4,
+      "consensus": 51.7,
+      "previous": 52.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-04-01",
+      "actual": 52.7,
+      "consensus": 52.3,
+      "previous": 52.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-05-01",
+      "actual": 52.7,
+      "consensus": 53.1,
+      "previous": 52.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-06-01",
+      "actual": 54,
+      "consensus": 53.3,
+      "previous": 52.7,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-07-01",
+      "actual": 53.3,
+      "consensus": 53.8,
+      "previous": 54,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-08-03",
+      "actual": 55.6,
+      "consensus": 54,
+      "previous": 53.3,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "mpmi",
+      "day": "2026-09-01",
+      "actual": 54.6,
+      "consensus": 55.2,
+      "previous": 55.6,
+      "anchor": "heatmap"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2025-09-04",
+      "actual": 52,
+      "consensus": 50.9,
+      "previous": null,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2025-10-03",
+      "actual": 50,
+      "consensus": 51.8,
+      "previous": 52,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2025-11-05",
+      "actual": 52.4,
+      "consensus": 50.7,
+      "previous": 50,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2025-12-03",
+      "actual": 52.6,
+      "consensus": 52,
+      "previous": 52.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-01-07",
+      "actual": 54.4,
+      "consensus": 52.2,
+      "previous": 52.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-02-04",
+      "actual": 53.8,
+      "consensus": 53.5,
+      "previous": 54.4,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-03-04",
+      "actual": 56.1,
+      "consensus": 53.5,
+      "previous": 53.8,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-04-06",
+      "actual": 54,
+      "consensus": 54.8,
+      "previous": 56.1,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-05-05",
+      "actual": 53.6,
+      "consensus": 53.7,
+      "previous": 54,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-06-03",
+      "actual": 54.5,
+      "consensus": 53.7,
+      "previous": 53.6,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-07-06",
+      "actual": 54,
+      "consensus": 54.2,
+      "previous": 54.5,
+      "anchor": "axis-label"
+    },
+    {
+      "currency": "USD",
+      "slotKey": "spmi",
+      "day": "2026-08-05",
+      "actual": 54.1,
+      "consensus": 54.5,
+      "previous": 54,
+      "anchor": "heatmap"
+    }
+  ]
+}

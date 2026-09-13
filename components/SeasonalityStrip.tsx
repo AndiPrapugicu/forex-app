@@ -76,7 +76,7 @@ export function SeasonalityStrip({
       action={
         <Link
           href="/seasonality"
-          className="text-[10px] text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
+          className="text-micro text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
         >
           scanner
         </Link>
@@ -145,7 +145,7 @@ export function SeasonalityStrip({
         })}
       </div>
 
-      <p className="px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+      <p className="px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
         Current {kind === 'month' ? 'month' : kind === 'week' ? 'week' : 'day'} outlined; faded bars
         are below the sample floor.{' '}
         {kind !== 'week' && 'Percentages beneath are how often that bucket closed higher. '}

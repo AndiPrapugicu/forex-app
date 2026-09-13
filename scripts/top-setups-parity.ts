@@ -35,7 +35,7 @@ async function main() {
    * narrows the calendar fetch and loses scheduled events the frame could see.
    */
   const payload = await runSetupsPipeline(new Date(), { pricesAsOf: CAPTURED_AT });
-  const trimmed = asOf({ events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() }, CAPTURED_AT);
+  const trimmed = asOf({ events: payload.rewindPool, cot: payload.cot, bars: new Map(), seasonality: new Map() }, CAPTURED_AT);
   const matrix = buildSetupsMatrix({
     events: trimmed.events,
     cot: trimmed.cot,

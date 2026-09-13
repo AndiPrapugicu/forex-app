@@ -42,8 +42,8 @@ export default async function HeatmapPage({
   if (events.length === 0) {
     const calendar = health.find((h) => !h.ok);
     return (
-      <div className="px-4 py-4">
-        <h1 className="mb-4 text-lg font-bold">Economic Heatmap</h1>
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
+        <h1 className="mb-4 text-title font-semibold tracking-tight">Economic Heatmap</h1>
         <Panel title="Unavailable">
           <EmptyState message="Could not load calendar history" hint={calendar?.detail} />
         </Panel>

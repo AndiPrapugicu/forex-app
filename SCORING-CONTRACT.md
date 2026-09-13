@@ -115,6 +115,31 @@ report `null` and are not checked.
 | Provenance | `legs[].referenceLabel`, `consensusSource`, `actualSource` |
 | Historical | **HISTORICAL.** `asOf` drops releases dated after the cutoff |
 
+### PMI history (added 2026-09-13)
+
+FXStreet nulls the `actual` on historical non-USD PMI releases, so on any rewound date the EUR, GBP,
+JPY and AUD PMI legs had nothing to score. Two sources now fill that gap, in strict precedence:
+
+| | |
+|---|---|
+| **1. Observed actual** | any live or accumulated read (`actualSource` not `a1-capture`) — always wins |
+| **2. Seed** | `fixtures/derived/pmi-seed-2026-09-03.json`, built by `npm run build:pmi-seed` from the full-access PMI captures. `actualSource: 'a1-capture'`, confidence 65 |
+| Precedence | `dropSupersededSeed` removes a seed row once an observed actual exists for the same series on the same day or later. Applied per frame — in the pipeline and again inside `asOf` — so a rewind sees the seed that was the only reading on that day |
+| Accumulation | each pipeline run upserts observed PMI actuals into Supabase `events`; seed rows are never written back (no laundering an A1 number into our own history) |
+| Not seeded | CHF, CAD and NZD services PMI — A1 has no series of its own for them |
+| Provenance | a seeded cell is A1-sourced; `npm run parity` prints a second headline that excludes every such cell |
+
+---
+
+## Profiles (added 2026-09-13)
+
+`BoardProfile = 'ours' | 'a1'`, default `ours`. The product always builds `ours`.
+
+- `a1` applies `A1_COVERAGE` (`config/profiles.config.ts`) **after** scoring: A1's own proven data gaps,
+  each citing a ledger key — CHF services PMI substitutes EUR's, AUD retail sales is blank.
+- The scorer (`discrete.ts`) never sees the profile. An entry goes in only when a capture proves it.
+- `mirror-guardrail.test.ts` asserts that ingest, score history and the change log never build `a1`.
+
 ---
 
 ## Rates

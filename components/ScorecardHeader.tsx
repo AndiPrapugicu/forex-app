@@ -62,7 +62,7 @@ export function ScorecardHeader({
         value={symbol}
         onChange={(e) => router.push(`/scorecard/${e.target.value}`)}
         aria-label="Switch symbol"
-        className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 font-mono text-[11px] outline-none hover:border-[var(--color-border-bright)]"
+        className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 font-mono text-micro outline-none hover:border-[var(--color-border-bright)]"
       >
         {groups.map(([assetClass, list]) => (
           <optgroup key={assetClass} label={assetClass}>
@@ -100,7 +100,7 @@ export function ScorecardHeader({
             title={`${freshness.detail} Nothing else on this page is live.`}
           />
           {freshness.kind !== 'live' && (
-            <span className="self-center text-[10px] text-[var(--color-uncertain)]">
+            <span className="self-center text-micro text-[var(--color-uncertain)]">
               {freshness.label}
             </span>
           )}

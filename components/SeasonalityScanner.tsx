@@ -29,6 +29,7 @@ import {
 } from '@/lib/scoring/seasonality';
 import { SEASONALITY_YEARS } from '@/config/setups.config';
 import type { SymbolKind } from '@/config/symbols.config';
+import { PageHeader } from '@/components/primitives';
 import { EmptyState, Panel } from '@/components/ui';
 
 export interface SymbolSeasonality {
@@ -106,9 +107,9 @@ function BucketBars({
           return (
             <div key={key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
               <div className="flex h-24 w-full items-center justify-center">
-                <span className="text-[8px] text-[var(--color-faint)]">·</span>
+                <span className="text-micro text-[var(--color-faint)]">·</span>
               </div>
-              <span className="truncate text-[8px] text-[var(--color-faint)]">
+              <span className="truncate text-micro text-[var(--color-faint)]">
                 {bucketTick(kind, key)}
               </span>
             </div>
@@ -148,7 +149,7 @@ function BucketBars({
               />
             </div>
             <span
-              className={`truncate text-[8px] ${
+              className={`truncate text-micro ${
                 isCurrent ? 'font-bold text-[var(--color-text)]' : 'text-[var(--color-faint)]'
               }`}
             >
@@ -222,7 +223,7 @@ export function SeasonalityScanner({
 
   if (!active) {
     return (
-      <div className="px-4 py-4">
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
         <Panel title="Seasonality">
           <EmptyState message="No symbols with price history" />
         </Panel>
@@ -233,47 +234,43 @@ export function SeasonalityScanner({
   const strongest = Math.max(1, ...ranked.map((r) => Math.abs(r.bucket?.meanPct ?? 0)));
 
   return (
-    <div className="px-4 py-4">
-      <header className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <div>
-          <h1 className="text-lg font-bold">Seasonality</h1>
-          <p className="text-xs text-[var(--color-faint)]">
-            Average return per calendar bucket · up to {historyYears} years of daily bars
-            {missing > 0 && (
-              <span className="ml-2 text-[var(--color-uncertain)]">
-                · {missing} of {total} symbols have no history right now — Yahoo throttled the
-                first load. Reload; it is cached for a week once it lands.
-              </span>
-            )}
-          </p>
-        </div>
-
-        {/* Lookback. Applies to the scanner and all three charts at once. */}
-        <div className="ml-auto flex items-center gap-1">
-          <span className="mr-1 text-[10px] tracking-wide text-[var(--color-faint)] uppercase">
-            Lookback
-          </span>
-          {SEASONALITY_LOOKBACKS.map((years) => (
-            <button
-              key={years}
-              type="button"
-              onClick={() => setLookback(years)}
-              className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
-                lookback === years
-                  ? 'border-[var(--color-bull)] text-[var(--color-bull)]'
-                  : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
-              }`}
-              title={
-                years === SEASONALITY_YEARS
-                  ? 'The window the scorecard cell reads'
-                  : `${years}-year window — display only`
-              }
-            >
-              {years}y{years === SEASONALITY_YEARS ? ' ★' : ''}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
+      <PageHeader
+        title="Seasonality"
+        description={`Average return per calendar bucket · up to ${historyYears} years of daily bars`}
+        updated={
+          missing > 0
+            ? `${missing} of ${total} symbols have no history yet — Yahoo throttled the first load; reload`
+            : undefined
+        }
+        info={
+          <>
+            The scorecard&rsquo;s Seasonality cell reads the sign of the {SEASONALITY_YEARS}-year monthly average for
+            the current month. The lookback buttons are a reading aid and never change that cell. An average of ten
+            Augusts describes ten Augusts: read it with its win rate and sample count, not as a forecast.
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-1" role="group" aria-label="Lookback">
+            <span className="mr-1 text-caption text-[var(--color-faint)]">Lookback</span>
+            {SEASONALITY_LOOKBACKS.map((years) => (
+              <button
+                key={years}
+                type="button"
+                aria-pressed={lookback === years}
+                onClick={() => setLookback(years)}
+                className={`min-h-11 min-w-11 rounded-[var(--radius-control)] border px-2 text-small transition-colors md:min-h-9 ${
+                  lookback === years
+                    ? 'border-[var(--color-bull)] text-[var(--color-bull)]'
+                    : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
+                }`}
+              >
+                {years}y{years === SEASONALITY_YEARS ? ' ★' : ''}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         {/* --- Scanner ---------------------------------------------------- */}
@@ -290,7 +287,7 @@ export function SeasonalityScanner({
                     setScanKind(k.key);
                     setScanBucket(null);
                   }}
-                  className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                  className={`min-h-9 rounded px-2 text-caption transition-colors ${
                     scanKind === k.key
                       ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
                       : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -307,12 +304,12 @@ export function SeasonalityScanner({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter symbols"
-              className="w-32 rounded border border-[var(--color-border)] bg-transparent px-2 py-0.5 text-[11px] outline-none focus:border-[var(--color-border-bright)]"
+              className="min-h-11 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-small outline-none focus:border-[var(--color-border-bright)] md:min-h-9 md:w-32 md:flex-none"
             />
             <select
               value={activeBucket}
               onChange={(e) => setScanBucket(Number(e.target.value))}
-              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[11px] outline-none"
+              className="min-h-11 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-small outline-none md:min-h-9"
             >
               {allKeys(scanKind).map((key) => (
                 <option key={key} value={key}>
@@ -321,15 +318,15 @@ export function SeasonalityScanner({
                 </option>
               ))}
             </select>
-            <span className="ml-auto text-[10px] text-[var(--color-faint)]">
+            <span className="ml-auto text-micro text-[var(--color-faint)]">
               {ranked.length} symbols
             </span>
           </div>
 
-          <div className="max-h-[calc(100vh-16rem)] overflow-y-auto">
-            <table className="w-full text-[11px]">
-              <thead className="sticky top-0 z-10 bg-[var(--color-surface)]">
-                <tr className="text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+          <div className="max-h-[50dvh] overflow-y-auto xl:max-h-[calc(100dvh-16rem)]">
+            <table className="w-full text-small">
+              <thead className="table-head sticky top-0 z-10">
+                <tr className="text-caption font-semibold">
                   <th className="px-3 py-1.5 text-left">Symbol</th>
                   <th className="px-2 py-1.5 text-right">Avg</th>
                   <th className="w-20 px-2 py-1.5" />
@@ -350,9 +347,9 @@ export function SeasonalityScanner({
                         isSelected ? 'bg-[var(--color-surface-2)]' : 'hover:bg-[var(--color-surface-2)]/50'
                       }`}
                     >
-                      <td className="px-3 py-1 font-mono">{s.symbol}</td>
+                      <td className="px-3 py-2.5 md:py-1.5 font-mono">{s.symbol}</td>
                       <td
-                        className={`tnum px-2 py-1 text-right font-semibold ${
+                        className={`tnum px-2 py-2.5 md:py-1.5 text-right font-semibold ${
                           !bucket
                             ? 'text-[var(--color-faint)]'
                             : bucket.meanPct >= 0
@@ -362,7 +359,7 @@ export function SeasonalityScanner({
                       >
                         {bucket ? signed(bucket.meanPct) : '—'}
                       </td>
-                      <td className="px-2 py-1">
+                      <td className="px-2 py-2.5 md:py-1.5">
                         {/* Centre-anchored bar, so sign reads before magnitude. */}
                         <div className="relative h-1.5 w-full">
                           <div className="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--color-border)]" />
@@ -382,11 +379,11 @@ export function SeasonalityScanner({
                           )}
                         </div>
                       </td>
-                      <td className="tnum px-2 py-1 text-right text-[var(--color-muted)]">
+                      <td className="tnum px-2 py-2.5 md:py-1.5 text-right text-[var(--color-muted)]">
                         {bucket ? `${bucket.winRatePct}%` : '—'}
                       </td>
                       <td
-                        className={`tnum px-3 py-1 text-right ${
+                        className={`tnum px-3 py-2.5 md:py-1.5 text-right ${
                           bucket?.reliable ? 'text-[var(--color-faint)]' : 'text-[var(--color-uncertain)]'
                         }`}
                         title={bucket?.reliable ? undefined : 'Below the sample floor — not enough history to lean on'}
@@ -400,7 +397,7 @@ export function SeasonalityScanner({
             </table>
           </div>
 
-          <p className="border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+          <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
             Ranked by the average, not by conviction. A large average on a small
             <span className="text-[var(--color-uncertain)]"> n </span>
             is one year of history wearing a decade&rsquo;s clothes — those bars are drawn faded and
@@ -425,7 +422,7 @@ export function SeasonalityScanner({
                 }
                 action={
                   bucket ? (
-                    <span className="text-[10px] text-[var(--color-faint)]">
+                    <span className="text-micro text-[var(--color-faint)]">
                       {bucketName(k.key, here)} averages{' '}
                       <span
                         className={
@@ -437,7 +434,7 @@ export function SeasonalityScanner({
                       · higher {bucket.winRatePct}% of {bucket.samples}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-[var(--color-faint)]">
+                    <span className="text-micro text-[var(--color-faint)]">
                       no history for {bucketName(k.key, here)}
                     </span>
                   )
@@ -451,9 +448,8 @@ export function SeasonalityScanner({
                 ) : (
                   <>
                     <BucketBars kind={k.key} buckets={buckets} highlight={here} />
-                    <div className="px-3 pt-1 pb-2 text-[9px] text-[var(--color-faint)]">
-                      Current bucket outlined. Faded bars are below the sample floor. Hover any bar
-                      for its median, win rate, best and worst.
+                    <div className="px-3 pt-1 pb-2 text-micro text-[var(--color-faint)]">
+                      Current bucket outlined. Faded bars are below the sample floor. Tap the scanner to change symbol.
                     </div>
                   </>
                 )}
@@ -461,7 +457,7 @@ export function SeasonalityScanner({
             );
           })}
 
-          <p className="px-1 text-[10px] leading-relaxed text-[var(--color-faint)]">
+          <p className="px-1 text-micro leading-relaxed text-[var(--color-faint)]">
             The scorecard&rsquo;s Seasonality cell reads the SIGN of the {SEASONALITY_YEARS}-year
             monthly average for the current month, and nothing here changes it — the lookback
             buttons are a reading aid, not a setting. Bias bands in this app are absolute, so a cell

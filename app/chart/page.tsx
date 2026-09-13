@@ -61,8 +61,8 @@ export default async function ChartPage({
     payload = await runSetupsPipeline();
   } catch (error) {
     return (
-      <div className="px-4 py-4">
-        <h1 className="mb-4 text-lg font-bold">Chart</h1>
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
+        <h1 className="mb-4 text-title font-semibold tracking-tight">Chart</h1>
         <Panel title="Unavailable">
           <EmptyState
             message="Could not load setups"
@@ -88,8 +88,8 @@ export default async function ChartPage({
 
   if (!selected) {
     return (
-      <div className="px-4 py-4">
-        <h1 className="mb-4 text-lg font-bold">Chart</h1>
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
+        <h1 className="mb-4 text-title font-semibold tracking-tight">Chart</h1>
         <Panel title={`Nothing at ${minScore} or beyond`}>
           <EmptyState
             message={`No setup currently scores ±${minScore} or better`}

@@ -15,6 +15,7 @@
  *    look the same.
  */
 
+import { SetupsCards } from '@/components/SetupsCards';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { MATRIX_SLOTS, SCORING_SLOTS, SLOT_CATEGORIES, type SlotCategory } from '@/config/setups.config';
@@ -221,9 +222,11 @@ export function SetupsMatrix({
   rows,
   cotReportDate,
   mirror,
+  initialView = 'full',
 }: {
   rows: SymbolRow[];
   cotReportDate: string | null;
+  initialView?: ViewKey;
   /** Null when no capture of A1's board is on disk — the toggle then hides. */
   mirror?: MirrorOverlay | null;
 }) {
@@ -231,8 +234,28 @@ export function SetupsMatrix({
   const [category, setCategory] = useState<SlotCategory | 'all'>('all');
   const [sort, setSort] = useState<SortKey>('score');
   const [hideNeutral, setHideNeutral] = useState(false);
-  const [view, setView] = useState<ViewKey>('full');
+  const [view, setViewState] = useState<ViewKey>(initialView);
+  /**
+   * A view is a link: `/?view=macro` is the Macro Only board. `replaceState`
+   * rather than a router push, so switching views neither re-runs the server
+   * pipeline nor stacks history entries.
+   */
+  const setView = (next: ViewKey) => {
+    setViewState(next);
+    const url = new URL(window.location.href);
+    if (next === 'full') url.searchParams.delete('view');
+    else url.searchParams.set('view', next);
+    window.history.replaceState(null, '', url);
+  };
   const [mirrorOn, setMirrorOn] = useState(false);
+  /**
+   * CARDS OR GRID. Eighteen indicator columns cannot fit a phone, and A1 does
+   * not try. `null` means "follow the screen": cards below md, the grid above.
+   * An explicit choice overrides it, so a phone user who wants the grid can
+   * still scroll it sideways.
+   */
+  const [layout, setLayout] = useState<'cards' | 'grid' | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   /**
    * Mirror mode is PRESENTATION. It rewrites what this table shows and reaches
@@ -286,7 +309,7 @@ export function SetupsMatrix({
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* --- Controls -------------------------------------------------- */}
       <header className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] px-3 py-2.5">
-        <h2 className="text-[13px] font-semibold tracking-wide uppercase">Top Setups</h2>
+        <h2 className="text-small font-semibold tracking-wide uppercase">Top Setups</h2>
 
         <div className="mr-auto flex rounded border border-[var(--color-border)] p-0.5">
           {VIEWS.map((v) => (
@@ -295,7 +318,7 @@ export function SetupsMatrix({
               type="button"
               title={v.hint}
               onClick={() => setView(v.key)}
-              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+              className={`min-h-9 rounded px-3 text-caption transition-colors md:min-h-0 md:px-2 md:py-0.5 md:text-micro ${
                 view === v.key
                   ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -315,7 +338,7 @@ export function SetupsMatrix({
                 "what A1's own currency rows and country heatmaps publish."
               }
               onClick={() => setMirrorOn(false)}
-              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+              className={`min-h-9 rounded px-3 text-caption transition-colors md:min-h-0 md:px-2 md:py-0.5 md:text-micro ${
                 !mirrorOn
                   ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -334,7 +357,7 @@ export function SetupsMatrix({
                   : '')
               }
               onClick={() => setMirrorOn(true)}
-              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+              className={`min-h-9 rounded px-3 text-caption transition-colors md:min-h-0 md:px-2 md:py-0.5 md:text-micro ${
                 mirrorOn
                   ? 'bg-[var(--color-uncertain)]/20 text-[var(--color-uncertain)]'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -345,18 +368,37 @@ export function SetupsMatrix({
           </div>
         )}
 
+        <button
+          type="button"
+          aria-expanded={filtersOpen}
+          aria-controls="setups-filters"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="min-h-9 rounded border border-[var(--color-border)] px-3 text-caption text-[var(--color-muted)] md:hidden"
+        >
+          Filters{query || category !== 'all' || hideNeutral || sort !== 'score' ? ' •' : ''}
+        </button>
+
+        {/*
+          On a phone the four filters took most of the first screen before a
+          single symbol showed. They fold behind the button above; from md up
+          `md:contents` removes this wrapper and they sit inline as before.
+        */}
+        <div
+          id="setups-filters"
+          className={`${filtersOpen ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 md:contents`}
+        >
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search symbol"
-          className="w-32 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs outline-none focus:border-[var(--color-bull)]"
+          className="min-h-11 w-full rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-small outline-none focus:border-[var(--color-bull)] md:min-h-0 md:w-32 md:rounded md:px-2 md:py-1 md:text-caption"
         />
 
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value as SlotCategory | 'all')}
-          className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs outline-none"
+          className="min-h-11 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-small outline-none md:min-h-0 md:flex-none md:rounded md:py-1 md:text-caption"
         >
           <option value="all">All categories</option>
           {SLOT_CATEGORIES.map((c) => (
@@ -369,13 +411,13 @@ export function SetupsMatrix({
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs outline-none"
+          className="min-h-11 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 text-small outline-none md:min-h-0 md:flex-none md:rounded md:py-1 md:text-caption"
         >
           <option value="score">Sort by score</option>
           <option value="symbol">Sort by symbol</option>
         </select>
 
-        <label className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+        <label className="flex min-h-11 items-center gap-2 text-small text-[var(--color-muted)] md:min-h-0 md:text-caption">
           <input
             type="checkbox"
             checked={hideNeutral}
@@ -384,11 +426,42 @@ export function SetupsMatrix({
           />
           Exclude neutral
         </label>
+        </div>
+
+        <div className="flex rounded border border-[var(--color-border)] p-0.5 md:hidden" role="group" aria-label="Layout">
+          {(['cards', 'grid'] as const).map((l) => {
+            const active = (layout ?? 'cards') === l;
+            return (
+              <button
+                key={l}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setLayout(l)}
+                className={`min-h-9 rounded px-3 text-caption capitalize ${
+                  active ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]' : 'text-[var(--color-muted)]'
+                }`}
+              >
+                {l}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
+      {/* --- Cards: the default on a phone ------------------------------ */}
+      <div className={layout === 'grid' ? 'hidden' : layout === 'cards' ? 'block md:hidden' : 'block md:hidden'}>
+        <SetupsCards
+          rows={filtered}
+          slots={visibleSlots}
+          mirrorCells={mirrorOn && mirror ? mirror.cells : undefined}
+        />
+      </div>
+
       {/* --- Matrix ------------------------------------------------------ */}
-      <div className="max-h-[calc(100vh-13rem)] overflow-auto">
-        <table className="w-full border-separate border-spacing-0 text-center text-[11px]">
+      <div
+        className={`${layout === 'grid' ? 'block' : 'hidden md:block'} max-h-[calc(100dvh-13rem)] overflow-auto`}
+      >
+        <table className="w-full border-separate border-spacing-0 text-center text-micro">
           <thead className="sticky top-0 z-30 bg-[var(--color-surface)]">
             {/* Category band */}
             <tr>
@@ -404,7 +477,7 @@ export function SetupsMatrix({
                   <th
                     key={cat.key}
                     colSpan={span}
-                    className="border-b border-l border-[var(--color-border)] px-2 py-1 text-[9px] font-semibold tracking-wider text-[var(--color-faint)] uppercase"
+                    className="border-b border-l border-[var(--color-border)] px-2 py-1 text-micro font-semibold tracking-wider text-[var(--color-faint)] uppercase"
                   >
                     {cat.label}
                   </th>
@@ -415,19 +488,19 @@ export function SetupsMatrix({
             <tr>
               <th
                 style={{ left: STICKY_LEFT.symbol, width: STICKY.symbol, minWidth: STICKY.symbol }}
-                className="sticky z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]"
+                className="sticky z-20 border-b border-[var(--color-border)] table-head px-2 py-1.5 text-left text-micro font-semibold"
               >
                 Symbol
               </th>
               <th
                 style={{ left: STICKY_LEFT.score, width: STICKY.score, minWidth: STICKY.score }}
-                className="sticky z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1 py-1.5 text-[10px] font-semibold text-[var(--color-faint)]"
+                className="sticky z-20 border-b border-[var(--color-border)] table-head px-1 py-1.5 text-micro font-semibold"
               >
                 Score
               </th>
               <th
                 style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
-                className="sticky z-20 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-[10px] font-semibold text-[var(--color-faint)]"
+                className="sticky z-20 border-r border-b border-[var(--color-border)] table-head px-2 py-1.5 text-left text-micro font-semibold"
               >
                 Bias
               </th>
@@ -443,14 +516,14 @@ export function SetupsMatrix({
                      header text sizes each one and the grid comes out ragged —
                      "Crowd Sentiment" was three times the width of "COT". */
                   style={{ width: INDICATOR_COL_WIDTH, minWidth: INDICATOR_COL_WIDTH }}
-                  className={`border-b border-[var(--color-border)] px-0.5 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)] ${
+                  className={`border-b border-[var(--color-border)] table-head px-0.5 py-1.5 text-center text-micro leading-tight font-semibold ${
                     // A context column has to be tellable from a scoring one at a
                     // glance, or the row's total looks like it does not add up.
                     slot.scoring ? '' : 'italic opacity-60'
                   }`}
                 >
                   {slot.label}
-                  {!slot.scoring && <span className="align-super text-[7px]">°</span>}
+                  {!slot.scoring && <span className="align-super text-micro">°</span>}
                 </th>
               ))}
 
@@ -461,7 +534,7 @@ export function SetupsMatrix({
                     key={cat.key}
                     title={cat.label}
                     style={{ minWidth: 78 }}
-                    className="border-b border-[var(--color-border)] px-2 py-1.5 text-center text-[9px] leading-tight font-medium text-[var(--color-faint)]"
+                    className="table-head border-b border-[var(--color-border)] px-2 py-1.5 text-center text-micro leading-tight font-semibold"
                   >
                     {cat.label.split(' ')[0]}
                   </th>
@@ -478,7 +551,7 @@ export function SetupsMatrix({
                 >
                   <Link
                     href={`/scorecard/${row.symbol}`}
-                    className="font-mono text-[11px] font-medium text-[var(--color-text)] hover:text-[var(--color-bull)] hover:underline"
+                    className="font-mono text-micro font-medium text-[var(--color-text)] hover:text-[var(--color-bull)] hover:underline"
                   >
                     {row.symbol}
                   </Link>
@@ -498,10 +571,10 @@ export function SetupsMatrix({
                   style={{ left: STICKY_LEFT.bias, width: STICKY.bias, minWidth: STICKY.bias }}
                   className="sticky z-10 border-r border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-left whitespace-nowrap group-hover:bg-[var(--color-surface-2)]"
                 >
-                  <span className={`text-[10px] ${BIAS_STYLE[row.bias]}`}>{row.bias}</span>
+                  <span className={`text-micro ${BIAS_STYLE[row.bias]}`}>{row.bias}</span>
                   {/* Populated count keeps a thin row from reading as confident. */}
                   <span
-                    className="ml-1.5 text-[9px] text-[var(--color-faint)]"
+                    className="ml-1.5 text-micro text-[var(--color-faint)]"
                     title={`${row.populated} of ${SCORING_SLOTS.length} scored indicators resolved completely`}
                   >
                     {row.populated}
@@ -514,7 +587,7 @@ export function SetupsMatrix({
                   */}
                   {row.partial > 0 && (
                     <span
-                      className="ml-1 text-[9px] text-[var(--color-uncertain)]"
+                      className="ml-1 text-micro text-[var(--color-uncertain)]"
                       title={`${row.partial} cell(s) built from one leg because the other was expected and did not arrive`}
                     >
                       +{row.partial}◐
@@ -577,23 +650,23 @@ export function SetupsMatrix({
       </div>
 
       {filtered.length === 0 && (
-        <p className="px-4 py-8 text-center text-xs text-[var(--color-muted)]">
+        <p className="px-4 py-8 text-center text-small text-[var(--color-muted)]">
           No symbols match the current filters.
         </p>
       )}
 
-      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-3 py-2 text-[10px] text-[var(--color-faint)]">
+      <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t md:flex border-[var(--color-border)] px-3 py-2 text-micro text-[var(--color-faint)]">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgba(58,122,224,0.55)' }} />
+          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bull-cell-rgb) / 55%)' }} />
           bullish
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgba(242,80,110,0.55)' }} />
+          <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bear-cell-rgb) / 55%)' }} />
           bearish
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-4 rounded-sm bg-[var(--color-surface-2)]/40" />
-          stale — outside its freshness window, not scored
+          faded — older than its usual release cadence, still counted
         </span>
         <span>blank = not published for that currency</span>
         {/* Only meaningful while some column is carried but not scored. */}

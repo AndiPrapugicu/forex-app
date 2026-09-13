@@ -73,7 +73,7 @@ export function ChangeLog({ changes }: { changes: ScoreChange[] }) {
     <section className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[var(--color-border)] px-3 py-2">
         <h2 className="text-xs font-semibold">Changed since the last run</h2>
-        <span className="text-[10px] text-[var(--color-faint)]">
+        <span className="text-micro text-[var(--color-faint)]">
           {changes.length} {changes.length === 1 ? 'symbol' : 'symbols'}
           {/* An absolute clock time rather than "11m ago": the age depends on
               when you look, which would make this component impure and desync
@@ -82,7 +82,7 @@ export function ChangeLog({ changes }: { changes: ScoreChange[] }) {
         </span>
         {/* The count that answers "did the board move, or did a feed break?" */}
         {suspect > 0 && (
-          <span className="text-[10px] text-[var(--color-uncertain)]">
+          <span className="text-micro text-[var(--color-uncertain)]">
             {suspect} moved because a source went missing, not because the data changed
           </span>
         )}
@@ -90,7 +90,7 @@ export function ChangeLog({ changes }: { changes: ScoreChange[] }) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="ml-auto text-[10px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+            className="ml-auto text-micro text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
           >
             {expanded ? 'Show less' : `Show all ${changes.length}`}
           </button>
@@ -103,7 +103,7 @@ export function ChangeLog({ changes }: { changes: ScoreChange[] }) {
           return (
             <li
               key={change.symbol}
-              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-1.5 text-[11px]"
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-1.5 text-micro"
             >
               <span className="w-20 font-semibold">{change.symbol}</span>
 
@@ -130,7 +130,7 @@ export function ChangeLog({ changes }: { changes: ScoreChange[] }) {
               {/* Everything else that moved, for the reader who wants the rest. */}
               {change.cells.length > 1 && (
                 <span
-                  className="ml-auto text-[10px] text-[var(--color-faint)]"
+                  className="ml-auto text-micro text-[var(--color-faint)]"
                   title={change.cells
                     .map((c) => `${label(c.slotKey)} ${cellMove(c)}`)
                     .join('\n')}

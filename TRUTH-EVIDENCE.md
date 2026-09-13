@@ -72,6 +72,23 @@ strongest single piece of evidence that the transformation is right.
 
 ---
 
+## Verified 2026-09-13, full-access era
+
+| # | Component | Cur | Our input | A1 | Independent source | Tier | Verdict |
+|---|---|---|---|---|---|---|---|
+| 7 | Retail Sales | CAD | June **+0.6%** (core +1.2%) | heatmap **−0.8** | StatCan, *The Daily*, 2026-08-21: June +0.6%, core +1.2%, **July advance estimate −0.8%** | 1 | **DIFFERENT RELEASE, BOTH REAL** |
+| 8 | Services PMI | CHF | none — no Swiss services PMI series exists | byte-identical to EUR on 24 of 24 points | A1's own two captures | 4 | **A1 SUBSTITUTES EUR** — mirrored in the `a1` profile only |
+| 9 | Metals trend | XAG, XPT, XAU | Yahoo front-month futures | SMA100 states differ | roll-free ETFs SLV −4.11%, PPLT −2.73%, GLD +0.28% vs futures −5.11%, −2.89%, −0.25% | 2 | **UNKNOWN** — not a futures-roll artefact; no change |
+
+### 7. CAD retail — A1 reads the flash, we read the final
+
+A1's −0.8 is StatCan's advance estimate for July, published inside the June release. We score the
+confirmed June figure. Neither is wrong; they are two different numbers from the same release, and
+the confirmed one is the better reading. The scanner's −0.10% on A1's other surface matches neither
+and is unexplained. Ledger `retail:cad-a1-heatmap-is-the-statcan-advance-estimate`.
+
+---
+
 ## Not established — do not guess
 
 | Item | Why it is open | What would close it |

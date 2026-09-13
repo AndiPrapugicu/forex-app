@@ -47,7 +47,7 @@ async function boardAt(dateIso: string): Promise<Map<string, number>> {
    * so a real day-to-day move in the technicals could not show up here at all.
    */
   const payload = await runSetupsPipeline(new Date(), { pricesAsOf: at });
-  const trimmed = asOf({ events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() }, at);
+  const trimmed = asOf({ events: payload.rewindPool, cot: payload.cot, bars: new Map(), seasonality: new Map() }, at);
   const matrix = buildSetupsMatrix({
     events: trimmed.events,
     cot: trimmed.cot,

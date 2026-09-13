@@ -42,7 +42,7 @@ export function CurrencyStrengthPanel({ strengths }: { strengths: CurrencyStreng
               {/* Contributor count is the honesty column: a big score off one
                   event should not read the same as one off six. */}
               <span
-                className="tnum w-14 text-right text-[11px] text-[var(--color-faint)]"
+                className="tnum w-14 text-right text-micro text-[var(--color-faint)]"
                 title={`${s.contributors} scored release${s.contributors === 1 ? '' : 's'}, confidence ${s.confidence}`}
               >
                 {s.contributors === 0 ? 'no data' : `${s.contributors}ev · ${s.confidence}`}
@@ -89,7 +89,7 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
               <tr>
                 <th className="w-10" />
                 {MAJORS.map((c) => (
-                  <th key={c} className="pb-1 font-mono text-[10px] font-semibold text-[var(--color-faint)]">
+                  <th key={c} className="pb-1 font-mono text-micro font-semibold text-[var(--color-faint)]">
                     {c}
                   </th>
                 ))}
@@ -98,7 +98,7 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
             <tbody>
               {MAJORS.map((base) => (
                 <tr key={base}>
-                  <td className="pr-1 text-right font-mono text-[10px] font-semibold text-[var(--color-faint)]">
+                  <td className="pr-1 text-right font-mono text-micro font-semibold text-[var(--color-faint)]">
                     {base}
                   </td>
                   {MAJORS.map((quote) => {
@@ -109,7 +109,7 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
                     }
                     if (!c) {
                       return (
-                        <td key={quote} className="h-8 rounded bg-[var(--color-surface-2)]/40 text-[10px] text-[var(--color-faint)]">
+                        <td key={quote} className="h-8 rounded bg-[var(--color-surface-2)]/40 text-micro text-[var(--color-faint)]">
                           —
                         </td>
                       );
@@ -129,7 +129,7 @@ export function PairMatrix({ strengths }: { strengths: CurrencyStrength[] }) {
                     return (
                       <td
                         key={quote}
-                        className="tnum h-8 rounded text-[11px] font-semibold"
+                        className="tnum h-8 rounded text-micro font-semibold"
                         style={{
                           backgroundColor: `rgb(${rgb} / ${(0.08 + intensity * 0.42) * 100}%)`,
                           color: intensity > 0.35 ? `rgb(${rgb})` : 'var(--color-muted)',
@@ -176,7 +176,7 @@ export function TrackedPairsPanel({ pairs }: { pairs: PairScore[] }) {
                 </span>
               </div>
               <ScoreBar score={p.score} direction={p.direction} confidence={p.confidence} width={100} height={6} />
-              <span className="text-[10px] text-[var(--color-faint)]">
+              <span className="text-micro text-[var(--color-faint)]">
                 {p.confidence === 0 ? 'no data' : p.direction === 'uncertain' ? 'uncertain' : `conf ${p.confidence}`}
               </span>
             </Link>

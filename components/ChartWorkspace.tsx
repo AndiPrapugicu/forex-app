@@ -53,22 +53,22 @@ function CheckRow({ check }: { check: Check }) {
 
   return (
     <div className="flex gap-2.5 border-b border-[var(--color-border)]/60 px-4 py-2 last:border-b-0">
-      <span className={`w-3 shrink-0 text-center text-[12px] leading-5 font-bold ${tone}`}>
+      <span className={`w-3 shrink-0 text-center text-caption leading-5 font-bold ${tone}`}>
         {mark}
       </span>
       <div className="min-w-0">
-        <div className="text-[11px] font-medium">
+        <div className="text-micro font-medium">
           {check.label}
           {check.href && (
             <Link
               href={check.href}
-              className="ml-2 text-[10px] font-normal text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
+              className="ml-2 text-micro font-normal text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
             >
               open
             </Link>
           )}
         </div>
-        <p className="text-[10px] leading-relaxed text-[var(--color-faint)]">{check.detail}</p>
+        <p className="text-micro leading-relaxed text-[var(--color-faint)]">{check.detail}</p>
       </div>
     </div>
   );
@@ -107,10 +107,10 @@ export function ChartWorkspace({
   const dp = view ? (view.price >= 1000 ? 1 : view.price >= 10 ? 3 : 5) : 5;
 
   return (
-    <div className="px-4 py-4">
+    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
       <header className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-2">
         <div>
-          <h1 className="text-lg leading-tight font-bold">
+          <h1 className="text-title leading-tight font-semibold tracking-tight">
             {row.symbol} <span className="text-sm font-normal text-[var(--color-faint)]">{label}</span>
           </h1>
           <p className="text-xs text-[var(--color-faint)]">
@@ -123,12 +123,12 @@ export function ChartWorkspace({
             {row.totalScore > 0 ? '+' : ''}
             {row.totalScore}
           </span>
-          <span className="text-[11px] font-semibold">{row.bias}</span>
+          <span className="text-micro font-semibold">{row.bias}</span>
         </div>
 
-        <nav className="ml-auto flex items-center gap-3 text-[11px]">
+        <nav className="ml-auto flex items-center gap-3 text-micro">
           <span className="flex items-center gap-1">
-            <span className="text-[9px] tracking-wider text-[var(--color-faint)] uppercase">Min</span>
+            <span className="text-micro tracking-wider text-[var(--color-faint)] uppercase">Min</span>
             {CONVICTION_LEVELS.map((level) => (
               <Link
                 key={level}
@@ -176,7 +176,7 @@ export function ChartWorkspace({
       */}
       <div className="mb-4 flex flex-wrap gap-1.5">
         {candidates.length === 0 && (
-          <span className="text-[11px] text-[var(--color-faint)]">
+          <span className="text-micro text-[var(--color-faint)]">
             Nothing else at ±{minScore} right now.
           </span>
         )}
@@ -184,7 +184,7 @@ export function ChartWorkspace({
           <Link
             key={c.symbol}
             href={href({ symbol: c.symbol, tf: timeframe, min: minScore })}
-            className={`flex items-baseline gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition-colors ${
+            className={`flex items-baseline gap-1.5 rounded-lg border px-2 py-1 text-micro transition-colors ${
               c.symbol === row.symbol
                 ? 'border-[var(--color-bull)]/60 bg-[var(--color-surface-2)]'
                 : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-muted)]/50'
@@ -250,9 +250,9 @@ export function ChartWorkspace({
                   hint="Nothing lines up within reach of price."
                 />
               ) : (
-                <table className="w-full text-right text-[11px]">
+                <table className="w-full text-right text-micro">
                   <thead>
-                    <tr className="border-b border-[var(--color-border)] text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+                    <tr className="border-b border-[var(--color-border)] text-micro tracking-wider text-[var(--color-faint)] uppercase">
                       <th className="px-3 py-2 text-left">Level</th>
                       <th className="px-2 py-2 text-left">Side</th>
                       <th className="px-2 py-2">Away</th>
@@ -270,7 +270,7 @@ export function ChartWorkspace({
                           {z.price.toFixed(dp)}
                         </td>
                         <td
-                          className={`px-2 py-1.5 text-left text-[10px] ${
+                          className={`px-2 py-1.5 text-left text-micro ${
                             z.side === 'support'
                               ? 'text-[var(--color-bull)]'
                               : 'text-[var(--color-bear)]'
@@ -285,7 +285,7 @@ export function ChartWorkspace({
                         <td className="tnum px-2 py-1.5 text-[var(--color-faint)]">
                           {z.distanceAtr.toFixed(1)}
                         </td>
-                        <td className="px-3 py-1.5 text-left text-[10px] text-[var(--color-muted)]">
+                        <td className="px-3 py-1.5 text-left text-micro text-[var(--color-muted)]">
                           {z.sources.map((s) => s.label).join(' · ')}
                         </td>
                       </tr>
@@ -293,7 +293,7 @@ export function ChartWorkspace({
                   </tbody>
                 </table>
               )}
-              <p className="border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+              <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
                 Distances are in ATR as well as percent because percent is not
                 comparable across symbols — 0.3% is most of a day in EURUSD and a
                 fifth of one in gold. A level needs two independent sources to be
@@ -311,11 +311,11 @@ export function ChartWorkspace({
           >
             <div className="border-b border-[var(--color-border)] px-4 py-2.5">
               {alignment.failures.length === 0 ? (
-                <p className="text-[11px] text-[var(--color-bull)]">
+                <p className="text-micro text-[var(--color-bull)]">
                   Everything measurable points the same way.
                 </p>
               ) : (
-                <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
+                <p className="text-micro leading-relaxed text-[var(--color-muted)]">
                   <span className="font-semibold text-[var(--color-bear)]">Disagreeing:</span>{' '}
                   {alignment.failures.map((f) => f.label.toLowerCase()).join('; ')}.
                 </p>
@@ -333,7 +333,7 @@ export function ChartWorkspace({
               support. A count, and the names of what disagrees, is what the
               evidence licenses.
             */}
-            <p className="border-t border-[var(--color-border)] px-4 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+            <p className="border-t border-[var(--color-border)] px-4 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
               A count of conditions, not a grade or a probability. The conditions are
               unweighted — any weighting would be invented. Not financial advice.
             </p>
@@ -343,7 +343,7 @@ export function ChartWorkspace({
 
           {view?.structure.latest && (
             <Panel title="Structure" subtitle="What broke, and where it left the level">
-              <div className="px-4 py-3 text-[11px] leading-relaxed">
+              <div className="px-4 py-3 text-micro leading-relaxed">
                 <p>
                   <span
                     className={
@@ -398,7 +398,7 @@ export function ChartWorkspace({
               <button
                 type="button"
                 onClick={() => setShowTradingView(false)}
-                className="rounded border border-[var(--color-border)] px-2 py-1 text-[10px] text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                className="rounded border border-[var(--color-border)] px-2 py-1 text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]"
               >
                 Hide
               </button>
@@ -421,7 +421,7 @@ export function ChartWorkspace({
               13px, not folded into the 10px note below it, and it is not
               conditional on anything.
             */}
-            <p className="border-t border-[var(--color-border)] px-4 pt-2 text-[13px] text-[var(--color-muted)]">
+            <p className="border-t border-[var(--color-border)] px-4 pt-2 text-small text-[var(--color-muted)]">
               Chart by{' '}
               <a
                 href="https://www.tradingview.com/"
@@ -432,7 +432,7 @@ export function ChartWorkspace({
                 TradingView
               </a>
             </p>
-            <p className="px-4 pb-2 text-[10px] text-[var(--color-faint)]">
+            <p className="px-4 pb-2 text-micro text-[var(--color-faint)]">
               Their free widget has no API for custom horizontal lines, so the levels
               above cannot be drawn on it — use this one for drawing by hand, and the
               chart above for our read.
@@ -442,7 +442,7 @@ export function ChartWorkspace({
           <button
             type="button"
             onClick={() => setShowTradingView(true)}
-            className="w-full rounded-xl border border-dashed border-[var(--color-border)] px-4 py-3 text-[11px] text-[var(--color-muted)] transition-colors hover:border-[var(--color-muted)]/60 hover:text-[var(--color-text)]"
+            className="w-full rounded-xl border border-dashed border-[var(--color-border)] px-4 py-3 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-muted)]/60 hover:text-[var(--color-text)]"
           >
             Open the TradingView chart for {row.symbol} — third-party frame, loads on click
           </button>

@@ -3,9 +3,10 @@
 /**
  * The Scorecard tab: every asset, grouped, with a live price.
  *
- * Deliberately a table and not a grid of cards. Fifty-one cards is a scroll;
- * fifty-one rows sorted by conviction is a board you read in one pass, which is
- * what this page is for.
+ * Deliberately a table and not a grid of cards on a monitor. Fifty-one cards is
+ * a scroll; fifty-one rows sorted by conviction is a board you read in one pass,
+ * which is what this page is for. On a phone `DataTable` turns each row into a
+ * card anyway, because five columns do not fit 375px.
  *
  * PRICES POLL, SCORES DO NOT. The score, bias and column count are computed
  * server-side from closed bars and a weekly COT file; only the price and its
@@ -18,13 +19,9 @@ import Link from 'next/link';
 import { maxScoreForKind } from '@/config/setups.config';
 import type { SymbolKind } from '@/config/symbols.config';
 import { freshnessOf, useLiveQuotes } from '@/lib/hooks/useLiveQuotes';
-import {
-  Panel,
-  changeColor,
-  formatChangePct,
-  formatPrice,
-  formatScore,
-} from '@/components/ui';
+import { DataTable, type Column } from '@/components/DataTable';
+import { PageHeader } from '@/components/primitives';
+import { Panel, changeColor, formatChangePct, formatPrice, formatScore } from '@/components/ui';
 
 export interface ScorecardEntry {
   symbol: string;
@@ -40,21 +37,12 @@ export interface ScorecardEntry {
 }
 
 const BIAS_TONE: Record<string, string> = {
-  'Very Bullish': 'text-[var(--color-bull)]',
+  'Very Bullish': 'text-[var(--color-bull)] font-semibold',
   Bullish: 'text-[var(--color-bull)]',
   Neutral: 'text-[var(--color-muted)]',
   Bearish: 'text-[var(--color-bear)]',
-  'Very Bearish': 'text-[var(--color-bear)]',
+  'Very Bearish': 'text-[var(--color-bear)] font-semibold',
 };
-
-type SortKey = 'conviction' | 'score' | 'symbol' | 'change';
-
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: 'conviction', label: 'Conviction' },
-  { key: 'score', label: 'Score' },
-  { key: 'change', label: 'Day change' },
-  { key: 'symbol', label: 'A–Z' },
-];
 
 export function ScorecardIndex({
   entries,
@@ -66,56 +54,86 @@ export function ScorecardIndex({
   generatedAtUtc: string;
 }) {
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortKey>('conviction');
   const [live, setLive] = useState(true);
 
   const symbols = useMemo(() => entries.map((e) => e.symbol), [entries]);
   const quotes = useLiveQuotes(symbols, live);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toUpperCase();
-    return entries.filter(
-      (e) => !q || e.symbol.includes(q) || e.label.toUpperCase().includes(q),
-    );
-  }, [entries, query]);
-
   const groups = useMemo(() => {
+    const q = query.trim().toUpperCase();
     const out = new Map<string, ScorecardEntry[]>();
-    for (const e of filtered) {
+    for (const e of entries) {
+      if (q && !e.symbol.includes(q) && !e.label.toUpperCase().includes(q)) continue;
       const list = out.get(e.assetClass) ?? [];
       list.push(e);
       out.set(e.assetClass, list);
     }
-
-    for (const list of out.values()) {
-      list.sort((a, b) => {
-        switch (sort) {
-          case 'score':
-            return b.totalScore - a.totalScore;
-          case 'symbol':
-            return a.symbol.localeCompare(b.symbol);
-          case 'change': {
-            const av = quotes.get(a.symbol)?.changePct ?? a.changePct ?? 0;
-            const bv = quotes.get(b.symbol)?.changePct ?? b.changePct ?? 0;
-            return bv - av;
-          }
-          default:
-            // Conviction is DISTANCE FROM ZERO, so a -11 ranks with a +11.
-            // Sorting by the raw score buries every short at the bottom.
-            return Math.abs(b.totalScore) - Math.abs(a.totalScore);
-        }
-      });
-    }
-
     return classOrder.filter((c) => out.has(c)).map((c) => [c, out.get(c)!] as const);
-  }, [filtered, sort, classOrder, quotes]);
+  }, [entries, query, classOrder]);
+
+  const columns = useMemo<Column<ScorecardEntry>[]>(
+    () => [
+      {
+        key: 'symbol',
+        label: 'Symbol',
+        align: 'left',
+        sticky: true,
+        hideOnCards: true,
+        sortValue: (e) => e.symbol,
+        defaultDir: 'asc',
+        render: (e) => (
+          <Link href={`/scorecard/${e.symbol}`} className="block hover:text-[var(--color-bull)]">
+            <span className="font-mono font-semibold">{e.symbol}</span>
+            <span className="ml-1.5 text-caption text-[var(--color-faint)]">{e.label}</span>
+          </Link>
+        ),
+      },
+      {
+        key: 'price',
+        label: 'Price',
+        render: (e) => {
+          const price = quotes.get(e.symbol)?.price ?? e.price;
+          return price === null ? <span className="text-[var(--color-faint)]">—</span> : formatPrice(price);
+        },
+      },
+      {
+        key: 'change',
+        label: 'Day',
+        sortValue: (e) => quotes.get(e.symbol)?.changePct ?? e.changePct,
+        render: (e) => {
+          const change = quotes.get(e.symbol)?.changePct ?? e.changePct;
+          return <span className={changeColor(change)}>{formatChangePct(change)}</span>;
+        },
+      },
+      {
+        key: 'conviction',
+        label: 'Score',
+        explain:
+          'Sorted by distance from zero, so a −11 ranks with a +11. Bias bands are absolute: a ±34 pair and a ±20 single-economy asset both turn Bullish at +4.',
+        // Conviction is DISTANCE FROM ZERO; sorting by the raw score buries every short at the bottom.
+        sortValue: (e) => Math.abs(e.totalScore),
+        render: (e) => (
+          <span className={`font-bold ${BIAS_TONE[e.bias] ?? ''}`}>
+            {formatScore(e.totalScore)}
+            <span className="ml-1 text-micro font-normal text-[var(--color-faint)]">/±{maxScoreForKind(e.kind)}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'bias',
+        label: 'Bias',
+        hideOnCards: true,
+        render: (e) => <span className={`whitespace-nowrap ${BIAS_TONE[e.bias] ?? ''}`}>{e.bias}</span>,
+      },
+    ],
+    [quotes],
+  );
 
   /**
    * This board mixes asset classes, so it mixes freshness: the FX rows are
    * seconds old while gold, copper, WTI and DXY are exactly ten minutes behind
    * and the European indices fifteen. One badge cannot honestly speak for all
-   * of them, so it reports how many are genuinely current and says the rest are
-   * delayed rather than implying the whole board is live.
+   * of them, so it reports how many are genuinely current.
    */
   const liveCount = useMemo(
     () => [...quotes.values()].filter((q) => freshnessOf(q).kind === 'live').length,
@@ -125,135 +143,65 @@ export function ScorecardIndex({
   const allLive = anyLive && liveCount === quotes.size;
 
   return (
-    <div className="px-4 py-4">
-      <header className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <div>
-          <h1 className="text-lg font-bold">Asset scorecard</h1>
-          <p className="text-xs text-[var(--color-faint)]">
-            Every asset, its score and what it is doing right now
-          </p>
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter"
-            className="w-28 rounded border border-[var(--color-border)] bg-transparent px-2 py-0.5 text-[11px] outline-none focus:border-[var(--color-border-bright)]"
-          />
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setSort(s.key)}
-              className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-                sort === s.key
-                  ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setLive((on) => !on)}
-            aria-pressed={live}
-            className="flex items-center gap-1.5 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
-          >
-            <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${
-                live && allLive
-                  ? 'animate-pulse bg-[var(--color-bull)]'
-                  : live
-                    ? 'bg-[var(--color-uncertain)]'
-                    : 'bg-[var(--color-faint)]'
-              }`}
+    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
+      <PageHeader
+        title="Asset Scorecard"
+        description="Every asset, its score and what it is doing right now"
+        updated={`Scores computed ${generatedAtUtc.slice(11, 16)} UTC`}
+        info={
+          <>
+            Scores come from closed bars and the weekly COT file. <strong>The price polls; the score does not.</strong> A
+            live tick never moves a cell, a moving average, a level or a trade idea. Tap a symbol for its full card.
+          </>
+        }
+        actions={
+          <>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter symbols"
+              className="min-h-11 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-small outline-none focus:border-[var(--color-border-bright)] md:min-h-9 md:w-44 md:flex-none"
             />
-            {!live
-              ? 'Live off'
-              : !anyLive
-                ? 'Connecting…'
-                : allLive
-                  ? 'Live'
-                  : `${liveCount}/${quotes.size} live`}
-          </button>
-        </div>
-      </header>
+            <button
+              type="button"
+              onClick={() => setLive((on) => !on)}
+              aria-pressed={live}
+              className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] px-3 text-small text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] md:min-h-9"
+            >
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  live && allLive ? 'live-dot bg-[var(--color-bull)]' : live ? 'bg-[var(--color-uncertain)]' : 'bg-[var(--color-faint)]'
+                }`}
+              />
+              {!live ? 'Live off' : !anyLive ? 'Connecting…' : allLive ? 'Live' : `${liveCount}/${quotes.size} live`}
+            </button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {groups.map(([assetClass, list]) => (
           <Panel key={assetClass} title={assetClass} subtitle={`${list.length} symbols`}>
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
-                  <th className="px-3 py-1 text-left">Symbol</th>
-                  <th className="px-2 py-1 text-right">Price</th>
-                  <th className="px-2 py-1 text-right">Day</th>
-                  <th className="px-2 py-1 text-right">Score</th>
-                  <th className="px-3 py-1 text-right">Bias</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((e) => {
-                  const quote = quotes.get(e.symbol);
-                  const price = quote?.price ?? e.price;
-                  const change = quote?.changePct ?? e.changePct;
-                  const max = maxScoreForKind(e.kind);
-
-                  return (
-                    <tr
-                      key={e.symbol}
-                      className="border-t border-[var(--color-border)]/60 hover:bg-[var(--color-surface-2)]/50"
-                    >
-                      <td className="px-3 py-1">
-                        <Link href={`/scorecard/${e.symbol}`} className="block hover:text-[var(--color-bull)]">
-                          <span className="font-mono">{e.symbol}</span>
-                          <span className="ml-1.5 text-[9px] text-[var(--color-faint)]">
-                            {e.label}
-                          </span>
-                        </Link>
-                      </td>
-                      <td className="tnum px-2 py-1 text-right">
-                        {price === null ? (
-                          <span className="text-[var(--color-faint)]">—</span>
-                        ) : (
-                          formatPrice(price)
-                        )}
-                      </td>
-                      <td className={`tnum px-2 py-1 text-right ${changeColor(change)}`}>
-                        {formatChangePct(change)}
-                      </td>
-                      <td
-                        className={`tnum px-2 py-1 text-right font-bold ${BIAS_TONE[e.bias] ?? ''}`}
-                        title={`${formatScore(e.totalScore)} out of a possible ±${max}, from ${e.populated} populated columns`}
-                      >
-                        {formatScore(e.totalScore)}
-                      </td>
-                      <td
-                        className={`px-3 py-1 text-right text-[10px] whitespace-nowrap ${BIAS_TONE[e.bias] ?? ''}`}
-                      >
-                        {e.bias}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DataTable
+              caption={`${assetClass} scorecard`}
+              columns={columns}
+              rows={list}
+              rowKey={(e) => e.symbol}
+              defaultSort={{ key: 'conviction', dir: 'desc' }}
+              cardTitle={(e) => (
+                <Link href={`/scorecard/${e.symbol}`} className="flex min-h-11 items-center gap-2">
+                  <span className="font-mono">{e.symbol}</span>
+                  <span className={`text-caption font-normal ${BIAS_TONE[e.bias] ?? ''}`}>{e.bias}</span>
+                </Link>
+              )}
+            />
           </Panel>
         ))}
       </div>
-
-      <p className="mt-3 px-1 text-[10px] leading-relaxed text-[var(--color-faint)]">
-        Scores are computed server-side from closed bars and the weekly COT file, at{' '}
-        {generatedAtUtc.slice(11, 16)} UTC. <strong className="text-[var(--color-muted)]">
-          The price polls; the score does not.
-        </strong>{' '}
-        A live tick never moves a cell, a moving average, a level or a trade idea — those all come
-        from bars that have closed. Bias bands are absolute, so a ±34 pair and a ±20 single-economy
-        asset both become Bullish at +4; the score column&rsquo;s tooltip gives each symbol&rsquo;s
-        own maximum.
-      </p>
+      {groups.length === 0 && (
+        <p className="py-10 text-center text-small text-[var(--color-muted)]">No symbol matches “{query}”.</p>
+      )}
     </div>
   );
 }

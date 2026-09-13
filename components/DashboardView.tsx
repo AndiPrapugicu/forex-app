@@ -88,12 +88,12 @@ export function DashboardView({
           {data && <SourceHealthBar health={data.health} />}
 
           <div className="ml-auto flex items-center gap-3">
-            {error && <span className="text-[10px] text-[var(--color-bear)]">{error}</span>}
+            {error && <span className="text-micro text-[var(--color-bear)]">{error}</span>}
             <button
               type="button"
               onClick={refresh}
               disabled={refreshing}
-              className="rounded border border-[var(--color-border)] px-2 py-1 text-[10px] text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)] disabled:opacity-50"
+              className="rounded border border-[var(--color-border)] px-2 py-1 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)] disabled:opacity-50"
             >
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
@@ -120,7 +120,7 @@ export function DashboardView({
                 title="Upcoming"
                 subtitle="Next 72 hours, highest impact first"
                 action={
-                  <span className="tnum text-[10px] text-[var(--color-faint)]">
+                  <span className="tnum text-micro text-[var(--color-faint)]">
                     {data.upcoming.length}
                   </span>
                 }
@@ -163,7 +163,7 @@ export function DashboardView({
       </main>
 
       <footer className="mx-auto max-w-[1600px] px-4 pt-2 pb-8">
-        <p className="text-[10px] leading-relaxed text-[var(--color-faint)]">
+        <p className="text-micro leading-relaxed text-[var(--color-faint)]">
           Scores are rule-based and reproducible from <code>config/scoring.config.ts</code>. Confidence
           below 40 renders as uncertain rather than a direction. News is grouped by story and counted
           by distinct publisher — a single outlet never counts as corroboration. Not financial advice.

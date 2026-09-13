@@ -18,7 +18,7 @@ export default async function SentimentPage() {
 
   if (rows.length === 0) {
     return (
-      <div className="px-4 py-4">
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
         <Panel title="Crowd sentiment">
           <EmptyState
             message="No positioning data"

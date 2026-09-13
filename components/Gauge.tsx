@@ -141,7 +141,7 @@ export function ScoreGauge({
         <div className={`text-xs font-medium ${style.color}`}>
           {style.glyph} {style.label}
         </div>
-        {label && <div className="mt-0.5 text-[11px] text-[var(--color-faint)]">{label}</div>}
+        {label && <div className="mt-0.5 text-micro text-[var(--color-faint)]">{label}</div>}
       </div>
     </div>
   );
@@ -198,7 +198,7 @@ export function ConfidenceRing({
         </text>
       </svg>
       {showLabel && (
-        <span className="text-[10px] tracking-wide text-[var(--color-faint)] uppercase">
+        <span className="text-micro tracking-wide text-[var(--color-faint)] uppercase">
           Confidence
         </span>
       )}
@@ -364,7 +364,7 @@ export function PercentGauge({
         <div className="tnum text-xl font-bold" style={{ color: colour }}>
           {known ? `${Math.round(pct)}%` : '—'}
         </div>
-        {sublabel && <div className="text-[10px] text-[var(--color-faint)]">{sublabel}</div>}
+        {sublabel && <div className="text-micro text-[var(--color-faint)]">{sublabel}</div>}
       </div>
     </div>
   );

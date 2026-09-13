@@ -60,9 +60,19 @@ import {
   explainGaps,
   solveA1Legs,
 } from '@/lib/scoring/a1-legs';
-import { listCaptures } from '@/lib/a1-capture-file';
+import { listCaptures, loadLatestA1Capture } from '@/lib/a1-capture-file';
+import { mirrorResidual } from '@/lib/scoring/mirror-residual';
 import { parseCapture } from '@/lib/scoring/a1-pair-legs';
 import { NAME_MAP, NOT_MODELED } from '@/lib/scoring/a1-symbol-map';
+import { rowA1Contribution } from '@/lib/scoring/provenance';
+import type { BoardProfile } from '@/config/profiles.config';
+
+/**
+ * `--profile=a1` measures the board with A1's proven data gaps applied, which
+ * is what "do we reproduce them" means. The default stays `ours`, so an `a1`
+ * number is never quoted as if it described the product.
+ */
+const PROFILE: BoardProfile = process.argv.includes('--profile=a1') ? 'a1' : 'ours';
 
 interface Capture {
   /** null when the capture's date could not be established. */
@@ -291,6 +301,71 @@ function summarise(rows: SymbolRow[]) {
 }
 
 /**
+ * The same measurement with every A1-SOURCED cell removed from BOTH sides.
+ *
+ * `lib/connectors/pmi-history.ts` seeds PMI history out of a capture of A1's own
+ * charts, because FXStreet nulls the `actual` on every non-USD PMI release once
+ * it stops being current. Without this second headline, that seed would drive
+ * TOTAL ABS GAP down for a reason that has nothing to do with our engine — the
+ * precise self-flattery this script exists to prevent.
+ *
+ * SUBTRACTED FROM BOTH SIDES, NOT ONE. Removing the cell from our total while
+ * leaving it in theirs is an arbitrary handicap that measures nothing. So a row
+ * we cannot subtract from — one with an A1-sourced cell but no cell-by-cell
+ * transcription of their board — is DROPPED and counted as dropped, rather than
+ * silently compared on unequal terms.
+ *
+ * NOT COMPARABLE ACROSS RUNS EITHER, and for a new reason: the excluded set
+ * SHRINKS every time the forward accumulator observes a print live and
+ * supersedes a seed row. That shrinkage is the intended trajectory, so the
+ * excluded-cell count is printed beside the number rather than left to be
+ * inferred from it.
+ */
+function summariseClean(rows: SymbolRow[]) {
+  let excludedCells = 0;
+  const bySlot = new Map<string, number>();
+  const dropped: string[] = [];
+
+  const compared = Object.keys(totals)
+    .map((symbol) => {
+      const row = rows.find((r) => r.symbol === symbol);
+      if (!row) return null;
+
+      const contribution = rowA1Contribution(row);
+      if (contribution.slots.length === 0) {
+        return { symbol, ours: row.totalScore, a1: totals[symbol], gap: row.totalScore - totals[symbol] };
+      }
+
+      // Their published cells for this row, if we transcribed them.
+      const theirs = cells[symbol];
+      if (!theirs) {
+        dropped.push(symbol);
+        return null;
+      }
+
+      let theirAdjustment = 0;
+      for (const key of contribution.slots) {
+        excludedCells++;
+        bySlot.set(key, (bySlot.get(key) ?? 0) + 1);
+        theirAdjustment += theirs[key] ?? 0;
+      }
+
+      const ours = row.totalScore - contribution.points;
+      const a1 = totals[symbol] - theirAdjustment;
+      return { symbol, ours, a1, gap: ours - a1 };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const totalAbsGap = compared.reduce((t, c) => t + Math.abs(c.gap), 0);
+  const slots = [...bySlot.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${k} ${n}`)
+    .join(', ');
+
+  return { compared, totalAbsGap, excludedCells, dropped, slots };
+}
+
+/**
  * Which COLUMN a gap came from, for the rows captured cell by cell.
  *
  * The per-symbol total says a row moved; this says why. Without it a regression
@@ -390,11 +465,14 @@ async function main() {
    * this script claimed to reproduce. `now` stays live on purpose: rewinding it
    * narrows the calendar fetch and loses scheduled events the frame could see.
    */
-  const payload = await runSetupsPipeline(new Date(), { pricesAsOf: CAPTURED_AT });
+  const payload = await runSetupsPipeline(new Date(), { pricesAsOf: CAPTURED_AT, profile: PROFILE });
+  console.log(
+    `profile: ${PROFILE}${PROFILE === 'a1' ? " — A1's proven data gaps applied (config/profiles.config.ts)" : ''}\n`,
+  );
 
   const driftHours = (Date.now() - CAPTURED_AT.getTime()) / 3_600_000;
-  const trimmed = asOf({ events: payload.events, cot: payload.cot, bars: new Map(), seasonality: new Map() }, CAPTURED_AT);
-  const dropped = payload.events.length - trimmed.events.length;
+  const trimmed = asOf({ events: payload.rewindPool, cot: payload.cot, bars: new Map(), seasonality: new Map() }, CAPTURED_AT);
+  const dropped = payload.rewindPool.length - trimmed.events.length;
 
   /**
    * Rebuilt from the trimmed inputs rather than reusing `payload.matrix`, which
@@ -416,6 +494,9 @@ async function main() {
      */
     yield2y: payload.yield2y,
     now: CAPTURED_AT,
+    // Must match the pipeline call above, or the diagnostic scores a board the
+    // pipeline never built.
+    profile: payload.profile,
   });
   const health = payload.health;
 
@@ -507,7 +588,72 @@ async function main() {
   console.log(`  exact           ${exact}`);
   console.log(`  within 1        ${within1}`);
   console.log(`  within 2        ${within2}`);
-  console.log(`  TOTAL ABS GAP   ${totalAbsGap}    <- the number to drive down`);
+  console.log(`  TOTAL ABS GAP   ${totalAbsGap}    <- the number to drive down (profile ${PROFILE})`);
+
+  const clean = summariseClean(matrix.rows);
+  if (clean.excludedCells === 0 && clean.dropped.length === 0) {
+    console.log(
+      `  TOTAL ABS GAP (clean)   ${clean.totalAbsGap}    <- identical: no cell was scored off an A1 capture`,
+    );
+  } else {
+    console.log(
+      `  TOTAL ABS GAP (clean)   ${clean.totalAbsGap}    over ${clean.compared.length} of ` +
+        `${Object.keys(totals).length} rows`,
+    );
+    console.log(
+      `      excludes ${clean.excludedCells} cell${clean.excludedCells === 1 ? '' : 's'} scored off an ` +
+        `A1 capture (${clean.slots}), subtracted from BOTH sides`,
+    );
+    if (clean.dropped.length > 0) {
+      console.log(
+        `      ${clean.dropped.length} row${clean.dropped.length === 1 ? '' : 's'} dropped — A1-sourced but ` +
+          `no cell capture to subtract from: ${clean.dropped.join(' ')}`,
+      );
+    }
+    console.log('      this set SHRINKS as the accumulator observes prints live; it is not a fixed baseline');
+  }
+
+  /**
+   * MIRROR RESIDUAL — only under `--profile=a1`, because it needs both boards.
+   *
+   * The distance from their captured board, split by what closes it: A1's
+   * proven data gaps, a derived mirror rule, copying their printed cell, and
+   * whatever is left. Only the last is a work list. `captured` is never folded
+   * in, because copying their answer explains nothing.
+   */
+  if (PROFILE === 'a1') {
+    const cellCapture = loadLatestA1Capture();
+    if (!cellCapture) {
+      console.log('\n  MIRROR RESIDUAL  skipped: no fixtures/a1-top-setups-*.csv capture on disk');
+    } else {
+      const oursBoard = buildSetupsMatrix({
+        events: trimmed.events,
+        cot: trimmed.cot,
+        technicals: payload.technicals,
+        sovereignYields: payload.sovereignYields,
+        yield2y: payload.yield2y,
+        now: CAPTURED_AT,
+        profile: 'ours',
+      });
+      const r = mirrorResidual(oursBoard.rows, matrix.rows, cellCapture);
+      const fmt = (n: number) => (n > 0 ? `-${n}` : n < 0 ? `+${-n}` : '0');
+      console.log(`\nMIRROR RESIDUAL vs ${r.capture} — ${r.cellsCompared} captured cells\n`);
+      console.log(`  starting distance      ${r.start}`);
+      console.log(`  closed by coverage     ${fmt(r.total.coverage)}    A1's proven data gaps (config/profiles.config.ts)`);
+      console.log(`  closed by convention   ${fmt(r.total.convention)}    derived mirror rules (PPI negation)`);
+      console.log(`  closed by copying      ${fmt(r.total.captured)}    their printed cell - explains nothing`);
+      console.log(`  UNEXPLAINED            ${r.total.unexplained}    <- the only work list`);
+      const worst = Object.entries(r.bySlot)
+        .filter(([, b]) => b.unexplained > 0)
+        .sort((a, b) => b[1].unexplained - a[1].unexplained);
+      if (worst.length > 0) {
+        console.log('\n  unexplained by column');
+        for (const [slotKey, b] of worst) {
+          console.log(`    ${pad(slotKey, 22)}${padStart(String(b.unexplained), 4)}   of ${b.start}`);
+        }
+      }
+    }
+  }
 
   /**
    * WHICH LEG, from the score column alone.

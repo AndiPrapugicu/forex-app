@@ -1,81 +1,136 @@
 @import 'tailwindcss';
 
 /**
- * Dark trading theme.
+ * Dark trading theme, closer to EdgeFinder's chrome.
  *
  * Committed to dark only — this is a dashboard meant to sit on a second monitor
  * for hours, and a light variant would be dead code.
+ *
+ * Retuned 2026-09-13 toward A1's look, in our own colours: neutral charcoal
+ * surfaces instead of the old navy tint, a LIGHT table header with dark text,
+ * and saturated blue/red cell fills that carry white text. The page chrome
+ * recedes so the grid is the brightest thing on screen.
  *
  * Colour rules that matter for a trading UI:
  *  - Bullish/bearish are the ONLY saturated hues. Everything else is neutral, so
  *    the eye lands on direction first.
  *  - Amber means "uncertain", never "slightly bad". Confidence and direction are
  *    separate axes and must never share a colour.
- *  - Green/red are teal-green and rose rather than pure hues, which keeps them
- *    distinguishable for the most common forms of colour blindness. Direction is
- *    also always carried by a glyph and a sign, never colour alone.
+ *  - Direction is always also carried by a glyph and a sign, never colour alone.
  */
 
 @theme {
-  --color-bg: #0a0d14;
-  --color-surface: #111621;
-  --color-surface-2: #171d2b;
-  --color-border: #232b3d;
-  --color-border-bright: #2f3950;
+  --color-bg: #111214;
+  --color-surface: #1a1b1f;
+  --color-surface-2: #232429;
+  /* Alternate table row: between surface and surface-2, so hover stays distinct. */
+  --color-zebra: #1e1f23;
+  --color-border: #2e3036;
+  --color-border-bright: #3d4048;
 
-  --color-text: #e8edf7;
-  --color-muted: #8b97b0;
-  --color-faint: #5a6580;
+  --color-text: #eceef2;
+  --color-muted: #a1a6b0;
+  --color-faint: #6e737d;
 
   /*
-    TWO BULLISH COLOURS, ON PURPOSE — but each defined once, here.
-
-    `bull` is the status accent: a bias label, a live dot, an "above" tag. It is
-    teal so it reads as positive next to the rose bear without either shouting.
-
-    `bull-cell` is the fill for a bullish CELL in a dense grid — the setups
-    matrix, the scorecard table, the candles. Teal at 18 shades of opacity
-    against a teal-accented page turns a table into a wash; the blue separates
-    "this cell voted up" from "this label says bullish", which is the same
-    distinction EdgeFinder's own blue-and-red grid draws.
-
-    They used to be three hardcoded hexes scattered across PriceChart,
-    SetupsMatrix and the scorecard page, drifting apart (#3a7ae0 vs #5b95e8).
-    The `-rgb` variants exist because those grids compose their own alphas.
+    The light header band A1's tables use. Dark text on a pale fill makes a
+    column label read as a label and not as data — the single change that most
+    separates their tables from ours.
   */
-  --color-bull: #26d0a4;
-  --color-bull-dim: #178f70;
-  --color-bear: #f2506e;
+  --color-head: #d7dae0;
+  --color-head-text: #15171b;
+
+  /*
+    TWO BULLISH COLOURS, ON PURPOSE — each defined once, here.
+
+    `bull` is the status accent: a bias label, a live dot, an "above" tag.
+    `bull-cell` is the fill for a bullish CELL in a dense grid. The blue
+    separates "this cell voted up" from "this label says bullish", which is the
+    same distinction EdgeFinder's own blue-and-red grid draws.
+  */
+  --color-bull: #2fd3a8;
+  --color-bull-dim: #1a8f72;
+  --color-bear: #f2556f;
   --color-bear-dim: #a8324a;
-  --color-bull-cell: #3a7ae0;
-  --color-bull-cell-rgb: 58 122 224;
-  --color-bear-cell: #f2506e;
-  --color-bear-cell-rgb: 242 80 110;
-  --color-neutral: #6b7794;
+  --color-bull-cell: #2d6fe6;
+  --color-bull-cell-rgb: 45 111 230;
+  --color-bear-cell: #e5484d;
+  --color-bear-cell-rgb: 229 72 77;
+  --color-neutral: #6e737d;
   --color-uncertain: #e0a03a;
 
   /*
     SPACE-separated, not comma-separated, and that is load-bearing.
-    These exist for fills that compose their own alpha in a style attribute,
-    where a hex cannot carry opacity. Only the modern space form accepts the
-    slash: `rgb(38 208 164 / 75%)` is valid, `rgb(38, 208, 164 / 75%)` is not —
-    it parses as invalid and paints nothing. Every consumer must therefore use
+    Only the modern space form accepts the slash: `rgb(38 208 164 / 75%)` is
+    valid, `rgb(38, 208, 164 / 75%)` is not. Every consumer must use
     `rgb(var(--x) / N%)` and never `rgba(var(--x), 0.N)`.
   */
-  --color-bull-rgb: 38 208 164;
-  --color-bear-rgb: 242 80 110;
+  --color-bull-rgb: 47 211 168;
+  --color-bear-rgb: 242 85 111;
   --color-uncertain-rgb: 224 160 58;
 
-  --color-critical: #f2506e;
+  --color-critical: #f2556f;
   --color-high: #f28b3a;
   --color-medium: #e0c53a;
-  --color-info: #6b7794;
+  --color-info: #6e737d;
 
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* Radius scale: cards, controls, pills. */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
 }
 
+/*
+  THE TYPE SCALE, and why it lives in two places.
+
+  The app had 274 hardcoded sizes under 14px and no responsive variant on any of
+  them, which is most of why it was unpleasant on a phone. These four steps
+  replace them. The floor RISES below the md breakpoint: a 10px label is
+  legible on a 27-inch monitor at arm's length and not on a phone at all.
+
+  `@theme inline` makes the utilities (`text-micro`, `text-caption`, ...) emit
+  `var(--fs-*)` rather than a frozen value, so the media query below reaches
+  every one of them.
+*/
 :root {
   color-scheme: dark;
+  --fs-micro: 11px;
+  --fs-caption: 12px;
+  --fs-small: 13px;
+  --fs-body: 14px;
+  --fs-title: 20px;
+
+  /* z-index scale. Named, so a drawer can never be guessed underneath a sticky header. */
+  --z-sticky: 10;
+  --z-header: 20;
+  --z-tabbar: 30;
+  --z-drawer: 40;
+  --z-popover: 50;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --fs-micro: 12px;
+    --fs-caption: 13px;
+    --fs-small: 14px;
+    --fs-body: 15px;
+    --fs-title: 22px;
+  }
+}
+
+@theme inline {
+  --text-micro: var(--fs-micro);
+  --text-micro--line-height: 1.35;
+  --text-caption: var(--fs-caption);
+  --text-caption--line-height: 1.45;
+  --text-small: var(--fs-small);
+  --text-small--line-height: 1.5;
+  --text-body: var(--fs-body);
+  --text-body--line-height: 1.55;
+  --text-title: var(--fs-title);
+  --text-title--line-height: 1.25;
 }
 
 body {
@@ -93,9 +148,15 @@ body {
 /* Subtle grid texture, so large empty panels do not read as broken. */
 .grid-bg {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
   background-size: 32px 32px;
+}
+
+/* A1's pale table header. Applied to <thead> rows and card headers alike. */
+.table-head {
+  background: var(--color-head);
+  color: var(--color-head-text);
 }
 
 @keyframes pulse-ring {
@@ -114,7 +175,7 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #171d2b 0%, #232b3d 50%, #171d2b 100%);
+  background: linear-gradient(90deg, var(--color-surface-2) 0%, var(--color-border) 50%, var(--color-surface-2) 100%);
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;
 }

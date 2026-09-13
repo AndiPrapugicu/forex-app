@@ -57,8 +57,8 @@ import { priceDecimals } from '@/components/ui';
  * custom property means nothing there, and it would silently render black.
  * Keep them in step with the `-cell` tokens in globals.css.
  */
-const BULL = '#3a7ae0';
-const BEAR = '#f2506e';
+const BULL = '#2d6fe6';
+const BEAR = '#e5484d';
 
 /** Bars in view on first paint. The rest stays scrollable to the left. */
 const INITIAL_BARS = 150;
@@ -799,7 +799,7 @@ export function PriceChart({
           cannot swallow the drag that pans the chart underneath it.
         */}
         {shown && (
-          <div className="pointer-events-none absolute top-1.5 left-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-[10px] leading-tight">
+          <div className="pointer-events-none absolute top-1.5 left-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-micro leading-tight">
             <span className="font-mono font-semibold text-[var(--color-text)]">
               {label}
               <span className="ml-1 font-normal text-[var(--color-faint)]">{spec.label}</span>
@@ -867,7 +867,7 @@ export function PriceChart({
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-4 py-2 text-[10px] text-[var(--color-faint)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-4 py-2 text-micro text-[var(--color-faint)]">
         <button
           type="button"
           onClick={() => setLive((on) => !on)}

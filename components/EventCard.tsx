@@ -32,7 +32,7 @@ export function UpcomingEventRow({ event, now }: { event: NormalizedEvent; now: 
         <span className="tnum text-xs font-semibold text-[var(--color-text)]">
           {utcTime(event.dateUtc)}
         </span>
-        <span className="tnum text-[10px] text-[var(--color-faint)]">
+        <span className="tnum text-micro text-[var(--color-faint)]">
           {timeAgo(event.dateUtc, now)}
         </span>
       </div>
@@ -44,13 +44,13 @@ export function UpcomingEventRow({ event, now }: { event: NormalizedEvent; now: 
 
       <div className="hidden shrink-0 items-center gap-3 text-right sm:flex">
         <div className="flex flex-col">
-          <span className="text-[9px] tracking-wide text-[var(--color-faint)] uppercase">Fcst</span>
+          <span className="text-micro tracking-wide text-[var(--color-faint)] uppercase">Fcst</span>
           <span className="tnum text-xs text-[var(--color-muted)]">
             {formatValue(event.consensus, event.unit)}
           </span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[9px] tracking-wide text-[var(--color-faint)] uppercase">Prev</span>
+          <span className="text-micro tracking-wide text-[var(--color-faint)] uppercase">Prev</span>
           <span className="tnum text-xs text-[var(--color-faint)]">
             {formatValue(event.previous, event.unit)}
           </span>
@@ -78,7 +78,7 @@ export function RecentEventRow({
       className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--color-surface-2)]"
     >
       <div className="flex w-14 shrink-0 flex-col">
-        <span className="tnum text-[11px] text-[var(--color-muted)]">{timeAgo(event.dateUtc, now)}</span>
+        <span className="tnum text-micro text-[var(--color-muted)]">{timeAgo(event.dateUtc, now)}</span>
       </div>
 
       <ImpactBadge impact={event.impact} />
@@ -92,7 +92,7 @@ export function RecentEventRow({
           )}
         </div>
 
-        <div className="tnum mt-0.5 flex items-center gap-2 text-[11px]">
+        <div className="tnum mt-0.5 flex items-center gap-2 text-micro">
           {/* Actual is coloured by beat/miss, which is a factual comparison —
               distinct from the bullish/bearish verdict on the right. */}
           <span

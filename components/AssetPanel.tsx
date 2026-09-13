@@ -16,7 +16,7 @@ import { DIRECTION_STYLE, EmptyState, Panel, formatScore, scoreColor } from '@/c
 
 function PriceTag({ quote }: { quote: PriceQuote | undefined }) {
   if (!quote) {
-    return <span className="text-[11px] text-[var(--color-faint)]">price unavailable</span>;
+    return <span className="text-micro text-[var(--color-faint)]">price unavailable</span>;
   }
 
   const chg = quote.changePct;
@@ -30,7 +30,7 @@ function PriceTag({ quote }: { quote: PriceQuote | undefined }) {
           : 'text-[var(--color-muted)]';
 
   return (
-    <span className="tnum text-[11px]">
+    <span className="tnum text-micro">
       <span className="text-[var(--color-muted)]">{quote.price.toLocaleString()}</span>{' '}
       <span className={color}>
         {chg === null ? '' : `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%`}
@@ -93,7 +93,7 @@ export function AssetPanel({
                   {a.direction === 'uncertain' ? '?' : formatScore(a.score)}
                 </span>
 
-                <span className={`w-16 text-right text-[10px] font-medium ${style.color}`}>
+                <span className={`w-16 text-right text-micro font-medium ${style.color}`}>
                   {style.label}
                 </span>
 
@@ -111,7 +111,7 @@ export function AssetPanel({
                   ) : (
                     <ul className="space-y-1.5">
                       {a.contributions.map((c) => (
-                        <li key={c.label} className="flex items-baseline gap-2 text-[11px]">
+                        <li key={c.label} className="flex items-baseline gap-2 text-micro">
                           <span
                             className={`tnum w-11 shrink-0 text-right font-semibold ${
                               c.contribution > 0
@@ -132,7 +132,7 @@ export function AssetPanel({
                   )}
 
                   {a.confidence < 40 && (
-                    <p className="mt-2 text-[11px] text-[var(--color-uncertain)]">
+                    <p className="mt-2 text-micro text-[var(--color-uncertain)]">
                       Confidence {a.confidence} — the news behind these factors is not corroborated
                       enough to call a direction.
                     </p>

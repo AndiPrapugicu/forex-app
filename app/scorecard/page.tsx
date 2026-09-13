@@ -42,7 +42,7 @@ export default async function ScorecardIndexPage() {
 
   if (entries.length === 0) {
     return (
-      <div className="px-4 py-4">
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
         <Panel title="Asset scorecard">
           <EmptyState
             message="No symbols scored"

@@ -325,6 +325,38 @@ Ordered by "impossible once the window closes on 2026-09-07":
 5. **A metric page with dated x-axis labels**, to settle the no-forecast fallback.
 6. **Re-test the 23 demo-era ledger entries.** `LEGACY-EVIDENCE.md`.
 
+> **Superseded 2026-09-13:** the window closed on 2026-09-07. Items 1 (mPMI, sPMI) and the EURUSD Score History
+> were captured; everything else on this list is now unobtainable. See §20.
+
+## 20. Re-measured 2026-09-13, after the window closed
+
+Same capture (2026-09-02 09:04), same rewind. Only sPMI's code path changed; every other column moved by at most
+feed drift. Full per-column spec: [`docs/COMPONENT-SPEC.md`](docs/COMPONENT-SPEC.md).
+
+| measure | before | after |
+|---|---:|---:|
+| `npm run parity` TOTAL ABS GAP (`ours`) | 114 | **101** |
+| same, excluding A1-sourced cells | — | **110** |
+| `npm run parity:a1` | — | **99** |
+| `board-parity` AGREE / OURS | 744 / 108 | **752 / 100** |
+| `leg-parity` | 117/144 | **124/144** |
+
+| column | absGap before | absGap after | status | what would settle the rest | obtainable? |
+|---|---:|---:|---|---|---|
+| PPI | 61 | 61 | 21 cells are A1 against A1 (NEGATED); mirrored in the `a1` view only | nothing — it is their convention | — |
+| Crowd | 40 | 40 | 19 crosses unscored by us | a permitted retail feed covering crosses, validated against A1's dated cross history | **No** — the history was lost in flight; no public feed passes the gate |
+| Cnsmr Conf | 40 | 40 | 13 A1 against A1 (index rows blank) | primary-source series for GBP, JPY, CHF, CAD | Yes, from publishers |
+| Retail Sales | 28 | 28 | CAD proven a release difference (advance vs final) | ONS / ABS checks of the remaining legs | Yes |
+| Trend | 17 | 17 | metals SMA100 and a flat USDCHF slope | A1's metals price source | **No** |
+| **sPMI** | **39** | **16** | FIXED for EUR/GBP/JPY/AUD by the PMI seed; all 16 remaining are CAD | A1's CAD services source (they have no series yet score it) | **No** |
+| Seasonality | 15 | 15 | 13 points are the sign of a near-zero mean; ETH is a different history | A1's ETH price history | **No** |
+| CPI | 11 | 11 | undisputed | per-leg primary checks | Yes |
+| GDP | 10 | 10 | undisputed | per-leg primary checks | Yes |
+| PCE | 9 | 9 | A1 scores a US-only series on JPY crosses | nothing | — |
+| mPMI | 7 | 7 | UNSOLVABLE on their own rows | nothing | — |
+| Unemployment | 2 | 2 | — | — | Yes |
+| COT | 1 | 1 | — | — | Yes |
+
 ---
 
 ## The answer to §27 — can we recreate A1's scoring engine?

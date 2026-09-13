@@ -13,6 +13,39 @@
 > across three runs. Two conclusions in the original diagnosis were **wrong** and are corrected
 > in place below, marked **CORRECTION**. Test suite 649 → 660, all passing.
 
+## Round eighteen — the PMI gap was data, and parity learns to not flatter itself (2026-09-13)
+
+A1's access window closed on 2026-09-07; this round works only from captures already in
+`fixtures/a1-full-access/`.
+
+**Headline.** `npm run parity` TOTAL ABS GAP **114 → 101** over 51 rows; exact rows 7 → 8. The new
+provenance-honest headline, which drops every cell scored off an A1-sourced input from both sides, reads
+**110**. `leg-parity` 117/144 → **124/144**. Tests 1045 → 1114.
+
+**1. sPMI 39 → 16 — a coverage bug, not a rule.** FXStreet nulls `actual` on historical non-USD PMI
+releases. Rewound to 2026-09-02, EUR, GBP, JPY and AUD services PMI had zero scoreable prints, so
+`resolveSeries` skipped to nothing. Fix: a committed seed built from the full-access PMI captures
+(212 rows, five guards — G1 date alignment, G2 duplicate collapse, G3 previous, G4 tail must reproduce
+the heatmap's published surprise, G5 declined series), plus a Supabase accumulator for observed actuals.
+Precedence is per frame (`dropSupersededSeed`, in the pipeline and inside `asOf`). Every remaining sPMI
+disagreement is a CAD row.
+
+**2. Profiles.** `ours | a1`. The `a1` profile applies two PROVEN A1 data gaps after scoring — CHF
+services = EUR, AUD retail blank — and closes 101 → 99. The product never builds it.
+
+**3. Mirror residual.** The distance to A1's captured board (257) now splits into coverage (−4),
+convention (−22, PPI negation), captured (−40, copied cells) and **191 unexplained** — the only work list:
+crowd 40, PPI 39, retail 24, trend 17, sPMI 16, seasonality 15, CPI 11, GDP 10, PCE 9, mPMI 7, unemployment 2,
+COT 1.
+
+**4. Investigated, deliberately NOT changed.**
+- CAD/NZD services blank in the `a1` profile — rejected; A1's board still scores both from a print frozen at 2026-05-01.
+- CAD retail — A1's −0.8 is StatCan's July advance estimate; we score confirmed June. `TRUTH-EVIDENCE.md` #7.
+- Metals trend — roll-free ETFs disagree with A1 as much as futures do; UNKNOWN.
+- Index-row trend — all seven index rows now agree; USDCHF's +1 vs +2 sits on a 0.00008 slope.
+- Ethereum seasonality — no window of our history reproduces A1's February −30.59; UNKNOWN, not fitted.
+- Crowd crosses, options, AAII — every candidate source fails the gate. `EdgeFinder-known-unknown-blocked.md`.
+
 ## Round seventeen — three fixes, and two of them were ours (2026-08-31)
 
 The build round. Four checksummed cells moved to EXACT and **not one moved away**; the component

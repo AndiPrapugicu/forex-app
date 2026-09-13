@@ -24,6 +24,7 @@ import { publicationDate, type CotSeries } from '@/lib/connectors/cftc';
 import type { DailyBars } from '@/lib/connectors/technicals';
 import type { Technicals } from '@/lib/connectors/technicals';
 import { TREND_SMA, TREND_SLOPE_LOOKBACK_DAYS } from '@/config/setups.config';
+import { dropSupersededSeed } from '@/lib/scoring/pmi-seed-precedence';
 import { buildSetupsMatrix } from '@/lib/scoring/setups';
 import type { NormalizedEvent } from '@/lib/types';
 
@@ -158,7 +159,15 @@ export function asOf(input: BacktestInput, at: Date) {
    * no history of its own forecast column. That is why `component-parity.ts`
    * labels a consensus-based rates cell PARTIAL rather than HISTORICAL.
    */
-  const events = input.events.filter((e) => e.dateUtc <= iso || e.actual === null);
+  const released = input.events.filter((e) => e.dateUtc <= iso || e.actual === null);
+
+  /**
+   * THEN the PMI seed's precedence, settled against THIS frame's calendar and
+   * not today's. Applied after the date filter on purpose: a print observed
+   * after `at` must not be allowed to suppress a seed row that was the only
+   * reading available at `at`. See `lib/scoring/pmi-seed-precedence.ts`.
+   */
+  const events = dropSupersededSeed(released);
 
   /**
    * CUT ON THE PUBLICATION DATE, NOT THE SURVEY DATE.

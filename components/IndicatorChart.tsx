@@ -93,7 +93,7 @@ export function IndicatorChart({ series }: { series: IndicatorSeries }) {
       subtitle={series.eventName}
       action={
         series.beatRatePct !== null && (
-          <span className="text-[10px] text-[var(--color-faint)]">
+          <span className="text-micro text-[var(--color-faint)]">
             beat forecast {series.beatRatePct}% of {points.filter((p) => p.consensus !== null).length}
           </span>
         )
@@ -186,7 +186,7 @@ export function IndicatorChart({ series }: { series: IndicatorSeries }) {
         </svg>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-4 py-2 text-[10px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--color-border)] px-4 py-2 text-micro">
         <span className="flex items-center gap-1 text-[var(--color-faint)]">
           <span className="inline-block h-2.5 w-3 rounded-sm" style={{ backgroundColor: 'rgb(var(--color-bull-cell-rgb) / 85%)' }} />
           beat forecast

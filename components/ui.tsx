@@ -138,7 +138,7 @@ export function BiasPill({
 
   return (
     <span
-      className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${bg} ${tone}`}
+      className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-micro font-semibold whitespace-nowrap ${bg} ${tone}`}
       style={partial ? { boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' } : undefined}
       title={title}
     >
@@ -223,29 +223,35 @@ export function Panel({
   action,
   children,
   className = '',
+  padded = false,
 }: {
   title?: string;
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Pad the body. Opt-in, because every existing call site pads its own
+   * children and a default would double-pad all of them.
+   */
+  padded?: boolean;
 }) {
   return (
     <section
-      className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] ${className}`}
+      className={`overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] ${className}`}
     >
       {title && (
-        <header className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border)] px-4 py-3">
           <div className="min-w-0">
-            <h2 className="text-[13px] font-semibold tracking-wide text-[var(--color-text)] uppercase">
+            <h2 className="text-small font-semibold tracking-wide text-[var(--color-text)] uppercase">
               {title}
             </h2>
-            {subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-faint)]">{subtitle}</p>}
+            {subtitle && <p className="mt-0.5 text-caption text-[var(--color-faint)]">{subtitle}</p>}
           </div>
           {action}
         </header>
       )}
-      {children}
+      {padded ? <div className="p-4">{children}</div> : children}
     </section>
   );
 }
@@ -277,7 +283,7 @@ const IMPACT_STYLE: Record<Impact, string> = {
 export function ImpactBadge({ impact }: { impact: Impact }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold tracking-wider ${IMPACT_STYLE[impact]}`}
+      className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-micro font-semibold tracking-wider ${IMPACT_STYLE[impact]}`}
     >
       {impact === 'NONE' ? '—' : impact[0]}
     </span>
@@ -286,7 +292,7 @@ export function ImpactBadge({ impact }: { impact: Impact }) {
 
 export function CurrencyChip({ currency }: { currency: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--color-text)]">
+    <span className="inline-flex shrink-0 items-center rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 font-mono text-micro font-semibold text-[var(--color-text)]">
       {currency}
     </span>
   );
@@ -318,7 +324,7 @@ export function SourceBadge({ source }: { source: string | null | undefined }) {
     source === 'manual' ? 'manual' : source === 'ai-extracted' ? 'AI-extracted' : source;
 
   return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${style}`}>
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-micro font-medium ${style}`}>
       {label}
     </span>
   );

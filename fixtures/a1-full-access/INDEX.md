@@ -36,9 +36,24 @@ forward-filled — so only the **last** row is safely comparable across currenci
 and that is the row the board is scoring today. `npm run a1-truth-table` reads
 these and scores them against the legs A1's own board prints.
 
-## Not yet captured, in priority order
+## The window is closed
 
-Everything below is impossible once the window closes on 2026-09-07:
+**A1's Free Week ended on 2026-09-07. Every capture this repository will ever
+hold from full access is in this directory.** Nothing further can be taken.
+
+One capture was lost in flight: the dated **Retail Sent. History for the 22 FX
+crosses** was 25 symbols into its pull when their feed went down, and the partial
+read never reached the repo. It was the only way to validate a retail feed for
+the Crowd column on crosses, so that column's cross gap is now permanently
+unverifiable against A1 (ledger `crowd:no-public-cross-feed-passes-the-gate`).
+
+The list below is kept as the record of what was never captured. Items 1 (mPMI
+and sPMI) and the EURUSD Score History were captured before the close; the rest
+are now **unobtainable**, not pending.
+
+## Never captured (unobtainable since 2026-09-07)
+
+Originally, in priority order:
 
 1. GDP Growth, Manufacturing PMI, Services PMI, Retail Sales — same shape as CPI
 2. Labor Market Data (NFP, Unemployment Rate, Claims, ADP, JOLTS)

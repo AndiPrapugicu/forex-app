@@ -130,13 +130,13 @@ function IndicatorCard({
       }`}
     >
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[11px] font-semibold tracking-wide">{series.label}</span>
-        <span className="tnum ml-auto shrink-0 text-[9px] text-[var(--color-faint)]">
+        <span className="font-mono text-micro font-semibold tracking-wide">{series.label}</span>
+        <span className="tnum ml-auto shrink-0 text-micro text-[var(--color-faint)]">
           {latest.dateUtc.slice(0, 10)}
         </span>
       </div>
 
-      <p className="-mt-1.5 truncate text-[10px] text-[var(--color-faint)]" title={series.eventName}>
+      <p className="-mt-1.5 truncate text-micro text-[var(--color-faint)]" title={series.eventName}>
         {series.eventName}
       </p>
 
@@ -146,14 +146,14 @@ function IndicatorCard({
           <span className="text-xs font-normal text-[var(--color-muted)]">{unit}</span>
         </span>
         {latest.consensus !== null && (
-          <span className={`tnum text-[10px] font-medium ${outcomeClass(o)}`}>
+          <span className={`tnum text-micro font-medium ${outcomeClass(o)}`}>
             {(latest.surprise ?? 0) > 0 ? '+' : ''}
             {num(latest.surprise ?? 0)}
           </span>
         )}
       </div>
 
-      <div className="-mt-1 text-[10px] text-[var(--color-faint)]">
+      <div className="-mt-1 text-micro text-[var(--color-faint)]">
         {latest.consensus === null ? (
           'no forecast published'
         ) : (
@@ -170,7 +170,7 @@ function IndicatorCard({
 
       <Sparkline points={series.points} unit={series.unit} />
 
-      <div className="flex items-center gap-2 text-[9px] text-[var(--color-faint)]">
+      <div className="flex items-center gap-2 text-micro text-[var(--color-faint)]">
         <span>
           {series.beatRatePct === null ? 'no forecasts' : `beat ${series.beatRatePct}% of the time`}
         </span>
@@ -209,7 +209,7 @@ export function ChartsView({
   const ungrouped = series.filter((s) => !GROUPS.some((g) => g.category === s.category));
 
   return (
-    <div className="px-4 py-4">
+    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
       {/*
         Sticky, because the currency switcher is the page's main control and
         scrolling to a series only to have to scroll back up to change economy
@@ -224,8 +224,8 @@ export function ChartsView({
         </div>
 
         {series.length > 0 && (
-          <div className="flex items-baseline gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[11px]">
-            <span className="text-[9px] tracking-wider text-[var(--color-faint)] uppercase">
+          <div className="flex items-baseline gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-micro">
+            <span className="text-micro tracking-wider text-[var(--color-faint)] uppercase">
               Latest print
             </span>
             <span className="tnum font-semibold text-[var(--color-bull)]">{beats} beat</span>
@@ -239,7 +239,7 @@ export function ChartsView({
               key={c}
               href={`/charts?currency=${c}`}
               aria-current={c === currency ? 'page' : undefined}
-              className={`rounded px-2.5 py-1 font-mono text-[11px] transition-colors ${
+              className={`rounded px-2.5 py-1 font-mono text-micro transition-colors ${
                 c === currency
                   ? 'bg-[var(--color-bull)]/15 font-semibold text-[var(--color-bull)]'
                   : 'text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]'
@@ -264,11 +264,11 @@ export function ChartsView({
             (group) => (
               <section key={group.category}>
                 <div className="mb-2 flex items-baseline gap-2">
-                  <h2 className="text-[11px] font-semibold tracking-wider text-[var(--color-muted)] uppercase">
+                  <h2 className="text-micro font-semibold tracking-wider text-[var(--color-muted)] uppercase">
                     {group.label}
                   </h2>
-                  <span className="text-[10px] text-[var(--color-faint)]">{group.hint}</span>
-                  <span className="tnum ml-auto text-[10px] text-[var(--color-faint)]">
+                  <span className="text-micro text-[var(--color-faint)]">{group.hint}</span>
+                  <span className="tnum ml-auto text-micro text-[var(--color-faint)]">
                     {group.items.length}
                   </span>
                 </div>
@@ -303,7 +303,7 @@ export function ChartsView({
         </div>
       )}
 
-      <p className="mt-6 text-[10px] leading-relaxed text-[var(--color-faint)]">
+      <p className="mt-6 text-micro leading-relaxed text-[var(--color-faint)]">
         Blue is a print above forecast, red below — the comparison, not the verdict: a hot
         unemployment number beats its forecast and is still bad news. Series resolve with the same
         rules the scorecard uses, so a chart here always refers to the release the Top Setups matrix

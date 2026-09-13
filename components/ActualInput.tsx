@@ -60,7 +60,7 @@ export function ActualInput({
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
       <form onSubmit={submit} className="flex items-center gap-2">
-        <label htmlFor="actual-input" className="text-[11px] whitespace-nowrap text-[var(--color-muted)]">
+        <label htmlFor="actual-input" className="text-micro whitespace-nowrap text-[var(--color-muted)]">
           {event.actual === null ? 'Enter actual' : 'Override actual'}
         </label>
         <input
@@ -83,16 +83,16 @@ export function ActualInput({
         </button>
       </form>
 
-      {error && <p className="mt-1.5 text-[11px] text-[var(--color-bear)]">{error}</p>}
+      {error && <p className="mt-1.5 text-micro text-[var(--color-bear)]">{error}</p>}
 
       {/* Overriding a feed value is surfaced, never silent. */}
       {conflict && (
-        <p className="mt-1.5 text-[11px] text-[var(--color-uncertain)]">
+        <p className="mt-1.5 text-micro text-[var(--color-uncertain)]">
           Saved. Note this overrides the feed value of {conflict.feed} with {conflict.manual}.
         </p>
       )}
 
-      <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-faint)]">
+      <p className="mt-1.5 text-micro leading-relaxed text-[var(--color-faint)]">
         A manual value outranks every feed and rescores immediately. Use it the moment a number
         prints — the feeds lag by seconds to minutes.
       </p>

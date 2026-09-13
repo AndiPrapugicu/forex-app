@@ -48,13 +48,13 @@ export function PriceStatistics({
         {smaRows.map((s) => (
           <div key={s.label} className="flex items-center justify-between px-4 py-1.5">
             <dt
-              className={`text-[11px] ${
+              className={`text-micro ${
                 s.scored ? 'text-[var(--color-text)]' : 'text-[var(--color-muted)]'
               }`}
             >
               {s.label} SMA
               {s.scored && (
-                <span className="ml-1.5 text-[9px] text-[var(--color-faint)]">scores trend</span>
+                <span className="ml-1.5 text-micro text-[var(--color-faint)]">scores trend</span>
               )}
             </dt>
             <dd className="flex items-center gap-2">
@@ -63,7 +63,7 @@ export function PriceStatistics({
               </span>
               {s.value !== null && price !== null && (
                 <span
-                  className={`text-[10px] font-medium ${
+                  className={`text-micro font-medium ${
                     price > s.value ? 'text-[var(--color-bull)]' : 'text-[var(--color-bear)]'
                   }`}
                 >
@@ -80,13 +80,13 @@ export function PriceStatistics({
           { label: 'Avg daily move (90d)', value: avgDailyMove90Pct },
         ].map((r) => (
           <div key={r.label} className="flex items-center justify-between px-4 py-1.5">
-            <dt className="text-[11px] text-[var(--color-muted)]">{r.label}</dt>
+            <dt className="text-micro text-[var(--color-muted)]">{r.label}</dt>
             <dd className="tnum text-xs">{r.value === null ? '—' : `${r.value}%`}</dd>
           </div>
         ))}
       </dl>
 
-      <p className="border-t border-[var(--color-border)] px-4 py-2 text-[10px] leading-relaxed text-[var(--color-faint)]">
+      <p className="border-t border-[var(--color-border)] px-4 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
         The averages come from closed bars and do not move with the tick — only which side of them
         the price is on.
       </p>

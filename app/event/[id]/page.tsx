@@ -101,7 +101,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               href={event.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
+              className="text-micro text-[var(--color-muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-text)]"
             >
               View source
             </a>
@@ -122,7 +122,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <ConfidenceRing confidence={score.confidence} />
 
                 {score.direction === 'uncertain' && (
-                  <p className="text-center text-[11px] leading-relaxed text-[var(--color-uncertain)]">
+                  <p className="text-center text-micro leading-relaxed text-[var(--color-uncertain)]">
                     Confidence is below the threshold, so no direction is asserted.
                   </p>
                 )}
@@ -167,7 +167,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               <ol className="divide-y divide-[var(--color-border)]">
                 {score.trace.map((step, i) => (
                   <li key={`${step.label}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold text-[var(--color-muted)]">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-micro font-semibold text-[var(--color-muted)]">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -185,7 +185,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                           {formatTraceValue(step.value, step.op)}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-muted)]">
+                      <p className="mt-0.5 text-micro leading-relaxed text-[var(--color-muted)]">
                         {step.detail}
                       </p>
                     </div>
@@ -194,7 +194,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               </ol>
 
               <div className="border-t border-[var(--color-border)] px-4 py-2.5">
-                <p className="text-[10px] leading-relaxed text-[var(--color-faint)]">
+                <p className="text-micro leading-relaxed text-[var(--color-faint)]">
                   Classified as <span className="text-[var(--color-muted)]">{rule.key}</span> (
                   {rule.category}). {event.currency} policy regime:{' '}
                   <span className="text-[var(--color-muted)]">{CURRENCY_REGIME[event.currency]}</span>.
@@ -208,7 +208,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <p className="text-xs font-semibold text-[var(--color-uncertain)]">
                   Sources disagree
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-muted)]">
+                <p className="mt-1 text-micro leading-relaxed text-[var(--color-muted)]">
                   {event.source} rates this print as{' '}
                   {event.isBetterThanExpected ? 'better' : 'worse'} than expected, which conflicts
                   with our polarity rule for {rule.key}. Confidence has been reduced. Worth a look
@@ -240,7 +240,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                     return (
                       <div key={p.pair} className="bg-[var(--color-surface)] px-3 py-2">
                         <div className="font-mono text-xs text-[var(--color-text)]">{p.pair}</div>
-                        <div className={`mt-0.5 text-[11px] font-medium ${s.color}`}>
+                        <div className={`mt-0.5 text-micro font-medium ${s.color}`}>
                           {s.glyph} {s.label}
                         </div>
                       </div>
@@ -282,7 +282,7 @@ function ValueRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-2">
-      <dt className="text-[11px] tracking-wide text-[var(--color-faint)] uppercase">{label}</dt>
+      <dt className="text-micro tracking-wide text-[var(--color-faint)] uppercase">{label}</dt>
       <dd className="flex items-center gap-2">
         {badge}
         <span

@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { loadLatestA1Capture } from '@/lib/a1-capture-file';
+import { loadMirrorCapture } from '@/lib/a1-capture-file';
 import { loadChangeLog, loadDayDeltas } from '@/lib/change-log';
 import { buildMirrorOverlay } from '@/lib/scoring/a1-mirror';
 import { buildA1ProfileRows, runSetupsPipeline } from '@/lib/setups-pipeline';
@@ -26,7 +26,8 @@ export async function GET() {
      * rather than in the browser because the capture lives on disk and the
      * sum-and-band rule must not be restated client-side.
      */
-    const mirror = buildMirrorOverlay(matrix.rows, loadLatestA1Capture() ?? undefined, buildA1ProfileRows(payload));
+    const { capture, staleLabel } = loadMirrorCapture();
+    const mirror = buildMirrorOverlay(matrix.rows, capture ?? undefined, buildA1ProfileRows(payload), staleLabel);
     return NextResponse.json(
       { ...matrix, health, changeLog, mirror, dayDeltas },
       { headers: { 'Cache-Control': 'no-store' } },

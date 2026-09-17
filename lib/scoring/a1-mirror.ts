@@ -251,6 +251,8 @@ export function mirrorDiffCount(rows: MirroredRow[]): number {
 export interface MirrorOverlay {
   /** Which capture the `captured` tier was read from, for the UI to name. */
   capturedFrom: string | null;
+  /** The newest capture, when it was refused for being too old to mirror. */
+  staleCapture: string | null;
   /** symbol -> slotKey -> the mirrored value. Only cells that MOVED. */
   cells: Record<string, Record<string, number | null>>;
   /** symbol -> the recomputed header, for rows whose total moved. */
@@ -265,6 +267,7 @@ export function buildMirrorOverlay(
   rows: SymbolRow[],
   capture?: A1Capture,
   a1ProfileRows?: SymbolRow[],
+  staleCapture: string | null = null,
 ): MirrorOverlay {
   const mirrored = mirrorBoard(rows, capture, a1ProfileRows);
   const cells: MirrorOverlay['cells'] = {};
@@ -282,6 +285,7 @@ export function buildMirrorOverlay(
 
   return {
     capturedFrom: capture?.label ?? null,
+    staleCapture,
     cells,
     totals,
     conventions: { ...COVERAGE_CONVENTIONS, ...PAIR_CONVENTIONS },

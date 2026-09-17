@@ -1750,8 +1750,13 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'evidence about their pipeline, not about their cell.',
     productionAction:
       'None. Not added to the coverage table, and not reproduced in `ours` either: scoring a 125-day-old ' +
-      'frozen print would copy a bug. After the PMI seed (2026-09-13) every remaining sPMI disagreement ' +
-      'in `npm run parity` is a CAD row, and this finding is why; it is not a work item.',
+      'frozen print would copy a bug. UPDATED 2026-09-15: the claim that every remaining sPMI disagreement ' +
+      'is a CAD row is stale. A new BusinessNZ PSI (2026-09-13, 51.2 vs 50.6) moved our NZD leg to +1 while ' +
+      'A1 still prints -1 on all three captures (09-02, 09-13, 09-15), a 2-point swing on every NZD row. ' +
+      'A `frozenAt` coverage rule was tested and REJECTED: resolving our own calendar at 2026-05-01, 05-10 ' +
+      'and 05-31 gives NZD null/null/+1 (PSI 48.9 vs 46) and CAD null/+1/+1 (Ivey 57.7), not their ' +
+      '47.5/48.7 and 50.6/49.2, so their frozen rows are a different series and only hardcoding their ' +
+      'value would reproduce them.',
   },
   {
     key: 'retail:cad-a1-heatmap-is-the-statcan-advance-estimate',
@@ -1920,6 +1925,37 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'or lag change is licensed by this entry. (Independently, and display only, a trend cell within 0.05% ' +
       'of flipping now states its margin.) Upgrade to STRONG only if another dated capture shows AUD rows ' +
       'lagging again.',
+  },
+  {
+    key: 'board:livestream-2026-09-15-gap-breakdown',
+    component: 'board total',
+    symbol: '28 legible rows',
+    date: '2026-09-15',
+    ours: '394 of 504 cells agree (78.2%), 93 OURS, 12 not scored, abs score gap 48',
+    a1: 'livestream board, 2026-09-15',
+    classification: 'UNKNOWN',
+    evidence:
+      'fixtures/a1-video-top-setups-2026-09-15.csv (two legible frames, every row checksums to its printed ' +
+      'Score; blurry-only rows excluded). `npm run board-parity -- <fixture> --at 2026-09-15T12:00:00Z`, ' +
+      'ours profile, no stored crowd feed. By column (OURS / not scored / abs gap): CnsmrConf 12/0/24 ' +
+      '(INDEX_BLANK; pair legs AUD +1 vs our Westpac -1, JPY -1 vs our +1); Crowd 12/9/22 (feed not live: ' +
+      'every ingest run fails before the request, INGEST_URL unset); PPI 5/0/18 (NEGATED, mirrored); sPMI ' +
+      '8/0/16 (NZD frozen -1 vs our +1, CHF reads EUR); RetailSales 11/0/12 (AUD no series, CAD advance ' +
+      'estimate, GBP -1 vs our 0 at -0.5 vs -0.5); GDP 11/0/11 (NZD 0 vs our -1 at 0.8 vs 0.9, JPY +1 vs ' +
+      'our 0 at 0.4 vs 0.4); Rates 10/0/10; Seasonality 5/0/9; CPI 6/0/6 (JPY +1 vs our 0 at 1.8 vs 1.8). ' +
+      'The 2026-09-14 22:00 cut scores 391 and 47, so the frame is not decided by the cut. ' +
+      'RE-MEASURED 2026-09-17 after the first successful ingest stored the Myfxbook feed (131 symbols): ' +
+      '407 of 504 agree (80.8%), abs score gap 40; Crowd 8/0/9, every other column unchanged. The feed is ' +
+      'dated 2026-09-17 against a 2026-09-15 board (crowd does not rewind), so the Crowd residual is an ' +
+      'upper bound on the real disagreement.',
+    confidence: 'WEAK',
+    rootCause:
+      'Mostly not scoring: an undeployed crowd feed, A1 pair-board conventions, and legs where the print ' +
+      'equals the consensus we hold (GBP retail, JPY GDP and CPI) but A1 scores a direction, which points ' +
+      'at a different consensus source. One board, blurry frames, no published A1 forecast to compare.',
+    productionAction:
+      'NONE from this board. Crowd is live since the 2026-09-17 ingest. The GBP/JPY equal-to-consensus legs need ' +
+      "A1's own forecast (their heatmap cards) on a second date before any consensus source is swapped.",
   },
   {
     key: 'options:no-public-per-symbol-chain-passes-the-gate',

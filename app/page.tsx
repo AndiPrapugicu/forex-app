@@ -6,7 +6,7 @@
  * interval is deliberately long compared with the news dashboard.
  */
 
-import { loadLatestA1Capture } from '@/lib/a1-capture-file';
+import { loadMirrorCapture } from '@/lib/a1-capture-file';
 import { loadChangeLog, loadDayDeltas } from '@/lib/change-log';
 import { buildMirrorOverlay, type MirrorOverlay } from '@/lib/scoring/a1-mirror';
 import { buildA1ProfileRows, runSetupsPipeline } from '@/lib/setups-pipeline';
@@ -42,7 +42,8 @@ export default async function TopSetupsPage({
     matrix = result.matrix;
     health = result.health;
     [changeLog, dayDeltas] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
-    mirror = buildMirrorOverlay(matrix.rows, loadLatestA1Capture() ?? undefined, buildA1ProfileRows(result));
+    const { capture, staleLabel } = loadMirrorCapture();
+    mirror = buildMirrorOverlay(matrix.rows, capture ?? undefined, buildA1ProfileRows(result), staleLabel);
   } catch (err) {
     error = err instanceof Error ? err.message : 'Failed to build the scorecard';
   }

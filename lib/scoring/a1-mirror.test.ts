@@ -26,14 +26,14 @@ function cell(slotKey: string, value: number | null): MatrixCell {
   };
 }
 
-function row(symbol: string, cells: Record<string, number | null>): SymbolRow {
+function row(symbol: string, cells: Record<string, number | null>, kind: SymbolRow['kind'] = 'fx'): SymbolRow {
   const built: Record<string, MatrixCell> = {};
   for (const [key, value] of Object.entries(cells)) built[key] = cell(key, value);
   const total = Object.values(cells).reduce<number>((s, v) => s + (v ?? 0), 0);
   return {
     symbol,
     label: symbol,
-    kind: 'fx',
+    kind,
     base: 'EUR',
     quote: 'USD',
     totalScore: total,
@@ -63,6 +63,19 @@ describe('mirrorBoard', () => {
     const capture = load('a1-top-setups-2026-09-01.csv');
     const [mirrored] = mirrorBoard([row('EURUSD', { ppi: 1 })], capture);
     expect(mirrored.cells.ppi.cell).toBe(capture.rows.get('EURUSD')?.ppi);
+  });
+
+  /**
+   * 2026-09-17 livestream: CH-FRANC PPI +1 and GOLD PPI -1 on their board, both
+   * equal to our unmirrored cells. Negation is for pair rows only.
+   */
+  it('keeps PPI as ours on currency and asset rows', () => {
+    const [chf] = mirrorBoard([row('CHFX', { ppi: 1 }, 'currency')]);
+    const [gold] = mirrorBoard([row('XAUUSD', { ppi: -1 }, 'commodity')]);
+    expect(chf.cells.ppi.cell).toBe(1);
+    expect(chf.cells.ppi.mirror?.tier).toBe('ours');
+    expect(gold.cells.ppi.cell).toBe(-1);
+    expect(gold.totalScore).toBe(-1);
   });
 
   it('leaves a null PPI alone rather than inventing a negated zero', () => {

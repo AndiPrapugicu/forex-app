@@ -20,6 +20,7 @@ function row(symbol: string, cells: Record<string, number | null>): SymbolRow {
   }
   return {
     symbol,
+    kind: 'fx',
     totalScore: total,
     bias: 'Neutral',
     categoryScores: { technical: 0, sentiment: 0, growth: 0, inflation: 0, jobs: 0 },

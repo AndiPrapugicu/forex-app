@@ -24,7 +24,7 @@
 import { z } from 'zod';
 import { TRADINGVIEW } from '@/config/sources.config';
 import { fetchJson, fixturesEnabled, stableId } from '@/lib/connectors/base';
-import { isMajor, ok, type NormalizedEvent, type Result } from '@/lib/types';
+import { fail, isMajor, ok, type NormalizedEvent, type Result } from '@/lib/types';
 
 const TvEvent = z.object({
   title: z.string(),
@@ -183,6 +183,12 @@ async function pullCountry(
   country: string,
   from: Date,
   to: Date,
+  /**
+   * Distinguishes a pull over a different window. The key is otherwise built
+   * from `from` alone, so a forward-looking pull starting the same day would be
+   * served the forecast pull's shorter response.
+   */
+  cacheKeySuffix = '',
 ): Promise<{ rows: TvRow[]; capped: boolean } | null> {
   const url =
     `${TRADINGVIEW.base}?from=${encodeURIComponent(from.toISOString())}` +
@@ -191,7 +197,7 @@ async function pullCountry(
   const res = await fetchJson<unknown>(TRADINGVIEW.name, url, {
     headers: { ...TRADINGVIEW.headers },
     cacheTtlSeconds: TRADINGVIEW.cacheTtlSeconds,
-    cacheKey: `tradingview:${country}:${from.toISOString().slice(0, 10)}`,
+    cacheKey: `tradingview:${country}:${from.toISOString().slice(0, 10)}${cacheKeySuffix}`,
     timeoutMs: 20_000,
     retries: 1,
   });
@@ -362,6 +368,90 @@ export async function fetchTradingViewActuals(
     out,
     failed.length > 0 ? `no rows for ${failed.join(', ')}` : undefined,
   );
+}
+
+type RateDecisionCountry = keyof typeof TRADINGVIEW.rateDecisions.titles;
+
+/**
+ * One country's central-bank decisions as calendar events, past and scheduled.
+ *
+ * PURE, so the title match can be tested without the network. Exact title only:
+ * "BoJ Interest Rate Decision" and nothing that merely contains it, because the
+ * same calendar lists deposit rates, statements and projections beside it.
+ */
+export function toRateDecisionEvents(
+  country: RateDecisionCountry,
+  rows: readonly { title: string; date: string; actual?: number | null; forecast?: number | null; previous?: number | null }[],
+): NormalizedEvent[] {
+  const spec = TRADINGVIEW.rateDecisions.titles[country];
+  const out: NormalizedEvent[] = [];
+  for (const row of rows) {
+    if (row.title.trim() !== spec.title) continue;
+    const dateUtc = new Date(row.date).toISOString();
+    out.push({
+      id: stableId('tv', 'rate-decision', spec.currency, dateUtc),
+      seriesId: null,
+      name: TRADINGVIEW.rateDecisions.publishAs,
+      currency: spec.currency,
+      countryCode: toOurCountry(country),
+      dateUtc,
+      impact: 'HIGH',
+      actual: row.actual ?? null,
+      consensus: row.forecast ?? null,
+      previous: row.previous ?? null,
+      revised: null,
+      unit: '%',
+      ratioDeviation: null,
+      isBetterThanExpected: null,
+      isSpeech: false,
+      isPreliminary: false,
+      source: 'tradingview',
+      actualSource: 'tradingview',
+      sourceUrl: null,
+      lastUpdated: null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Every major central bank's decisions over a window reaching past today.
+ *
+ * ALL OR NOTHING. The Rates column is a difference between two banks, so a
+ * board where one country's pull failed must not score the other seven from
+ * this and the eighth from something else. Any failed or capped country fails
+ * the whole Result, and the scorer falls back as a unit.
+ */
+export async function fetchTradingViewRateDecisions(
+  now = new Date(),
+): Promise<Result<NormalizedEvent[]>> {
+  const label = `${TRADINGVIEW.name}:rate decisions`;
+  if (fixturesEnabled()) return ok(label, []);
+
+  const cfg = TRADINGVIEW.rateDecisions;
+  const from = new Date(now.getTime() - cfg.lookbackDays * 86_400_000);
+  const to = new Date(now.getTime() + cfg.lookaheadDays * 86_400_000);
+  const countries = Object.keys(cfg.titles) as RateDecisionCountry[];
+
+  const out: NormalizedEvent[] = [];
+  const problems: string[] = [];
+  for (let i = 0; i < countries.length; i += TRADINGVIEW.batchSize) {
+    const batch = countries.slice(i, i + TRADINGVIEW.batchSize);
+    const results = await Promise.all(batch.map((c) => pullCountry(c, from, to, ':rate-decisions')));
+    results.forEach((raw, j) => {
+      const country = batch[j];
+      if (!raw) problems.push(`${country} unreachable`);
+      else if (raw.capped) problems.push(`${country} capped`);
+      else {
+        const events = toRateDecisionEvents(country, raw.rows);
+        if (events.length === 0) problems.push(`${country} has no decision in the window`);
+        out.push(...events);
+      }
+    });
+  }
+
+  if (problems.length > 0) return fail(label, problems.join('; '));
+  return ok(label, out);
 }
 
 /**

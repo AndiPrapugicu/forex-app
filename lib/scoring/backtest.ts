@@ -24,6 +24,7 @@ import { publicationDate, type CotSeries } from '@/lib/connectors/cftc';
 import type { DailyBars } from '@/lib/connectors/technicals';
 import type { Technicals } from '@/lib/connectors/technicals';
 import { TREND_SMA, TREND_SLOPE_LOOKBACK_DAYS } from '@/config/setups.config';
+import { TRADINGVIEW } from '@/config/sources.config';
 import { dropSupersededSeed } from '@/lib/scoring/pmi-seed-precedence';
 import { buildSetupsMatrix } from '@/lib/scoring/setups';
 import type { NormalizedEvent } from '@/lib/types';
@@ -159,7 +160,18 @@ export function asOf(input: BacktestInput, at: Date) {
    * no history of its own forecast column. That is why `component-parity.ts`
    * labels a consensus-based rates cell PARTIAL rather than HISTORICAL.
    */
-  const released = input.events.filter((e) => e.dateUtc <= iso || e.actual === null);
+  const released = input.events
+    /**
+     * A central-bank decision that has since happened was, at `at`, a scheduled
+     * decision with a published consensus — which is exactly what the Rates
+     * column reads. Kept, with the outcome removed, instead of dropped.
+     */
+    .map((e) =>
+      e.name === TRADINGVIEW.rateDecisions.publishAs && e.dateUtc > iso && e.actual !== null
+        ? { ...e, actual: null }
+        : e,
+    )
+    .filter((e) => e.dateUtc <= iso || e.actual === null);
 
   /**
    * THEN the PMI seed's precedence, settled against THIS frame's calendar and

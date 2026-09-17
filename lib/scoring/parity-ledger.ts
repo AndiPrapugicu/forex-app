@@ -1958,6 +1958,62 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       "A1's own forecast (their heatmap cards) on a second date before any consensus source is swapped.",
   },
   {
+    key: 'board:livestream-2026-09-17-gap-breakdown',
+    component: 'board total',
+    symbol: '60 legible rows over three frames',
+    date: '2026-09-17',
+    ours: '910 of 1080 cells agree (84.3%), abs score gap 70 over 60 rows (mean 1.17, 09-15 was 1.43)',
+    a1: 'livestream board, frames at 12:03, 12:56 and 14:23 UTC',
+    classification: 'UNKNOWN',
+    evidence:
+      'fixtures/a1-video-top-setups-2026-09-17-{a,b,c}.csv, every row checksums to its printed Score. ' +
+      'Frames dated off the presenter taskbar (07:03 at 32:29) as US Central: US-DOLLAR UnempClaims is -1 ' +
+      'at 12:03 and +1 at 12:56, straddling the 12:30 UTC claims release, which also moves every US index ' +
+      '+2 between frames. board-parity per frame (agree of cells / abs gap): a 244/270 / 11, b 352/432 / 34, ' +
+      'c 314/378 / 25. Recurring columns: CnsmrConf (A1 pair legs AUD, GBP, NZD +1, JPY, USD, CAD -1, ' +
+      'CHF 0 against ours AUD -1 Westpac, NZD -1, JPY +1, CAD blank; index rows blank), sPMI (NZD frozen ' +
+      '-1 again, CHF reads EUR), Rates (A1 EUR, GBP, NZD 0 against our +1 from the 2026-09-01 projection ' +
+      'snapshot, also on 09-15), Seasonality (9 flips, 8 with |September mean| <= 0.22%, USDZAR -0.34%; ' +
+      'USDCHF and AUDJPY also carried an August -1 and A1 shows September, so it is not a roll lag).',
+    confidence: 'WEAK',
+    rootCause:
+      'Seasonality is the known near-zero sign flip. Rates was a stale projection snapshot (see ' +
+      'rates:calendar-consensus-supersedes-stale-snapshot, fixed). Consumer confidence is a source ' +
+      'difference on AUD, NZD and JPY on a second date. The mirror negated PPI on currency and asset rows, ' +
+      'which A1 does not (CH-FRANC +1, GOLD, NASDAQ, DOW -1 all equal our unmirrored cells): fixed.',
+    productionAction:
+      'NONE from this board beyond the mirror PPI fix. Rates was fixed on its own PROVEN entry, ' +
+      'rates:calendar-consensus-supersedes-stale-snapshot.',
+  },
+  {
+    key: 'rates:calendar-consensus-supersedes-stale-snapshot',
+    component: 'Interest Rates (FX legs)',
+    symbol: 'all eight majors',
+    date: '2026-09-17',
+    ours: 'EUR, GBP, NZD +1 and USD +1 off the 2026-09-01 projections snapshot',
+    a1: 'EUR, GBP, NZD 0; USD +1 on 09-15 and 0 on 09-17; JPY +1; AUD, CAD, CHF 0',
+    classification: 'FIXED',
+    evidence:
+      'TradingView central-bank calendar read 2026-09-17: Fed 09-16 4.00 from 3.75, ECB 09-10 2.65 from ' +
+      '2.40, BoE 09-17 hold 3.75, BoJ 09-18 forecast 1.25 against 1.00, RBNZ 09-02 2.75 from 2.50, BoC 09-02 ' +
+      'hold 2.25, RBA 09-29 and SNB 09-24 with no forecast. sign(next consensus - standing) gives 09-15 USD ' +
+      '+1, JPY +1, others 0, and 09-17 JPY +1, others 0 - A1 pair legs EURUSD -1, GBPJPY -1, NZDUSD -1, ' +
+      'AUDNZD 0 on 09-15 and USDJPY -1, EURUSD 0, EURX/GBPX/NZDX 0 on 09-17. board-parity Rates column OURS ' +
+      '10 -> 1 on 09-15 and 5/8/10 -> 1/1/1 on the three 09-17 frames; the survivor is GER40/UK100 on the ' +
+      'US02Y asset rule. Cells agreeing: 09-15 407 -> 416 of 504, 09-17 910 -> 930 of 1080. npm run parity ' +
+      'TOTAL ABS GAP 102 -> 98, clean 111 -> 107. The USD leg is the control: +1 on 09-15 and 0 on 09-17, ' +
+      'flipping on A1s board exactly when the Fed decision lands between the two.',
+    confidence: 'PROVEN',
+    rootCause:
+      'The snapshot is a transcription of A1s projections page on one day and stayed live for 31 days. ' +
+      'Three banks decided inside that window, so its standing rates were wrong while still in date.',
+    productionAction:
+      'DONE 2026-09-17. lib/scoring/rate-decisions.ts: once any major decides after the newest snapshot (or it ages past 31 ' +
+      'days) the board uses the decision calendar for all eight banks, or falls back as a unit. Fetched by ' +
+      'fetchTradingViewRateDecisions; asOf keeps a later decision as scheduled so rewound boards read the ' +
+      'consensus that was public. Known limit: that consensus is the calendars final one.',
+  },
+  {
     key: 'options:no-public-per-symbol-chain-passes-the-gate',
     component: 'Options (Put-Call Ratio, Net Options Volume, Put & Call Walls)',
     symbol: 'GOLD, SPX500 and the other symbols A1 publishes options pages for',

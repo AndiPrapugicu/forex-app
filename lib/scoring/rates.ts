@@ -44,6 +44,13 @@
  * ALL-OR-NOTHING per board (`resolveConsensusProjectionLegs`) and must be
  * resolved once, above the per-currency loop, or the seam it exists to prevent
  * reappears one level up.
+ *
+ * SINCE 2026-09-17 THE SNAPSHOT STEPS ASIDE WHEN A BANK OVERTAKES IT. A reading
+ * of a page is true on the day it was read; after the RBNZ, ECB and Fed moved,
+ * the 2026-09-01 one kept scoring hikes that had already happened. Once any
+ * major decides after the snapshot's date, the board reads the central-bank
+ * decision calendar instead — the next decision's consensus against the
+ * standing rate, all eight banks or none. See `lib/scoring/rate-decisions.ts`.
  */
 
 import {

@@ -47,6 +47,7 @@ import {
   backfillConsensus,
   fetchTradingViewActuals,
   fetchTradingViewForecasts,
+  fetchTradingViewRateDecisions,
 } from '@/lib/connectors/tradingview';
 import { fetchPrices } from '@/lib/connectors/prices';
 import {
@@ -192,7 +193,7 @@ export async function runSetupsPipeline(
 ): Promise<SetupsPayload> {
   const [
     history, cot, technicals, prices, yield2y, yields, curve,
-    conferenceBoard, tvForecasts, ffCalendar, tvActuals, retail, pmiHistory,
+    conferenceBoard, tvForecasts, ffCalendar, tvActuals, retail, pmiHistory, rateDecisions,
   ] =
     await Promise.all([
       fetchFxStreetHistory(now),
@@ -247,6 +248,12 @@ export async function runSetupsPipeline(
        * stored. A store read, so it stays parallel with the fetches.
        */
       fetchPmiHistory(now),
+      /**
+       * Every major bank's decisions, past and scheduled, for the Rates column
+       * once a bank has moved since the projections snapshot. All or nothing:
+       * one unreachable country fails the whole read. See rate-decisions.ts.
+       */
+      fetchTradingViewRateDecisions(now),
     ]);
 
   /**
@@ -294,7 +301,13 @@ export async function runSetupsPipeline(
    * a borrowed consensus to a seeded row. Precedence is then settled for the
    * live board only; `rewindPool` keeps the unsettled pool for replays.
    */
-  const rewindPool = unionPmiHistory(ffBackfill.events, pmiHistory.ok ? pmiHistory.data : []);
+  // Decision rows join after the backfills: they carry their own consensus and
+  // publish under a name no slot reads, so nothing else can pick them up.
+  const decisionRows = rateDecisions.ok ? rateDecisions.data : [];
+  const rewindPool = unionPmiHistory(
+    [...ffBackfill.events, ...decisionRows],
+    pmiHistory.ok ? pmiHistory.data : [],
+  );
   const events = dropSupersededSeed(rewindPool);
 
   /**
@@ -352,6 +365,12 @@ export async function runSetupsPipeline(
     toHealth(tvActuals),
     retailHealth,
     { ...toHealth(pmiHistory), note: pmiHistoryNote(pmiHistory.counts) },
+    {
+      ...toHealth(rateDecisions),
+      note: rateDecisions.ok
+        ? `${decisionRows.length} decisions, ${decisionRows.filter((e) => e.actual === null && e.consensus !== null).length} scheduled with consensus`
+        : undefined,
+    },
   ];
   const cotData = cot.ok ? cot.data : new Map<string, CotSeries>();
   const techData = technicals.ok ? technicals.data : new Map<string, Technicals>();

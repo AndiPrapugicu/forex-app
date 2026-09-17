@@ -43,9 +43,12 @@ import {
 import projectionSnapshots from '@/fixtures/a1-rate-projections.json';
 import { scoreRateExpectation, type RateExpectation } from '@/lib/scoring/rates';
 import {
+  PROJECTION_MAX_STALENESS_DAYS,
   resolveConsensusProjectionLegs,
+  snapshotFor,
   type RateProjectionSnapshot,
 } from '@/lib/scoring/rate-projections';
+import { decidedSince, resolveCalendarRateLegs } from '@/lib/scoring/rate-decisions';
 import { scoreSeasonality, scoreTrend, scoreYield2y } from '@/lib/scoring/technical';
 import { MAJORS, type Currency, type NormalizedEvent } from '@/lib/types';
 
@@ -361,11 +364,38 @@ export function buildSetupsMatrix(input: BuildMatrixInput): SetupsMatrix {
     now.toISOString().slice(0, 10),
   );
 
+  /**
+   * A SNAPSHOT A BANK HAS SINCE OVERTAKEN IS NOT A READING OF TODAY.
+   *
+   * The snapshot is A1's own page and wins while it is current. Once any major
+   * has decided after it was read, its standing rates are known to be wrong, and
+   * the board switches — as a unit — to the decision calendar. See
+   * `lib/scoring/rate-decisions.ts` for the rule and the evidence.
+   */
+  const day = now.toISOString().slice(0, 10);
+  const newestSnapshot = snapshotFor(
+    (projectionSnapshots as { snapshots: RateProjectionSnapshot[] }).snapshots,
+    day,
+  );
+  // Also when the snapshot has aged out of its window: that is the same fact
+  // arriving by the calendar rather than by a decision. A board from before the
+  // first snapshot keeps the older ladder it was always measured under.
+  const agedOut =
+    newestSnapshot !== null &&
+    (Date.parse(`${day}T00:00:00Z`) - Date.parse(`${newestSnapshot.observedAt}T00:00:00Z`)) / 86_400_000 >
+      PROJECTION_MAX_STALENESS_DAYS;
+  const overtaken =
+    newestSnapshot !== null &&
+    (agedOut || decidedSince(input.events, MAJORS, newestSnapshot.observedAt, now));
+  const rateLegs = overtaken
+    ? resolveCalendarRateLegs(input.events, MAJORS, now).legs
+    : consensus.legs;
+
   const ratesByCurrency = new Map<Currency, RateExpectation>();
   for (const currency of MAJORS) {
     ratesByCurrency.set(
       currency,
-      scoreRateExpectation(currency, yields, input.events, now, consensus.legs?.get(currency)),
+      scoreRateExpectation(currency, yields, input.events, now, rateLegs?.get(currency)),
     );
   }
 

@@ -217,6 +217,38 @@ export const TRADINGVIEW = {
       unit: '%',
     },
   ] as const,
+
+  /**
+   * Central-bank decisions, past AND scheduled, for the Rates column.
+   *
+   * A1's column compares each bank's standing rate with the rate expected next
+   * ("current and next quarter's forecasted interest rate"). The calendar carries
+   * both halves on one row: `previous` is where the rate stands, `forecast` is
+   * the consensus for the coming decision. Read 2026-09-17, it gave every leg
+   * A1 printed on 09-15 and 09-17 — see ledger
+   * `rates:calendar-consensus-supersedes-stale-snapshot`.
+   *
+   * One exact title per country. For the euro area that is the MRO decision
+   * ("ECB Interest Rate Decision"), not the deposit facility, which TradingView
+   * lists separately; both move together at a decision.
+   *
+   * Published under a name no slot matches, so no other column can read these.
+   */
+  rateDecisions: {
+    publishAs: 'Policy Rate Decision (TradingView)',
+    lookbackDays: 120,
+    lookaheadDays: 200,
+    titles: {
+      US: { currency: 'USD', title: 'Fed Interest Rate Decision', bank: 'Fed' },
+      EU: { currency: 'EUR', title: 'ECB Interest Rate Decision', bank: 'ECB' },
+      GB: { currency: 'GBP', title: 'BoE Interest Rate Decision', bank: 'BoE' },
+      JP: { currency: 'JPY', title: 'BoJ Interest Rate Decision', bank: 'BoJ' },
+      AU: { currency: 'AUD', title: 'RBA Interest Rate Decision', bank: 'RBA' },
+      NZ: { currency: 'NZD', title: 'RBNZ Interest Rate Decision', bank: 'RBNZ' },
+      CA: { currency: 'CAD', title: 'BoC Interest Rate Decision', bank: 'BoC' },
+      CH: { currency: 'CHF', title: 'SNB Interest Rate Decision', bank: 'SNB' },
+    },
+  },
 } as const;
 
 /**

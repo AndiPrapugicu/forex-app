@@ -171,6 +171,22 @@ export function mirrorBoard(
           ...underTheirGaps,
           mirror: { tier: 'coverage', ours: cell.cell, mirrored: underTheirGaps.cell, why: coverage.why },
         };
+      } else if (key === 'ppi' && row.kind !== 'fx' && convention) {
+        /**
+         * The negation is a PAIR-row convention. Their currency and asset rows
+         * print the currency-impact leg we already score: on the 2026-09-17
+         * livestream CH-FRANC and JP-YEN read +1, GOLD, NASDAQ and DOW -1, each
+         * equal to our own cell and opposite to what negating it gave.
+         */
+        mirrored = {
+          ...cell,
+          mirror: {
+            tier: 'ours',
+            ours: cell.cell,
+            mirrored: cell.cell,
+            why: `${convention.why} Not a pair row: their currency and asset rows print the leg as we score it.`,
+          },
+        };
       } else if (convention?.tier === 'derived' && key === 'ppi' && cell.cell !== null) {
         const value = negate(cell.cell);
         mirrored = {

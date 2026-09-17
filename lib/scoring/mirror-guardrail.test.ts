@@ -51,6 +51,7 @@ describe('mirrorBoard returns a copy', () => {
     const rows = [
       {
         symbol: 'EURUSD',
+        kind: 'fx',
         totalScore: 1,
         bias: 'Neutral',
         categoryScores: { technical: 0, sentiment: 0, growth: 0, inflation: 1, jobs: 0 },

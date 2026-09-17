@@ -100,7 +100,7 @@ function cellTooltip(label: string, cell: MatrixCell, mirrorWhy?: string): strin
  * It is real information, but a grid this dense can only carry so many states
  * before none of them are read, and a cell that VOTES like a normal cell should
  * LOOK like one. The distinction survives where it costs nothing: in the
- * per-cell tooltip, and in the `+N◐` marker beside each row's coverage count.
+ * per-cell tooltip and in the mobile card's detail panel.
  */
 function cellStyle(cell: MatrixCell): { className: string; style?: React.CSSProperties; text: string } {
   /**
@@ -596,27 +596,6 @@ export function SetupsMatrix({
                   className="sticky z-10 border-b border-[var(--color-border)] px-2 py-1 text-left whitespace-nowrap"
                 >
                   <span className="text-caption font-medium">{row.bias}</span>
-                  {/* Populated count keeps a thin row from reading as confident. */}
-                  <span
-                    className="ml-1.5 text-micro opacity-60"
-                    title={`${row.populated} of ${SCORING_SLOTS.length} scored indicators resolved completely`}
-                  >
-                    {row.populated}
-                  </span>
-                  {/*
-                    Partial cells are called out beside the coverage count rather
-                    than folded into it: a row reading "16 +2◐" is saying two of
-                    its numbers came from one leg, which is a different kind of
-                    thinness from simply having fewer columns.
-                  */}
-                  {row.partial > 0 && (
-                    <span
-                      className="ml-1 text-micro text-[var(--color-uncertain)]"
-                      title={`${row.partial} cell(s) built from one leg because the other was expected and did not arrive`}
-                    >
-                      +{row.partial}◐
-                    </span>
-                  )}
                 </td>
 
                 <td
@@ -718,8 +697,7 @@ export function SetupsMatrix({
           </span>
         )}
         <span className="ml-auto">
-          The number after the bias is how many of {SCORING_SLOTS.length} scored indicators had data.
-          {cotReportDate && ` COT as of ${cotReportDate}.`}
+          {cotReportDate && `COT as of ${cotReportDate}.`}
         </span>
       </footer>
     </div>

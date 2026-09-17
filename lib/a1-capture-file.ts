@@ -57,6 +57,27 @@ export function listCaptures(dir = path.join(process.cwd(), 'fixtures')): { file
     .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`));
 }
 
+/**
+ * The mirror stops reading a capture older than this.
+ *
+ * Measured 2026-09-15: the mirror was still outlining cells read from the
+ * 2026-09-02 board, thirteen days and several releases later, so the toggle had
+ * become a viewer for a stale fixture — exactly what its header promised it
+ * would not be. Parity scripts keep `loadLatestA1Capture`, which is unaffected:
+ * they rewind to the capture's own moment, so its age is irrelevant there.
+ */
+export const MIRROR_CAPTURE_MAX_AGE_DAYS = 7;
+
+/** A capture's claimed moment from its filename parts; untimed means 00:00 UTC. */
+export function captureMoment(date: string, time: string): Date {
+  return new Date(`${date}T${time.slice(0, 2)}:${time.slice(2)}:00.000Z`);
+}
+
+export function isCaptureFresh(date: string, time: string, now: Date, maxAgeDays = MIRROR_CAPTURE_MAX_AGE_DAYS): boolean {
+  const ageMs = now.getTime() - captureMoment(date, time).getTime();
+  return ageMs <= maxAgeDays * 86_400_000;
+}
+
 let cached: { file: string; capture: A1Capture } | null = null;
 
 /**
@@ -80,4 +101,20 @@ export function loadLatestA1Capture(): A1Capture | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The capture the mirror may read, or none if the newest one is too old.
+ *
+ * `staleLabel` names the capture that was refused, so the UI can say why no
+ * cell is being read from A1's board rather than silently showing ours.
+ */
+export function loadMirrorCapture(now = new Date()): { capture: A1Capture | null; staleLabel: string | null } {
+  const newest = listCaptures()[0];
+  if (!newest) return { capture: null, staleLabel: null };
+  if (!isCaptureFresh(newest.date, newest.time, now)) {
+    const label = newest.time === '0000' ? newest.date : `${newest.date} ${newest.time.slice(0, 2)}:${newest.time.slice(2)}`;
+    return { capture: null, staleLabel: label };
+  }
+  return { capture: loadLatestA1Capture(), staleLabel: null };
 }

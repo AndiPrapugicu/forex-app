@@ -711,6 +711,9 @@ export function SetupsMatrix({
           <span className="text-[var(--color-uncertain)]">
             A1 mirror on — {mirror.moved} outlined cells re-derived under their pair-row
             conventions{mirror.capturedFrom ? `, some read from their ${mirror.capturedFrom} board` : ''}.
+            {mirror.staleCapture
+              ? ` Their newest capture (${mirror.staleCapture}) is over a week old, so no cell is read from it.`
+              : ''}{' '}
             Not our reading.
           </span>
         )}

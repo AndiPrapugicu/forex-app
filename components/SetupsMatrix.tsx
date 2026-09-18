@@ -217,12 +217,24 @@ const STICKY_LEFT = {
 } as const;
 const STICKY_TOTAL = STICKY.delta + STICKY.symbol + STICKY.bias + STICKY.score;
 
+/**
+ * `2026-09-17T16:08:00.000Z` -> `2026-09-17 16:08 UTC`.
+ *
+ * Absolute rather than "21h ago": the same markup is rendered on the server and
+ * in the browser, and a relative age computed twice against two clocks is a
+ * hydration mismatch.
+ */
+function captureLabel(iso: string): string {
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
 export function SetupsMatrix({
   rows,
   cotReportDate,
   mirror,
   initialView = 'full',
   dayDeltas,
+  dayDeltaSince = null,
 }: {
   rows: SymbolRow[];
   cotReportDate: string | null;
@@ -232,6 +244,12 @@ export function SetupsMatrix({
    * Absent until the ingest cron has a day of history; the column then reads "—".
    */
   dayDeltas?: Record<string, number | null>;
+  /**
+   * The capture the deltas are measured from. Named rather than assumed: the
+   * ingest schedule is throttled by GitHub, so "a day ago" is the nearest
+   * capture within six hours of it, and the column says which.
+   */
+  dayDeltaSince?: string | null;
   /** Null when no capture of A1's board is on disk — the toggle then hides. */
   mirror?: MirrorOverlay | null;
 }) {
@@ -569,9 +587,24 @@ export function SetupsMatrix({
                 >
                   {(() => {
                     const d = dayDeltas?.[row.symbol];
-                    if (d === null || d === undefined) return <span className="text-[var(--color-faint)]">—</span>;
+                    if (d === null || d === undefined)
+                      return (
+                        <span
+                          className="text-[var(--color-faint)]"
+                          title={
+                            dayDeltaSince
+                              ? `No stored score for ${row.symbol} in that capture.`
+                              : 'No stored board within six hours of a day ago, so there is nothing to compare with yet.'
+                          }
+                        >
+                          —
+                        </span>
+                      );
                     return (
-                      <span className={d > 0 ? 'text-[var(--color-bull)]' : d < 0 ? 'text-[var(--color-bear)]' : ''}>
+                      <span
+                        className={d > 0 ? 'text-[var(--color-bull)]' : d < 0 ? 'text-[var(--color-bear)]' : ''}
+                        title={dayDeltaSince ? `Change since the ${captureLabel(dayDeltaSince)} capture.` : undefined}
+                      >
                         {d > 0 ? '+' : ''}
                         {d}
                       </span>
@@ -697,6 +730,9 @@ export function SetupsMatrix({
           </span>
         )}
         <span className="ml-auto">
+          {dayDeltaSince
+            ? `1D Δ is measured against the ${captureLabel(dayDeltaSince)} board. `
+            : '1D Δ needs a stored board from about a day ago; there is none yet, so it reads —. '}
           {cotReportDate && `COT as of ${cotReportDate}.`}
         </span>
       </footer>

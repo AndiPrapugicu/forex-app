@@ -30,9 +30,12 @@ export function SetupsView({
   initialError,
   initialView = 'full',
   initialDayDeltas = {},
+  initialDayDeltaComparedWithUtc = null,
 }: {
   /** Score change over 24h per symbol, from stored snapshots. */
   initialDayDeltas?: Record<string, number | null>;
+  /** The capture those deltas are measured from — never assumed to be exactly a day. */
+  initialDayDeltaComparedWithUtc?: string | null;
   /** From `/?view=`; the matrix keeps the URL in step when the view changes. */
   initialView?: 'full' | 'simple' | 'macro';
   initial: Matrix | null;
@@ -48,6 +51,7 @@ export function SetupsView({
   const [mirror, setMirror] = useState<MirrorOverlay | null>(initialMirror);
   const [error, setError] = useState<string | null>(initialError);
   const [dayDeltas, setDayDeltas] = useState<Record<string, number | null>>(initialDayDeltas);
+  const [dayDeltaSince, setDayDeltaSince] = useState<string | null>(initialDayDeltaComparedWithUtc);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
 
@@ -64,6 +68,7 @@ export function SetupsView({
       setChangeLog(data.changeLog ?? []);
       setMirror(data.mirror ?? null);
       setDayDeltas(data.dayDeltas ?? {});
+      setDayDeltaSince(data.dayDeltaComparedWithUtc ?? null);
       setError(null);
     } catch (err) {
       // Keep the last good matrix on screen; a failed refresh is no reason to
@@ -155,7 +160,7 @@ export function SetupsView({
       ) : (
         <>
           <ChangeLog changes={changeLog} />
-          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} mirror={mirror} initialView={initialView} dayDeltas={dayDeltas} />
+          <SetupsMatrix rows={matrix.rows} cotReportDate={matrix.cotReportDate} mirror={mirror} initialView={initialView} dayDeltas={dayDeltas} dayDeltaSince={dayDeltaSince} />
         </>
       )}
     </div>

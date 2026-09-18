@@ -262,29 +262,61 @@ export function latestPerSymbol(
   return out;
 }
 
-/** How far before the target a snapshot may sit and still count as "then". */
-export const DAY_DELTA_TOLERANCE_MS = 2 * 3600_000;
+/**
+ * How far from the 24h-ago target a capture may sit and still be "yesterday".
+ *
+ * WIDENED FROM TWO HOURS, 2026-09-18. The writer is a scheduled GitHub Action
+ * asking for every 10 minutes, and GitHub throttles it hard: the first five
+ * successful runs landed 16:08, 18:54, 21:56, 00:00 and 04:36, so consecutive
+ * captures are two and a half to four and a half hours apart. Against a
+ * two-hour tolerance the target routinely fell in a gap and every row showed
+ * "—" on a day when a third of the board had changed bias.
+ *
+ * Six hours always contains a capture at that cadence. It is honest because the
+ * comparison names its own vantage: the column's tooltip and the table footer
+ * print the capture it used and how long ago that was, so a 21-hour or 28-hour
+ * comparison says so rather than hiding behind the "1D" label.
+ */
+export const DAY_DELTA_TOLERANCE_MS = 6 * 3600_000;
 
 /**
- * Each symbol's score as it stood at `atUtc`: its latest snapshot at or before
- * that moment, provided it is no older than `toleranceMs`.
+ * The capture moment nearest `atUtc`, within `toleranceMs` either side.
  *
- * The tolerance is what makes "1D Δ" honest. Without it a symbol whose only
- * snapshot is a week old would report a week's change under a one-day label.
+ * ONE MOMENT FOR THE WHOLE BOARD, not the nearest capture per symbol. Every row
+ * is then differenced against the same vantage point, so the 1D column cannot
+ * mix a 19-hour change on one row with a 27-hour change on the next — and the
+ * moment it used can be named in the UI.
+ */
+export function nearestCaptureMoment(
+  snapshots: ScoreSnapshot[],
+  atUtc: string,
+  toleranceMs = DAY_DELTA_TOLERANCE_MS,
+): string | null {
+  const target = new Date(atUtc).getTime();
+  let best: { capturedAtUtc: string; distance: number } | null = null;
+  for (const s of snapshots) {
+    const distance = Math.abs(new Date(s.capturedAtUtc).getTime() - target);
+    if (distance > toleranceMs) continue;
+    if (!best || distance < best.distance) best = { capturedAtUtc: s.capturedAtUtc, distance };
+  }
+  return best?.capturedAtUtc ?? null;
+}
+
+/**
+ * Each symbol's score as it stood at `atUtc` — read off the single capture
+ * nearest that moment. Empty when no capture is close enough, which is the
+ * honest answer and renders as "—".
  */
 export function scoresAt(
   snapshots: ScoreSnapshot[],
   atUtc: string,
   toleranceMs = DAY_DELTA_TOLERANCE_MS,
 ): Map<string, number> {
-  const floor = new Date(new Date(atUtc).getTime() - toleranceMs).toISOString();
-  const held = new Map<string, ScoreSnapshot>();
-  for (const s of snapshots) {
-    if (s.capturedAtUtc > atUtc || s.capturedAtUtc < floor) continue;
-    const prior = held.get(s.symbol);
-    if (!prior || s.capturedAtUtc > prior.capturedAtUtc) held.set(s.symbol, s);
-  }
-  return new Map([...held].map(([symbol, s]) => [symbol, s.totalScore]));
+  const moment = nearestCaptureMoment(snapshots, atUtc, toleranceMs);
+  if (moment === null) return new Map();
+  return new Map(
+    snapshots.filter((s) => s.capturedAtUtc === moment).map((s) => [s.symbol, s.totalScore]),
+  );
 }
 
 /** Score now minus score then, per row; null where there is no "then". */

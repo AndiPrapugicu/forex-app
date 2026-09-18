@@ -20,7 +20,7 @@ export async function GET() {
   try {
     const payload = await runSetupsPipeline();
     const { matrix, health } = payload;
-    const [changeLog, dayDeltas] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
+    const [changeLog, dayDelta] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
     /**
      * A compact diff, not a second board: see `buildMirrorOverlay`. Built here
      * rather than in the browser because the capture lives on disk and the
@@ -29,7 +29,14 @@ export async function GET() {
     const { capture, staleLabel } = loadMirrorCapture();
     const mirror = buildMirrorOverlay(matrix.rows, capture ?? undefined, buildA1ProfileRows(payload), staleLabel);
     return NextResponse.json(
-      { ...matrix, health, changeLog, mirror, dayDeltas },
+      {
+        ...matrix,
+        health,
+        changeLog,
+        mirror,
+        dayDeltas: dayDelta.deltas,
+        dayDeltaComparedWithUtc: dayDelta.comparedWithUtc,
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err) {

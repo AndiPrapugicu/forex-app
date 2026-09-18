@@ -34,6 +34,7 @@ export default async function TopSetupsPage({
   let health: SourceHealth[] = [];
   let changeLog: ScoreChange[] = [];
   let dayDeltas: Record<string, number | null> = {};
+  let dayDeltaComparedWithUtc: string | null = null;
   let mirror: MirrorOverlay | null = null;
   let error: string | null = null;
 
@@ -41,7 +42,10 @@ export default async function TopSetupsPage({
     const result = await runSetupsPipeline();
     matrix = result.matrix;
     health = result.health;
-    [changeLog, dayDeltas] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
+    const [log, dayDelta] = await Promise.all([loadChangeLog(matrix), loadDayDeltas(matrix)]);
+    changeLog = log;
+    dayDeltas = dayDelta.deltas;
+    dayDeltaComparedWithUtc = dayDelta.comparedWithUtc;
     const { capture, staleLabel } = loadMirrorCapture();
     mirror = buildMirrorOverlay(matrix.rows, capture ?? undefined, buildA1ProfileRows(result), staleLabel);
   } catch (err) {
@@ -57,6 +61,7 @@ export default async function TopSetupsPage({
       initialError={error}
       initialView={initialView}
       initialDayDeltas={dayDeltas}
+      initialDayDeltaComparedWithUtc={dayDeltaComparedWithUtc}
     />
   );
 }

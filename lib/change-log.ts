@@ -11,11 +11,10 @@
 
 import { getStore } from '@/lib/db/client';
 import {
-  DAY_DELTA_TOLERANCE_MS,
   buildChangeLog,
   dayDeltas,
   latestPerSymbol,
-  scoresAt,
+  nearestCaptureMoment,
   truncateToMinute,
   type ScoreChange,
 } from '@/lib/scoring/history';
@@ -62,17 +61,60 @@ export async function loadChangeLog(matrix: SetupsMatrix): Promise<ScoreChange[]
 const DAY_MS = 24 * 3600_000;
 
 /**
- * 1D Δ for every row: score now against the latest snapshot ~24h ago.
- * Never throws; an empty history returns null for every symbol.
+ * 1D Δ for every row: score now against the capture nearest 24 hours ago.
+ *
+ * `comparedWithUtc` is the capture it actually used, so the column can say
+ * which moment it is a day away from — the writer's cadence is at the mercy of
+ * GitHub's scheduler, and a comparison against a 21-hour-old board must not
+ * present itself as exactly a day. Never throws; with no history every row is
+ * null and `comparedWithUtc` is null.
  */
-export async function loadDayDeltas(matrix: SetupsMatrix): Promise<Record<string, number | null>> {
+/**
+ * A capture must be at least this old to be a "then" worth showing.
+ *
+ * Below it the comparison is against a board from the same session's data and
+ * would read 0 everywhere, which is indistinguishable from a quiet day.
+ */
+export const DAY_DELTA_MIN_AGE_MS = 2 * 3600_000;
+
+export async function loadDayDeltas(
+  matrix: SetupsMatrix,
+  /** Injectable so the fallback can be tested without a database. */
+  store: Pick<ReturnType<typeof getStore>, 'getAllSnapshots'> = getStore(),
+): Promise<{ deltas: Record<string, number | null>; comparedWithUtc: string | null }> {
   try {
     const now = new Date(matrix.generatedAtUtc).getTime();
     const target = new Date(now - DAY_MS).toISOString();
-    const since = new Date(now - DAY_MS - DAY_DELTA_TOLERANCE_MS).toISOString();
-    const snapshots = await getStore().getAllSnapshots(since);
-    return dayDeltas(matrix.rows, scoresAt(snapshots, target));
+    /**
+     * Two days of rows, not one.
+     *
+     * The history is only as old as the first successful ingest, and when it is
+     * younger than a day the honest fallback is the OLDEST board on file rather
+     * than nothing — the column then reports a shorter change and names the
+     * board it used. Reading two days keeps that fallback available without
+     * turning the query into a history chart.
+     */
+    const since = new Date(now - 2 * DAY_MS).toISOString();
+    const snapshots = await store.getAllSnapshots(since);
+    const old = snapshots.filter(
+      (s) => new Date(s.capturedAtUtc).getTime() <= now - DAY_DELTA_MIN_AGE_MS,
+    );
+
+    const comparedWithUtc =
+      nearestCaptureMoment(old, target) ??
+      // Nothing near a day ago: the oldest board we hold, which is still a real
+      // comparison as long as the UI says which board it is.
+      old.map((s) => s.capturedAtUtc).sort()[0] ??
+      null;
+    if (comparedWithUtc === null) {
+      return { deltas: dayDeltas(matrix.rows, new Map()), comparedWithUtc: null };
+    }
+
+    const then = new Map(
+      old.filter((s) => s.capturedAtUtc === comparedWithUtc).map((s) => [s.symbol, s.totalScore]),
+    );
+    return { deltas: dayDeltas(matrix.rows, then), comparedWithUtc };
   } catch {
-    return dayDeltas(matrix.rows, new Map());
+    return { deltas: dayDeltas(matrix.rows, new Map()), comparedWithUtc: null };
   }
 }

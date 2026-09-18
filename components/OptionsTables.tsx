@@ -119,7 +119,11 @@ const VOLUME_COLUMNS: Column<VolumeRow>[] = [
     hideOnCards: true,
     sortValue: (r) => r.symbol,
     defaultDir: 'asc',
-    render: (r) => <span className="font-mono font-semibold">{r.symbol}</span>,
+    render: (r) => (
+      <Link href={`/options/volume?symbol=${r.symbol}`} className="font-mono font-semibold underline decoration-1 underline-offset-2">
+        {r.symbol}
+      </Link>
+    ),
   },
   { key: 'etf', label: 'Chain', align: 'left', hideOnCards: true, render: (r) => <span className="text-[var(--color-muted)]">{r.etf}</span> },
   { key: 'calls', label: 'Call volume', sortValue: (r) => r.callVolume, render: (r) => count(r.callVolume) },

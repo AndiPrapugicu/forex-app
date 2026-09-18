@@ -46,6 +46,16 @@ export const OPTIONS_UNDERLYINGS: readonly OptionsUnderlying[] = [
 export const PUT_CALL_MA_DAYS = 5;
 export const PUT_CALL_BANDS = { highCallVolume: 1.07, highPutVolume: 1.2 } as const;
 
+/**
+ * The chart's FIXED y-axis, as A1 draws it (0 to 1.6).
+ *
+ * A ratio read against two thresholds must be drawn against those thresholds.
+ * Auto-scaling to the stored sessions put GOLD's 1.48 at the top of the plot
+ * with both bands crushed below it, which read as a broken chart rather than as
+ * a high reading.
+ */
+export const PUT_CALL_CHART_DOMAIN = [0, 1.6] as const;
+
 /** Expiries further out than this are left out: near-dated flow is the signal. */
 export const OPTIONS_EXPIRY_HORIZON_DAYS = 45;
 /** And no more than this many expiries per underlying, nearest first. */

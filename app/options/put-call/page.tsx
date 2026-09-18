@@ -2,11 +2,16 @@
  * Put-Call Ratio — A1's 5-day moving average, banded at 1.07 and 1.20.
  */
 
-import Link from 'next/link';
-import { OPTIONS_UNDERLYINGS, PUT_CALL_BANDS, PUT_CALL_MA_DAYS } from '@/config/options.config';
+import {
+  OPTIONS_UNDERLYINGS,
+  PUT_CALL_BANDS,
+  PUT_CALL_CHART_DOMAIN,
+  PUT_CALL_MA_DAYS,
+} from '@/config/options.config';
 import { loadOptionsPageData } from '@/lib/options-page-data';
 import { putCallSeries, readPutCall } from '@/lib/scoring/options';
 import { BandedLine } from '@/components/charts';
+import { OptionsSymbolNav } from '@/components/OptionsSymbolNav';
 import { PutCallTable, type PutCallRow } from '@/components/OptionsTables';
 import { MetricDescription, PageHeader } from '@/components/primitives';
 import { EmptyState, Panel } from '@/components/ui';
@@ -68,22 +73,11 @@ export default async function PutCallPage({ searchParams }: { searchParams: Prom
             subtitle={`Read through ${selected.etf}. ${data.historyNote ?? `${selectedSeries.length} sessions`}`}
             padded
           >
-            <nav aria-label="Symbol" className="mb-3 flex flex-wrap gap-1">
-              {rows.map((r) => (
-                <Link
-                  key={r.symbol}
-                  href={`/options/put-call?symbol=${r.symbol}`}
-                  aria-current={r.symbol === selected.symbol ? 'page' : undefined}
-                  className={`flex min-h-9 items-center rounded-[var(--radius-control)] border px-2.5 text-caption ${
-                    r.symbol === selected.symbol
-                      ? 'border-[var(--color-bull)] text-[var(--color-bull)]'
-                      : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
-                  }`}
-                >
-                  {r.symbol}
-                </Link>
-              ))}
-            </nav>
+            <OptionsSymbolNav
+              symbols={rows.map((r) => r.symbol)}
+              selected={selected.symbol}
+              href={(symbol) => `/options/put-call?symbol=${symbol}`}
+            />
             <BandedLine
               label={`${selected.symbol} put-call ratio`}
               points={selectedSeries.map((p) => ({ label: p.date.slice(5), value: p.movingAverage ?? p.ratio }))}
@@ -91,9 +85,14 @@ export default async function PutCallPage({ searchParams }: { searchParams: Prom
                 { value: PUT_CALL_BANDS.highPutVolume, label: 'High Put Volume', tone: 'bear' },
                 { value: PUT_CALL_BANDS.highCallVolume, label: 'High Call Volume', tone: 'bull' },
               ]}
+              domain={PUT_CALL_CHART_DOMAIN}
+              zones
             />
             <p className="mt-2 text-caption text-[var(--color-faint)]">
               The line is the {PUT_CALL_MA_DAYS}-day average where five sessions exist, and the daily ratio before that.
+              The axis is fixed at {PUT_CALL_CHART_DOMAIN[0]}–{PUT_CALL_CHART_DOMAIN[1]}, as A1 draws it, so a reading is
+              always placed against the two bands. {selectedSeries.length} session
+              {selectedSeries.length === 1 ? '' : 's'} stored so far.
             </p>
           </Panel>
 

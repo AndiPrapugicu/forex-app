@@ -8,8 +8,10 @@
  */
 
 import { useMemo, useState } from 'react';
-import { BandedLine } from '@/components/charts';
+import { heatStyle } from '@/lib/ui/heat';
+import { DivergingBars, StackedTimeBars } from '@/components/charts';
 import { DataTable, type Column } from '@/components/DataTable';
+import { Legend } from '@/components/primitives';
 import { Panel } from '@/components/ui';
 
 export interface CotHistoryWeek {
@@ -35,14 +37,54 @@ const signed = (n: number | null) => (n === null ? '—' : `${n > 0 ? '+' : ''}$
 const tone = (n: number | null) =>
   n === null || n === 0 ? 'text-[var(--color-faint)]' : n > 0 ? 'text-[var(--color-bull-cell)]' : 'text-[var(--color-bear)]';
 
+/**
+ * PAINTED THE WAY CotPanel PAINTS, and scaled the same way.
+ *
+ * Contract counts are not comparable between gold and the Swiss franc, so a
+ * raw net position cannot choose a colour strength. Every magnitude here is a
+ * share of the week's own open interest, which is what `components/CotPanel.tsx`
+ * does for the same numbers on the COT page.
+ */
+const heat = (value: number | null | undefined, max: number) => heatStyle(value, { max, zeroGrey: false });
+const ofOpenInterest = (w: CotHistoryWeek, value: number | null) =>
+  value === null || !w.openInterest ? null : (value / w.openInterest) * 100;
+
 const COLUMNS: Column<CotHistoryWeek>[] = [
   { key: 'date', label: 'Report', align: 'left', sticky: true, hideOnCards: true, sortValue: (w) => w.date, render: (w) => w.date },
   { key: 'long', label: 'Long', sortValue: (w) => w.specLong, render: (w) => fmt(w.specLong) },
   { key: 'short', label: 'Short', sortValue: (w) => w.specShort, render: (w) => fmt(w.specShort) },
-  { key: 'net', label: 'Net', sortValue: (w) => w.specNet, render: (w) => <span className={`font-semibold ${tone(w.specNet)}`}>{signed(w.specNet)}</span> },
-  { key: 'dnet', label: 'Δ Net', sortValue: (w) => w.specNetChange, render: (w) => <span className={tone(w.specNetChange)}>{signed(w.specNetChange)}</span> },
-  { key: 'longpct', label: 'Long %', sortValue: (w) => w.specLongPct, render: (w) => `${w.specLongPct.toFixed(1)}%` },
-  { key: 'retail', label: 'Retail long %', sortValue: (w) => w.retailLongPct, render: (w) => `${w.retailLongPct.toFixed(1)}%` },
+  {
+    key: 'net',
+    label: 'Net',
+    explain: 'Long minus short. Shaded by its share of open interest, so contracts of different sizes compare.',
+    sortValue: (w) => w.specNet,
+    cellStyle: (w) => heat(ofOpenInterest(w, w.specNet), 40),
+    render: (w) => <span className="font-semibold">{signed(w.specNet)}</span>,
+  },
+  {
+    key: 'dnet',
+    label: 'Δ Net',
+    explain: 'Change in net position from the week before, as a share of open interest.',
+    sortValue: (w) => w.specNetChange,
+    cellStyle: (w) => heat(ofOpenInterest(w, w.specNetChange), 5),
+    render: (w) => signed(w.specNetChange),
+  },
+  {
+    key: 'longpct',
+    label: 'Long %',
+    explain: 'Speculators long as a share of their open positions. Above 50% is net long.',
+    sortValue: (w) => w.specLongPct,
+    cellStyle: (w) => heat(w.specLongPct - 50, 50),
+    render: (w) => `${w.specLongPct.toFixed(1)}%`,
+  },
+  {
+    key: 'retail',
+    label: 'Retail long %',
+    explain: 'The crowd, read contrarian: heavy retail longs paint bearish, as the Crowd column scores them.',
+    sortValue: (w) => w.retailLongPct,
+    cellStyle: (w) => heat(50 - w.retailLongPct, 50),
+    render: (w) => `${w.retailLongPct.toFixed(1)}%`,
+  },
   { key: 'oi', label: 'Open int.', sortValue: (w) => w.openInterest, hideOnCards: true, render: (w) => (w.openInterest === null ? '—' : fmt(w.openInterest)) },
 ];
 
@@ -89,20 +131,34 @@ export function CotHistoryView({ series, initial }: { series: CotHistorySeries[]
       </label>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel title={`${active.ticker} · net position`} subtitle="Large speculators, contracts" padded>
-          <BandedLine
-            label={`${active.ticker} speculator net position over time`}
-            points={active.weeks.map((w) => ({ label: axisLabel(w.date), value: w.specNet }))}
-            bands={[{ value: 0, label: 'flat', tone: 'muted' }]}
-            format={(v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toFixed(0))}
+        <Panel
+          title={`${active.ticker} · positions`}
+          subtitle="Long over short each week, with the long share on the right axis"
+          padded
+        >
+          <StackedTimeBars
+            label={`${active.ticker} speculator long and short positions by week`}
+            points={active.weeks.map((w) => ({
+              label: axisLabel(w.date),
+              up: w.specLong,
+              down: w.specShort,
+              line: w.specLongPct,
+            }))}
+            lineLabel="Long %"
+          />
+          <Legend
+            items={[
+              { color: 'var(--color-bull-cell)', label: 'long' },
+              { color: 'var(--color-bear-cell)', label: 'short' },
+              { color: 'var(--color-uncertain)', label: 'long % (right axis, 50% dashed)', shape: 'line' as const },
+            ]}
           />
         </Panel>
-        <Panel title={`${active.ticker} · long share`} subtitle="Speculators' long share against the crowd's" padded>
-          <BandedLine
-            label={`${active.ticker} speculator long share over time`}
-            points={active.weeks.map((w) => ({ label: axisLabel(w.date), value: w.specLongPct }))}
-            bands={[{ value: 50, label: 'even', tone: 'muted' }]}
-            format={(v) => `${v.toFixed(0)}%`}
+        <Panel title={`${active.ticker} · net position`} subtitle="Long minus short, contracts" padded>
+          <DivergingBars
+            label={`${active.ticker} speculator net position by week`}
+            points={active.weeks.map((w) => ({ label: axisLabel(w.date), value: w.specNet }))}
+            format={(v) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : v.toFixed(0))}
           />
         </Panel>
       </div>

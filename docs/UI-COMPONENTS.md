@@ -33,7 +33,16 @@ arrays, and hands plain props to a client component.
 | `Legend`, `SignedBar`, `MetricDescription` | `components/primitives.tsx` | chart key; centre-anchored bar; prose block under a chart |
 | `Panel` | `components/ui.tsx` | card with header. Body is unpadded unless `padded` |
 | `DataTable` | `components/DataTable.tsx` | see below |
-| `Sparkline`, `MetricBars`, `StackedBar`, `DivergingRow`, `BandedLine` | `components/charts.tsx` | inline SVG, no hooks, usable from a server page |
+| `Sparkline`, `MetricBars`, `StackedBar`, `DivergingRow`, `BandedLine`, `DivergingBars`, `StackedTimeBars` | `components/charts.tsx` | inline SVG, no hooks, usable from a server page |
+| `OptionsSymbolNav` | `components/OptionsSymbolNav.tsx` | the symbol strip all three options pages share |
+
+### Charts
+
+- `BandedLine` takes `domain` for a FIXED y-axis and `zones` to wash the area beyond each band. A series read against thresholds needs both: the put-call chart auto-scaled to its own two sessions and pushed the 1.07 / 1.20 bands out of the plot. The axis for that page is `PUT_CALL_CHART_DOMAIN` in `config/options.config.ts`.
+- `DivergingBars` — a signed series as bars either side of zero, blue up and red down, symmetric around zero so a rise compares with a fall. Net options volume per session, COT net position per week.
+- `StackedTimeBars` — two magnitudes stacked per period (`up` on the baseline, `down` above it) with an optional right-axis percentage line. A1's COT chart: long over short, long share on top.
+- Axis maths lives in `lib/ui/chart-scale.ts` (`scaleDomain`, `axisTicks`) and is tested there rather than eyeballed in the SVG.
+- COT history's table paints with `heatStyle`, scaled by the week's own open interest so contracts of different sizes compare — the same treatment `components/CotPanel.tsx` gives those columns. Retail long % is painted INVERTED, because the crowd is read contrarian.
 
 ## DataTable
 

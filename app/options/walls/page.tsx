@@ -2,10 +2,10 @@
  * Put & Call Walls — open interest per strike around the current price.
  */
 
-import Link from 'next/link';
 import { OPTIONS_UNDERLYINGS } from '@/config/options.config';
 import { findWalls } from '@/lib/connectors/yahoo-options';
 import { loadOptionsPageData } from '@/lib/options-page-data';
+import { OptionsSymbolNav } from '@/components/OptionsSymbolNav';
 import { Legend, MetricDescription, PageHeader } from '@/components/primitives';
 import { EmptyState, Panel, formatPrice } from '@/components/ui';
 
@@ -47,22 +47,12 @@ export default async function WallsPage({ searchParams }: { searchParams: Promis
         info={<>A wall is the strike holding the most open interest. Large call walls often cap a rally and large put walls often support a fall, because dealers hedging those positions trade against the move.</>}
       />
 
-      <nav aria-label="Symbol" className="mb-4 flex flex-wrap gap-1">
-        {data.chains.map((c) => (
-          <Link
-            key={c.symbol}
-            href={`/options/walls?symbol=${c.symbol}`}
-            aria-current={c.symbol === chain.symbol ? 'page' : undefined}
-            className={`flex min-h-9 items-center rounded-[var(--radius-control)] border px-2.5 text-caption ${
-              c.symbol === chain.symbol
-                ? 'border-[var(--color-bull)] text-[var(--color-bull)]'
-                : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
-            }`}
-          >
-            {c.symbol}
-          </Link>
-        ))}
-      </nav>
+      <OptionsSymbolNav
+        symbols={data.chains.map((c) => c.symbol)}
+        selected={chain.symbol}
+        href={(symbol) => `/options/walls?symbol=${symbol}`}
+        className="mb-4 flex flex-wrap gap-1"
+      />
 
       <div className="mb-4 grid grid-cols-3 gap-2 md:max-w-xl">
         {[

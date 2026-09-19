@@ -39,6 +39,7 @@ bias bands are ±4 and ±7. Economic legs are cut at the release date on a rewin
 | AAII Sentiment | AAII's terms forbid copying (`aaii:public-page-but-terms-forbid-copying`) |
 | Scenario Backtests as a page | `npm run backtest` — each page view would refetch every symbol's full daily history |
 | Chart, Trade Ideas | removed 2026-09-13 at the user's request |
+| Trade idea panel on the scorecard | removed 2026-09-19 at the user's request, replaced by the Score history panel A1 puts there. `lib/scoring/trade-ideas.ts` still exists and is tested, but nothing renders it |
 
 ## Built on a non-A1 source, context only
 

@@ -11,6 +11,7 @@
  */
 
 import type { Direction } from '@/lib/types';
+import { bandStrength, bandedFraction } from '@/lib/ui/gauge-scale';
 import { DIRECTION_STYLE, formatScore } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,8 @@ export function ScoreGauge({
   size = 180,
   label,
   range = 10,
+  bands,
+  showDirection = true,
   displaySuffix,
 }: {
   /** Drives the needle, on whatever scale `range` declares. */
@@ -54,6 +57,25 @@ export function ScoreGauge({
    * separately.
    */
   range?: number;
+  /**
+   * Bias band edges in score units, ascending, from -max to +max — from
+   * `biasBandEdges`. Given them, the dial stops being linear: each band takes an
+   * equal slice of the sweep, the track is painted band by band, and the face
+   * labels the CUTS instead of the ends.
+   *
+   * The scorecard needs this because its bands are absolute (±4, ±7) while its
+   * maximum is the sum of eighteen columns. Linear, the face read "-34 … +34",
+   * a range nothing reaches, and a Very Bearish -9 sat almost dead centre under
+   * a banner saying Very Bearish. The continuous news score on the event page
+   * has no bands and stays linear.
+   */
+  bands?: readonly number[];
+  /**
+   * The word under the number. Off where the caller prints a more precise one
+   * of its own: the scorecard banner says "Very Bearish", and this line only
+   * knows "Bearish", so showing both made the panel argue with itself.
+   */
+  showDirection?: boolean;
   displaySuffix?: string;
 }) {
   const cx = size / 2;
@@ -61,10 +83,13 @@ export function ScoreGauge({
   const r = size / 2 - 16;
   const stroke = 12;
 
-  // Map -range..+range onto a 180-degree sweep.
-  const clamped = Math.max(-range, Math.min(range, score));
-  const fraction = (clamped + range) / (2 * range);
+  // Map the score onto a 180-degree sweep: through the bands where they exist,
+  // linearly over ±range where they do not.
+  const fraction = bands
+    ? bandedFraction(score, bands)
+    : (Math.max(-range, Math.min(range, score)) + range) / (2 * range);
   const needleAngle = fraction * 180;
+  const scaleMax = bands ? bands[bands.length - 1] : range;
 
   const style = DIRECTION_STYLE[direction];
   const arcColor =
@@ -84,30 +109,71 @@ export function ScoreGauge({
   const needle = polar(cx, cy, r - 2, needleAngle);
   const needleBase = polar(cx, cy, 6, needleAngle);
 
+  /** Inner cuts: the band boundaries, for the ticks and the numbers. */
+  const bandCount = bands ? bands.length - 1 : 0;
+  const cuts = bands ? bands.slice(1, -1) : [];
+  /**
+   * The score a boundary stands for, which is the first one that earns the word
+   * FURTHER FROM ZERO. The boundary itself is a half-point, so +3.5 is labelled
+   * "+4" and -3.5 is labelled "-4" — reading them both as "+0.5" printed a face
+   * of -6, -3, +4, +7, which is the same two cuts written two different ways.
+   */
+  const cutLabel = (edge: number) => formatScore(edge + (edge >= 0 ? 0.5 : -0.5));
+
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size / 2 + 26} viewBox={`0 0 ${size} ${size / 2 + 26}`} role="img"
-        aria-label={`Score ${formatScore(score)} out of ${range}, ${style.label.toLowerCase()}, confidence ${confidence} percent`}>
-        {/* Track */}
-        <path
-          d={arcPath(cx, cy, r, 0, 180)}
-          fill="none"
-          stroke="var(--color-surface-2)"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
+        aria-label={
+          bands
+            ? `Score ${formatScore(score)}, ${style.label.toLowerCase()}, on a dial banded at ${cuts
+                .map(cutLabel)
+                .join(', ')} with a maximum of ${formatScore(scaleMax)}, confidence ${confidence} percent`
+            : `Score ${formatScore(score)} out of ${range}, ${style.label.toLowerCase()}, confidence ${confidence} percent`
+        }>
+        {bands ? (
+          /* One arc per band, red through grey to blue. The track itself carries
+             the verdict, so the needle only has to say where inside it. */
+          bands.slice(0, -1).map((_, i) => {
+            const strength = bandStrength(i, bandCount);
+            const middle = (bandCount - 1) / 2;
+            const colour =
+              i === middle
+                ? 'var(--color-heat-zero)'
+                : `rgb(var(--color-heat-${i < middle ? 'bear' : 'bull'}-rgb) / ${Math.round((0.45 + 0.55 * strength) * 100)}%)`;
+            return (
+              <path
+                key={i}
+                d={arcPath(cx, cy, r, (i / bandCount) * 180, ((i + 1) / bandCount) * 180)}
+                fill="none"
+                stroke={colour}
+                strokeWidth={stroke}
+              />
+            );
+          })
+        ) : (
+          <>
+            {/* Track */}
+            <path
+              d={arcPath(cx, cy, r, 0, 180)}
+              fill="none"
+              stroke="var(--color-surface-2)"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+            />
 
-        {/* Filled portion. Opacity carries confidence as a secondary cue, so a
-            low-confidence reading looks visibly washed out. */}
-        {Math.abs(fillEnd - fillStart) > 0.5 && (
-          <path
-            d={arcPath(cx, cy, r, fillStart, fillEnd)}
-            fill="none"
-            stroke={arcColor}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            opacity={0.35 + (confidence / 100) * 0.65}
-          />
+            {/* Filled portion. Opacity carries confidence as a secondary cue, so a
+                low-confidence reading looks visibly washed out. */}
+            {Math.abs(fillEnd - fillStart) > 0.5 && (
+              <path
+                d={arcPath(cx, cy, r, fillStart, fillEnd)}
+                fill="none"
+                stroke={arcColor}
+                strokeWidth={stroke}
+                strokeLinecap="round"
+                opacity={0.35 + (confidence / 100) * 0.65}
+              />
+            )}
+          </>
         )}
 
         {/* Centre tick marks the zero point. */}
@@ -117,15 +183,44 @@ export function ScoreGauge({
           stroke="var(--color-border-bright)" strokeWidth={2}
         />
 
+        {/* Band cuts, ticked on the arc and numbered inside it. The number is
+            the CUT — the first score that earns the next word — not the
+            half-point boundary the geometry runs on. */}
+        {cuts.map((cut, i) => {
+          const angle = ((i + 1) / bandCount) * 180;
+          const outer = polar(cx, cy, r + stroke / 2 + 2, angle);
+          const inner = polar(cx, cy, r - stroke / 2 - 2, angle);
+          const text = polar(cx, cy, r - stroke - 9, angle);
+          return (
+            <g key={cut}>
+              <line
+                x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
+                stroke="var(--color-border-bright)" strokeWidth={1}
+              />
+              <text x={text.x} y={text.y + 3} textAnchor="middle" fill="var(--color-faint)" fontSize={9} className="tnum">
+                {cutLabel(cut)}
+              </text>
+            </g>
+          );
+        })}
+
         <line
           x1={needleBase.x} y1={needleBase.y}
           x2={needle.x} y2={needle.y}
-          stroke={arcColor} strokeWidth={3} strokeLinecap="round"
+          stroke={bands ? 'var(--color-text)' : arcColor} strokeWidth={3} strokeLinecap="round"
         />
-        <circle cx={cx} cy={cy} r={5} fill={arcColor} />
+        <circle cx={cx} cy={cy} r={5} fill={bands ? 'var(--color-text)' : arcColor} />
 
-        <text x={16} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">-{range}</text>
-        <text x={size - 26} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">+{range}</text>
+        {/* A banded dial has no honest end label: the ends ARE the model
+            maximum, which nothing reaches, and printing it is what made this
+            gauge look broken. The cuts above are the scale that means
+            something; the maximum stays in the aria description. */}
+        {!bands && (
+          <>
+            <text x={16} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">-{range}</text>
+            <text x={size - 26} y={cy + 18} fill="var(--color-faint)" fontSize={10} className="tnum">+{range}</text>
+          </>
+        )}
       </svg>
 
       <div className="-mt-1 text-center">
@@ -138,9 +233,11 @@ export function ScoreGauge({
             </span>
           )}
         </div>
-        <div className={`text-xs font-medium ${style.color}`}>
-          {style.glyph} {style.label}
-        </div>
+        {showDirection && (
+          <div className={`text-xs font-medium ${style.color}`}>
+            {style.glyph} {style.label}
+          </div>
+        )}
         {label && <div className="mt-0.5 text-micro text-[var(--color-faint)]">{label}</div>}
       </div>
     </div>

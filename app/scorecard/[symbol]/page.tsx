@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  BIAS_THRESHOLDS,
   MATRIX_SLOTS,
   SCORING_SLOTS,
   SLOT_CATEGORIES,
@@ -18,12 +19,17 @@ import {
 } from '@/config/setups.config';
 import { ALL_SYMBOLS, findSymbol } from '@/config/symbols.config';
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
+import { getStore } from '@/lib/db/client';
 import { scoreCot, scoreCrowd } from '@/lib/scoring/cot';
-import { buildTradeIdea, upcomingEventRisk } from '@/lib/scoring/trade-ideas';
+import { maxAgeFor } from '@/lib/scoring/discrete';
 import { fetchSeasonalHistory } from '@/lib/connectors/technicals';
 import { SEASONALITY_LOOKBACKS, buildProfile } from '@/lib/scoring/seasonality';
+import { heatStyle } from '@/lib/ui/heat';
+import { biasBandEdges } from '@/lib/ui/gauge-scale';
+import { BandedLine } from '@/components/charts';
 import { ScoreGauge } from '@/components/Gauge';
-import { BiasPill, Panel, cellBias, formatValue } from '@/components/ui';
+import { Explain, SignedBar } from '@/components/primitives';
+import { BiasPill, Panel, cellBias, formatScore, formatValue } from '@/components/ui';
 import { PriceStatistics } from '@/components/PriceStatistics';
 import { ScorecardHeader, type SwitcherOption } from '@/components/ScorecardHeader';
 import { SeasonalityStrip } from '@/components/SeasonalityStrip';
@@ -31,13 +37,81 @@ import { assetClassOf, CLASS_ORDER } from '@/lib/scoring/asset-class';
 
 export const dynamic = 'force-dynamic';
 
-const BIAS_COLOR: Record<string, string> = {
-  'Very Bullish': 'text-[var(--color-bull)]',
-  Bullish: 'text-[var(--color-bull)]',
-  Neutral: 'text-[var(--color-muted)]',
-  Bearish: 'text-[var(--color-bear)]',
-  'Very Bearish': 'text-[var(--color-bear)]',
-};
+/**
+ * The cuts the bias words turn on, smallest first — +4 Bullish, +7 Very
+ * Bullish. Read off the thresholds rather than written down, so the dial face
+ * and this page cannot drift apart from the scorer.
+ */
+const BIAS_CUTS = BIAS_THRESHOLDS.map((t) => t.min)
+  .filter((m) => Number.isFinite(m) && m > 0)
+  .sort((a, b) => a - b);
+/** The score that earns a "Very", which is where the banner paints solid. */
+const VERY_BIAS_CUT = BIAS_CUTS[BIAS_CUTS.length - 1];
+
+/** How far back the score-history panel looks. The full page offers 7/30/90. */
+const SCORE_HISTORY_DAYS = 30;
+/** Inside two days the captures are hours apart, so the clock is the useful label. */
+const INTRADAY_SPAN_MS = 2 * 86_400_000;
+
+/**
+ * Snapshots for the score-history panel.
+ *
+ * Returned rather than thrown, and separated from the reason it is empty: a
+ * blank chart otherwise reads as "this symbol has been flat", which is a
+ * different claim from "we have not been recording". Same distinction the
+ * /history page makes, in one line, because this is a sidebar panel.
+ */
+async function loadScoreHistory(symbol: string) {
+  const store = getStore();
+  const since = new Date(Date.now() - SCORE_HISTORY_DAYS * 86_400_000).toISOString();
+  try {
+    const history = await store.getSnapshots(symbol, since);
+    return {
+      history,
+      note: store.durable
+        ? `No boards stored in the last ${SCORE_HISTORY_DAYS} days yet — history fills in as the ingest job runs.`
+        : 'Storage is in-memory, so no board survives between requests.',
+    };
+  } catch (err) {
+    return { history: [], note: `Could not read history: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/**
+ * "Sep 01", the way A1 dates a release.
+ *
+ * Sliced off the ISO string against a fixed month list rather than run through
+ * `toLocaleDateString`: the server and the browser would otherwise format in
+ * different locales and time zones, and React would flag the mismatch.
+ */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function releaseDay(dateUtc: string | null): string {
+  if (dateUtc === null) return '—';
+  const month = MONTHS[Number(dateUtc.slice(5, 7)) - 1];
+  return month === undefined ? dateUtc.slice(5, 10) : `${month} ${dateUtc.slice(8, 10)}`;
+}
+
+/** Whole days between a release and now, for the date column's age marker. */
+function ageInDays(dateUtc: string | null, now: Date): number | null {
+  if (dateUtc === null) return null;
+  const then = Date.parse(dateUtc);
+  if (!Number.isFinite(then)) return null;
+  return Math.floor((now.getTime() - then) / 86_400_000);
+}
+
+/**
+ * Actual minus what it was scored against.
+ *
+ * Unsigned when positive, as A1 prints it — a minus sign is the only sign that
+ * carries information here, because the COLOUR already says whether the surprise
+ * was good news or bad. Formatted through `formatValue`, which trims the float
+ * noise that makes 0.6 - 0.4 print as 0.19999999999999998.
+ */
+function surpriseOf(leg: { actual: number | null; reference: number | null; unit: string | null }): string {
+  if (leg.actual === null || leg.reference === null) return '—';
+  const diff = leg.actual - leg.reference;
+  return formatValue(diff, leg.unit);
+}
 
 /**
  * Colour for a per-leg actual, matching the grid vocabulary rather than the
@@ -63,10 +137,24 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
    * cache — free after the first load of the week, and the /seasonality tab
    * warms the same cache entry.
    */
-  const [{ matrix, technicals, cot, events }, seasonalBars] = await Promise.all([
+  const [{ matrix, technicals, cot }, seasonalBars, scoreHistory] = await Promise.all([
     runSetupsPipeline(),
     fetchSeasonalHistory(def.yahoo),
+    loadScoreHistory(def.symbol),
   ]);
+  const { history, note: historyNote } = scoreHistory;
+
+  /**
+   * Hours inside a couple of days, dates beyond that. The ingest cron captures
+   * roughly every three hours, so a two-day window labelled by date would print
+   * the same day five times.
+   */
+  const historySpanMs =
+    history.length > 1
+      ? Date.parse(history[history.length - 1].capturedAtUtc) - Date.parse(history[0].capturedAtUtc)
+      : 0;
+  const historyLabel = (iso: string) =>
+    historySpanMs <= INTRADAY_SPAN_MS ? iso.slice(11, 16) : iso.slice(5, 10);
 
   const row = matrix.rows.find((r) => r.symbol === def.symbol);
   if (!row) notFound();
@@ -125,16 +213,18 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
    */
   const gaugeRange = maxScoreForKind(def.kind);
 
-  const tradeIdea = buildTradeIdea(row, tech);
-
   /**
-   * The releases that can invalidate those levels before they resolve. The stop
-   * is sized from realised volatility, which by definition has not seen the next
-   * print yet — so this is the one risk the trade idea cannot see in itself.
+   * ...and the dial is BANDED on that range rather than linear, because the two
+   * facts fight each other: the maximum is real, but the bias cuts are absolute,
+   * so on a linear face a Very Bearish -9 sat a tenth of the way off centre
+   * under a banner reading Very Bearish, and the only numbers on the face were
+   * ±34 — a score nothing reaches. Each band now owns an equal slice, so the
+   * needle agrees with the word, and the face is labelled with the cuts.
    */
-  const eventRisk = tradeIdea
-    ? upcomingEventRisk([def.base, def.quote, def.macroEconomy], events)
-    : [];
+  const gaugeBands = biasBandEdges(
+    gaugeRange,
+    BIAS_THRESHOLDS.map((t) => t.min),
+  );
 
   /**
    * The 3/14 pair drives the trend score; the rest are context. Kept in that
@@ -163,17 +253,31 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
         {/* --- Left: the verdict ------------------------------------------ */}
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:col-span-3">
           <Panel>
+            {/*
+              The verdict as a painted banner, the way A1's widget opens: the
+              word was a coloured line of text under the dial, which is the one
+              thing on this page a trader reads from across the room.
+            */}
+            <div
+              className="px-4 py-2 text-center text-sm font-bold tracking-wide"
+              style={heatStyle(row.totalScore, { max: VERY_BIAS_CUT })}
+            >
+              {row.bias}
+            </div>
             <div className="flex flex-col items-center gap-2 px-4 py-5">
               <ScoreGauge
                 score={row.totalScore}
                 range={gaugeRange}
+                bands={gaugeBands}
+                showDirection={false}
                 direction={
                   row.bias.includes('Bullish') ? 'bullish' : row.bias.includes('Bearish') ? 'bearish' : 'neutral'
                 }
                 confidence={Math.round((row.populated / SCORING_SLOTS.length) * 100)}
-                label={`${row.populated} of ${SCORING_SLOTS.length} scored indicators had data`}
+                label={`${row.populated} of ${SCORING_SLOTS.length} scored indicators had data · dial banded at ${BIAS_CUTS.map(
+                  (c) => `±${c}`,
+                ).join(' and ')}, this asset tops out at ±${gaugeRange}`}
               />
-              <div className={`text-lg font-bold ${BIAS_COLOR[row.bias]}`}>{row.bias}</div>
             </div>
           </Panel>
 
@@ -192,27 +296,41 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                   (t, s) => t + maxCellFor(s.key, def.kind),
                   0,
                 );
-                const tone = cellBias(value, blockMax).tone;
-
                 return (
-                  <div key={cat.key} className="flex items-center justify-between px-4 py-2">
-                    <dt className="text-micro text-[var(--color-muted)]">{cat.label}</dt>
-                    <dd
-                      className={`tnum text-sm font-semibold ${tone}`}
-                      title={`${value > 0 ? '+' : ''}${value} out of a possible ±${blockMax}`}
-                    >
-                      {value > 0 ? '+' : ''}
-                      {value}
-                      <span className="ml-1 text-micro font-normal text-[var(--color-faint)]">
-                        /{blockMax}
-                      </span>
-                    </dd>
+                  <div
+                    key={cat.key}
+                    className="px-4 py-2"
+                    title={`${value > 0 ? '+' : ''}${value} out of a possible ±${blockMax}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-micro text-[var(--color-muted)]">{cat.label}</dt>
+                      {/*
+                        Painted on the block's OWN maximum, which is the only
+                        scale on which "Inflation -2" and "Jobs -1" can be
+                        compared: the blocks are eight and ten points wide.
+                      */}
+                      <dd
+                        className="tnum rounded px-1.5 py-0.5 text-sm font-semibold"
+                        style={heatStyle(value, { max: blockMax, zeroGrey: false })}
+                      >
+                        {value > 0 ? '+' : ''}
+                        {value}
+                        <span className="ml-1 text-micro font-normal opacity-70">/{blockMax}</span>
+                      </dd>
+                    </div>
+                    {/* The same number as length, so the blocks rank at a glance. */}
+                    <div className="mt-1.5">
+                      <SignedBar value={value} max={blockMax} label={`${cat.label} ${value} of ±${blockMax}`} />
+                    </div>
                   </div>
                 );
               })}
               <div className="flex items-center justify-between bg-[var(--color-surface-2)]/40 px-4 py-2">
                 <dt className="text-micro font-semibold">Total</dt>
-                <dd className={`tnum text-base font-bold ${BIAS_COLOR[row.bias]}`}>
+                <dd
+                  className="tnum rounded px-2 py-0.5 text-base font-bold"
+                  style={heatStyle(row.totalScore, { max: VERY_BIAS_CUT })}
+                >
                   {row.totalScore > 0 ? '+' : ''}
                   {row.totalScore}
                 </dd>
@@ -221,71 +339,47 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
           </Panel>
 
           {/*
-            Trade idea. Absent entirely below ±4 rather than shown as "no setup",
-            because a greyed-out box still puts the idea of a trade on screen for
-            a symbol that has no directional signal.
+            Score history, where A1 puts it: directly under the breakdown.
+            The Trade idea panel that used to sit here is gone — it was the one
+            block on the page that was not a reading of the board, and levels
+            sized from volatility are not what this app is for.
           */}
-          {tradeIdea && (
-            <Panel title="Trade idea" subtitle="Levels derived from volatility, not advice">
-              <div className="px-4 py-3">
-                <div className="mb-2 flex items-baseline gap-2">
-                  <span
-                    className={`text-sm font-bold uppercase ${
-                      tradeIdea.direction === 'long' ? 'text-[var(--color-bull)]' : 'text-[var(--color-bear)]'
-                    }`}
-                  >
-                    {tradeIdea.direction}
-                  </span>
-                  <span className="text-micro text-[var(--color-faint)]">
-                    {tradeIdea.rewardRisk}:1 · {tradeIdea.dailyMovePct}% avg daily move
-                  </span>
-                </div>
-
-                <dl className="space-y-1 text-micro">
-                  {[
-                    { label: 'Entry', value: `${tradeIdea.entryMin} – ${tradeIdea.entryMax}`, color: '' },
-                    { label: 'Target', value: tradeIdea.target, color: 'text-[var(--color-bull)]' },
-                    { label: 'Stop', value: tradeIdea.stop, color: 'text-[var(--color-bear)]' },
-                  ].map((r) => (
-                    <div key={r.label} className="flex items-center justify-between">
-                      <dt className="text-[var(--color-muted)]">{r.label}</dt>
-                      <dd className={`tnum font-semibold ${r.color}`}>{r.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-
-                {/*
-                  Event risk sits INSIDE the trade-idea panel, above the caveat.
-                  Put anywhere else it reads as general context; here it reads as
-                  a property of these levels, which is what it is.
-                */}
-                {eventRisk.length > 0 && (
-                  <div className="mt-2 border-t border-[var(--color-border)] pt-2">
-                    <div className="mb-1 text-micro font-semibold tracking-wide text-[var(--color-uncertain)] uppercase">
-                      {eventRisk.length} high-impact release{eventRisk.length > 1 ? 's' : ''} before this resolves
-                    </div>
-                    {eventRisk.slice(0, 4).map((e) => (
-                      <div key={`${e.dateUtc}${e.name}`} className="flex items-baseline gap-2 text-micro">
-                        <span className="tnum w-12 shrink-0 text-[var(--color-uncertain)]">
-                          {e.hoursAway < 1 ? '<1h' : `${Math.round(e.hoursAway)}h`}
-                        </span>
-                        <span className="font-mono text-[var(--color-muted)]">{e.currency}</span>
-                        <span className="truncate text-[var(--color-faint)]">{e.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <p className="mt-2 border-t border-[var(--color-border)] pt-2 text-micro leading-relaxed text-[var(--color-faint)]">
-                  Sized from the average daily move alone.
-                  {eventRisk.length > 0
-                    ? ' The stop comes from realised volatility, which has not seen the releases above.'
-                    : ' No high-impact release is due for either leg in the next 48 hours.'}{' '}
-                  Not financial advice.
+          <Panel
+            title="Score history"
+            subtitle={
+              history.length > 0
+                ? `${history.length} captures · ${SCORE_HISTORY_DAYS} days`
+                : `Last ${SCORE_HISTORY_DAYS} days`
+            }
+          >
+            <div className="px-3 py-3">
+              {history.length > 0 ? (
+                <>
+                  <BandedLine
+                    label={`${def.symbol} total score over the last ${SCORE_HISTORY_DAYS} days`}
+                    points={history.map((h) => ({ label: historyLabel(h.capturedAtUtc), value: h.totalScore }))}
+                    bands={[
+                      { value: BIAS_CUTS[0], label: 'Bullish', tone: 'bull', zone: 'above' },
+                      { value: -BIAS_CUTS[0], label: 'Bearish', tone: 'bear', zone: 'below' },
+                    ]}
+                    width={340}
+                    height={150}
+                    zones
+                    format={(v) => formatScore(Math.round(v))}
+                  />
+                  <p className="mt-1 text-micro leading-relaxed text-[var(--color-faint)]">
+                    Every board we stored, newest on the right. Blue above +{BIAS_CUTS[0]} is the bullish zone, red
+                    below −{BIAS_CUTS[0]} the bearish one — the same cuts the banner above reads.
+                  </p>
+                </>
+              ) : (
+                <p className="text-micro leading-relaxed text-[var(--color-faint)]">
+                  {historyNote}
                 </p>
-              </div>
-            </Panel>
-          )}
+              )}
+            </div>
+          </Panel>
+
 
           <Link
             href={`/history/${def.symbol}`}
@@ -304,65 +398,137 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
           >
             <div className="max-h-[calc(100vh-13rem)] overflow-auto">
               <table className="w-full text-left text-micro">
-                <thead>
-                  <tr className="table-head sticky top-0 z-10 text-caption font-semibold">
-                    <th className="px-3 py-1.5">Indicator</th>
-                    <th className="px-2 py-1.5 text-center">Cell</th>
-                    <th className="px-2 py-1.5 text-right">Actual</th>
-                    <th className="px-2 py-1.5 text-right">Forecast</th>
-                    <th className="px-2 py-1.5 text-right">Previous</th>
-                  </tr>
-                </thead>
+                {/*
+                  NO GLOBAL HEADER ROW, because A1 has none: every section states
+                  its own columns, and they are not the same columns — the
+                  sentiment block has no calendar release to put under "Forecast".
+                  The caption keeps the table named for a screen reader, and the
+                  section rows carry real `th scope="col"` cells, so dropping the
+                  sticky header costs nothing semantically.
+                */}
+                <caption className="sr-only">
+                  {def.symbol} indicator detail: every slot, its reading, and the release it resolved to
+                </caption>
                 <tbody>
                   {SLOT_CATEGORIES.map((cat) => {
                     const slots = MATRIX_SLOTS.filter((s) => s.category === cat.key);
+                    /**
+                     * The block's own subtotal, repeated on its header row. The
+                     * left panel already carries these, but a reader scrolling
+                     * the table has no way back to them, and A1's widget states
+                     * the block verdict on the header exactly here.
+                     */
+                    const blockScore = row.categoryScores[cat.key];
+                    const blockMax = SCORING_SLOTS.filter((s) => s.category === cat.key).reduce(
+                      (t, s) => t + maxCellFor(s.key, def.kind),
+                      0,
+                    );
+                    const blockBias = cellBias(blockScore, blockMax);
+                    /**
+                     * Only a section whose rows HAVE releases gets the numeric
+                     * column names. Trend, seasonality and the COT cells carry a
+                     * sentence instead, and heading it "Actual · Forecast" would
+                     * be naming columns that are not there.
+                     */
+                    const sectionHasLegs = slots.some(
+                      (sl) => (row.cells[sl.key]?.legs?.filter((l) => l.seriesName !== null).length ?? 0) > 0,
+                    );
                     return [
-                      <tr key={`cat-${cat.key}`} className="bg-[var(--color-surface-2)]/40">
-                        <td
-                          colSpan={5}
-                          className="px-3 py-1 text-micro font-semibold tracking-wider text-[var(--color-faint)] uppercase"
-                        >
+                      <tr key={`cat-${cat.key}`} className="table-head">
+                        <th scope="col" className="px-3 py-1 text-left text-micro font-medium italic">
                           {cat.label}
-                        </td>
+                        </th>
+                        <th
+                          scope="col"
+                          className={`px-2 py-1 text-center text-micro font-semibold ${blockBias.tone}`}
+                          title={`${cat.label}: ${blockScore > 0 ? '+' : ''}${blockScore} of a possible ±${blockMax}`}
+                        >
+                          {blockBias.label}
+                        </th>
+                        {sectionHasLegs ? (
+                          ['Actual', 'Forecast', 'Surprise', 'Date'].map((h) => (
+                            <th key={h} scope="col" className="px-2 py-1 text-right text-micro font-medium italic">
+                              {h}
+                            </th>
+                          ))
+                        ) : (
+                          <th scope="col" colSpan={4} className="px-2 py-1" />
+                        )}
                       </tr>,
                       ...slots.map((slot) => {
                         const cell = row.cells[slot.key];
                         const legs = cell.legs?.filter((l) => l.seriesName !== null) ?? [];
-                        // Prefix the currency only when the legs actually come
-                        // from different economies. PMI on gold has two legs that
-                        // are both USD, and "USD · … USD · …" is just noise.
-                        const multiCurrency = new Set(legs.map((l) => l.currency)).size > 1;
 
                         return (
                           <tr key={slot.key} className="border-b border-[var(--color-border)]/60 align-top">
-                            <td className="px-3 py-1.5" title={slot.title}>
-                              <div className="whitespace-nowrap">
-                                {slot.label}
+                            <td className="px-3 py-1.5">
+                              <div className="flex items-center gap-1 whitespace-nowrap">
+                                <span title={slot.title}>{slot.label}</span>
                                 {!slot.scoring && (
-                                  <span className="ml-1 text-micro text-[var(--color-faint)] italic">context</span>
+                                  <span className="text-micro text-[var(--color-faint)] italic">context</span>
+                                )}
+                                {/*
+                                  The resolved series names moved in HERE.
+                                  "EUR · Gross Domestic Product s.a. (QoQ)" over
+                                  "USD · Gross Domestic Product Annualized" wrapped
+                                  onto five lines and pushed the three numbers that
+                                  matter down the page, for a name that is read
+                                  once. Naming the series still matters — CPI YoY
+                                  for EUR is the euro-area HICP — so it is a tap
+                                  away rather than gone, and works on a phone,
+                                  which a `title` does not.
+                                */}
+                                {legs.length > 0 && (
+                                  <Explain label={`Which series ${slot.label} reads`}>
+                                    <div className="flex flex-col gap-1">
+                                      {legs.map((leg, i) => (
+                                        <div key={i}>
+                                          <span className="font-mono font-semibold">{leg.currency}</span>{' '}
+                                          {leg.seriesName}
+                                          <span className="text-[var(--color-faint)]">
+                                            {' '}
+                                            &middot; scored against the {leg.referenceLabel} &middot; previous{' '}
+                                            {formatValue(leg.previous, leg.unit)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </Explain>
                                 )}
                               </div>
-                              {/* The resolved series, per leg. Naming it matters:
-                                  "CPI YoY" for EUR is the euro-area HICP. */}
+                              {/*
+                                One line per leg, in the same order as the numeric
+                                columns, so "EUR" lines up with the EUR actual.
+                                That alignment is the whole reason the currency
+                                stays visible while the series name does not.
+                              */}
                               {legs.map((leg, i) => (
-                                <div key={i} className="text-micro leading-tight text-[var(--color-faint)]">
-                                  {multiCurrency ? `${leg.currency} · ` : ''}
-                                  {leg.seriesName}
+                                <div
+                                  key={i}
+                                  className="font-mono text-micro leading-tight text-[var(--color-faint)]"
+                                  title={leg.seriesName ?? undefined}
+                                >
+                                  {leg.currency}
                                 </div>
                               ))}
                             </td>
 
                             {/*
-                              The cell as WORDS, not a bare integer.
-                              "+2" asks the reader to remember that Trend spans
-                              +/-2 while Seasonality spans +/-1 before they can
-                              tell a strong reading from a maximal one; the pill
-                              says it. The arithmetic is not lost — the number is
-                              still in the pill, the tooltip names the column's
-                              range, and Actual/Forecast/Previous are untouched.
+                              The cell as A1 draws it: a filled block spanning the
+                              column, carrying the WORD alone. Consecutive rows
+                              then read as one strip of colour, which is the whole
+                              point of their layout — the verdict is legible
+                              before a single number is.
+
+                              The integer moved into the block's tooltip and the
+                              row's disclosure. It is not lost, and it was never
+                              readable on its own anyway: "+2" means maximal on a
+                              seasonality row and middling on a trend row, which
+                              is why the word exists.
                             */}
-                            <td className="px-2 py-1.5 text-center">
+                            <td className="w-[88px] p-0 align-middle md:w-[104px]">
                               <BiasPill
+                                variant="block"
                                 cell={cell.cell}
                                 maxCell={maxCellFor(slot.key, def.kind)}
                                 stale={cell.stale ?? false}
@@ -371,44 +537,98 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                             </td>
 
                             {/*
-                              Actual / Forecast / Previous as real columns.
-                              These were previously concatenated into one prose
-                              string, which is unreadable at a glance and buries
-                              the only three numbers that matter.
+                              Actual / Forecast / SURPRISE / DATE, which is the
+                              set A1's own widget prints. The surprise is what
+                              the cell is actually made of — every economic
+                              column is "vs. forecast" — and it was left for the
+                              reader to do in their head, from two columns that
+                              are not in the same units as each other. Previous
+                              moved into the disclosure above: it is the scoring
+                              basis only for PMI, where the Forecast column is
+                              already showing it.
                             */}
                             {/*
                               Trend, seasonality, COT and the rate cell have no
                               calendar release behind them, so there is nothing to
-                              put in three numeric columns. They get the width
+                              put in four numeric columns. They get the width
                               instead — cramming a sentence into "Actual" truncated
                               exactly the part that explains the score.
                             */}
                             {legs.length === 0 ? (
-                              <td colSpan={3} className="px-2 py-1.5 text-micro leading-snug text-[var(--color-muted)]">
+                              <td colSpan={4} className="px-2 py-1.5 text-micro leading-snug text-[var(--color-muted)]">
                                 {cell.explanation}
                               </td>
                             ) : (
-                              (['actual', 'reference', 'previous'] as const).map((field) => (
-                                <td key={field} className="px-2 py-1.5 text-right">
+                              <>
+                                {/*
+                                  Actual and Forecast are PLAIN, as A1 prints
+                                  them. They used to be painted by the leg's own
+                                  reading, which put three coloured numbers on a
+                                  row whose verdict is already a filled block —
+                                  and a colour on "1.50%" says nothing anyway,
+                                  since the reading is the DIFFERENCE. Only the
+                                  surprise is coloured now.
+                                */}
+                                {(['actual', 'reference'] as const).map((field) => (
+                                  <td key={field} className="px-2 py-1.5 text-right">
+                                    {legs.map((leg, i) => (
+                                      <div
+                                        key={i}
+                                        className={`tnum text-micro leading-tight ${
+                                          field === 'actual' ? 'text-[var(--color-text)]' : 'text-[var(--color-muted)]'
+                                        }`}
+                                        title={
+                                          field === 'reference'
+                                            ? `Scored against the ${leg.referenceLabel}`
+                                            : undefined
+                                        }
+                                      >
+                                        {formatValue(leg[field], leg.unit)}
+                                      </div>
+                                    ))}
+                                  </td>
+                                ))}
+
+                                {/*
+                                  Coloured by the LEG'S OWN CELL, never by the
+                                  sign of the difference: a rise in unemployment
+                                  is a positive surprise and a bearish one, and
+                                  painting that blue would contradict the pill two
+                                  columns to its left.
+                                */}
+                                <td className="px-2 py-1.5 text-right">
                                   {legs.map((leg, i) => (
-                                    <div
-                                      key={i}
-                                      className={`tnum text-micro leading-tight ${
-                                        field === 'actual'
-                                          ? `font-semibold ${cellColor(leg.cell)}`
-                                          : 'text-[var(--color-muted)]'
-                                      }`}
-                                      title={
-                                        field === 'reference'
-                                          ? `Scored against the ${leg.referenceLabel}`
-                                          : undefined
-                                      }
-                                    >
-                                      {formatValue(leg[field], leg.unit)}
+                                    <div key={i} className={`tnum text-micro leading-tight ${cellColor(leg.cell)}`}>
+                                      {surpriseOf(leg)}
                                     </div>
                                   ))}
                                 </td>
-                              ))
+
+                                <td className="px-2 py-1.5 text-right">
+                                  {legs.map((leg, i) => {
+                                    const age = ageInDays(leg.dateUtc, now);
+                                    const past = age !== null && age > maxAgeFor(slot, leg.currency);
+                                    return (
+                                      <div
+                                        key={i}
+                                        className={`tnum text-micro leading-tight ${
+                                          past ? 'text-[var(--color-uncertain)]' : 'text-[var(--color-faint)]'
+                                        }`}
+                                        title={
+                                          age === null
+                                            ? undefined
+                                            : past
+                                              ? `${age} days old, past this series' usual cadence — still scored, as A1 scores theirs`
+                                              : `${age} days old`
+                                        }
+                                      >
+                                        {releaseDay(leg.dateUtc)}
+                                        {past && '*'}
+                                      </div>
+                                    );
+                                  })}
+                                </td>
+                              </>
                             )}
                           </tr>
                         );
@@ -420,9 +640,13 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
             </div>
             <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
               The Forecast column is what the cell was actually scored against — for PMI that is the
-              previous print, not the consensus, which is A1&rsquo;s rule. Pair cells are base minus
-              quote: a currency that publishes no payrolls still shows a value there, inheriting the
-              inverted reading from the other leg.
+              previous print, not the consensus, which is A1&rsquo;s rule. Surprise is actual minus that
+              number, coloured by what it MEANS rather than by its sign, so a rise in unemployment reads
+              red. A date marked * is past its series&rsquo; usual cadence and is still scored, as A1
+              scores theirs. Each block&rsquo;s own score is on its header, and every cell&rsquo;s integer
+              is in its tooltip. Pair cells are base minus quote, one line per leg: a currency that
+              publishes no payrolls still shows a value there, inheriting the inverted reading from the
+              other leg.
             </p>
           </Panel>
 

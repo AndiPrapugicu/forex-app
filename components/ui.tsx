@@ -7,6 +7,7 @@
 
 import type { ReactNode } from 'react';
 import type { AlertSeverity, Direction, Impact } from '@/lib/types';
+import { heatStyle } from '@/lib/ui/heat';
 
 // ---------------------------------------------------------------------------
 // Direction
@@ -88,6 +89,7 @@ export function BiasPill({
   stale = false,
   ageDays = null,
   partial = null,
+  variant = 'pill',
 }: {
   cell: number | null;
   maxCell: number;
@@ -110,6 +112,15 @@ export function BiasPill({
    * has no business looking identical to one built on all of them.
    */
   partial?: string | null;
+  /**
+   * `block` is A1's scorecard shape: a filled rectangle spanning its column,
+   * carrying the WORD alone, so consecutive rows read as one strip of colour.
+   * The integer goes to the tooltip — on its own it is not readable anyway,
+   * since +2 is maximal in one column and middling in the next.
+   *
+   * `pill` is the inline shape, for a cell sitting in a row of ordinary text.
+   */
+  variant?: 'pill' | 'block';
 }) {
   const { label, tone } = cellBias(cell, maxCell);
   const value = cell === null ? 'no value' : formatScore(cell);
@@ -128,21 +139,32 @@ export function BiasPill({
       ? `${value} on a ±${maxCell} column — ${notes.join('; ')}`
       : `${value} on a ±${maxCell} column`;
 
-  const bg = partial
-    ? 'bg-[var(--color-surface-2)]'
-    : cell === null || cell === 0
-      ? 'bg-[var(--color-surface-2)]'
-      : cell > 0
-        ? 'bg-[var(--color-bull)]/12'
-        : 'bg-[var(--color-bear)]/12';
+  /**
+   * PAINTED, not tinted. This pill used to be a 12% wash behind coloured text,
+   * which is legible on its own and invisible in a table of forty rows — the
+   * whole point of A1's board is that the CELL carries the verdict, so a
+   * scorecard reads as two columns of colour before a single word is read.
+   * Strength scales with the cell's share of its own column, so a maximal
+   * reading outranks a partial one without either changing shape.
+   */
+  const paint = heatStyle(cell, { max: maxCell });
+  const painted = paint.backgroundColor !== undefined;
+
+  const shape =
+    variant === 'block'
+      ? `m-0.5 flex items-center justify-center gap-1 rounded-[2px] px-2 py-1.5 ${painted ? '' : 'bg-[var(--color-surface-2)]'}`
+      : 'inline-flex items-baseline gap-1 rounded px-1.5 py-0.5';
 
   return (
     <span
-      className={`inline-flex items-baseline gap-1 rounded px-1.5 py-0.5 text-micro font-semibold whitespace-nowrap ${bg} ${tone}`}
-      style={partial ? { boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' } : undefined}
+      className={`text-micro font-semibold whitespace-nowrap ${shape} ${painted ? '' : tone}`}
+      style={{
+        ...paint,
+        ...(partial ? { boxShadow: 'inset 0 0 0 1px rgb(var(--color-uncertain-rgb) / 85%)' } : {}),
+      }}
       title={title}
     >
-      {cell !== null && <span className="tnum">{formatScore(cell)}</span>}
+      {variant === 'pill' && cell !== null && <span className="tnum">{formatScore(cell)}</span>}
       <span className="font-medium">{label}</span>
       {partial && <span className="text-[var(--color-uncertain)]">◐</span>}
       {stale && <span className="text-[var(--color-faint)]" aria-label="stale">··</span>}

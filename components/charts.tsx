@@ -237,15 +237,29 @@ export function BandedLine({
   bands = [],
   label,
   height = 200,
+  width = 640,
   format = (v) => v.toFixed(2),
   domain,
   zones = false,
 }: {
   points: { label: string; value: number | null }[];
-  /** A threshold line with a caption, e.g. 1.20 "High put volume". */
-  bands?: { value: number; label: string; tone: 'bull' | 'bear' | 'muted' }[];
+  /**
+   * A threshold line with a caption, e.g. 1.20 "High put volume".
+   *
+   * `zone` says which side of the line the wash covers. It has to be explicit:
+   * on the put-call chart a HIGH ratio is the bearish one, so the bear zone is
+   * above its band, while on a score history the bullish zone is above. Left
+   * out, it keeps the put-call reading.
+   */
+  bands?: { value: number; label: string; tone: 'bull' | 'bear' | 'muted'; zone?: 'above' | 'below' }[];
   label: string;
   height?: number;
+  /**
+   * Viewport width. The SVG scales to its container either way, so this is
+   * really a TEXT SIZE control: at the default 640 the axis labels render
+   * unreadably small inside a narrow sidebar panel.
+   */
+  width?: number;
   format?: (v: number) => string;
   /**
    * A FIXED axis, for a series read against thresholds rather than against
@@ -256,7 +270,7 @@ export function BandedLine({
   /** Wash the area beyond each band, the way A1 shades its sentiment zones. */
   zones?: boolean;
 }) {
-  const W = 640;
+  const W = width;
   const H = height;
   const padL = 40;
   const padB = 22;
@@ -288,15 +302,14 @@ export function BandedLine({
   const toneColor = { bull: BULL, bear: BEAR, muted: MUTED } as const;
 
   /**
-   * A zone runs from its band to the far edge of the axis: bearish above the
-   * `bear` band, bullish below the `bull` one. Drawn first so the grid, the
-   * bands and the line all sit on top of it.
+   * A zone runs from its band to the far edge of the axis, on the side the band
+   * names. Drawn first so the grid, the bands and the line all sit on top of it.
    */
   const zoneRects = !zones
     ? []
     : bands.flatMap((b) => {
         if (b.tone === 'muted') return [];
-        const edge = b.tone === 'bear' ? y(hi) : y(lo);
+        const edge = (b.zone ?? (b.tone === 'bear' ? 'above' : 'below')) === 'above' ? y(hi) : y(lo);
         const top = Math.min(edge, y(b.value));
         const height = Math.abs(edge - y(b.value));
         return height < 1 ? [] : [{ key: b.label, top, height, fill: b.tone === 'bear' ? BEAR_ZONE : BULL_ZONE }];
@@ -334,7 +347,16 @@ export function BandedLine({
       )}
       {points.map((p, i) =>
         i % labelEvery === 0 ? (
-          <text key={`${p.label}-${i}`} x={x(i)} y={H - 6} textAnchor="middle" fontSize={10} fill="var(--color-faint)">
+          <text
+            key={`${p.label}-${i}`}
+            x={x(i)}
+            y={H - 6}
+            /* The end labels anchor inward, or the first and last are clipped
+               by the viewBox — visible as "08:5" on a narrow chart. */
+            textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
+            fontSize={10}
+            fill="var(--color-faint)"
+          >
             {p.label}
           </text>
         ) : null,

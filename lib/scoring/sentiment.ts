@@ -23,7 +23,8 @@
 import { COT_PERCENTILE_BUCKETS, CROWD_LONG_PCT_BUCKETS } from '@/config/setups.config';
 import type { CotSeries } from '@/lib/connectors/cftc';
 import { percentileRank, scoreCrowd } from '@/lib/scoring/cot';
-import { cotTicker } from '@/config/symbols.config';
+import { scoreRetailLongPct, type RetailPositioningFeed } from '@/lib/scoring/crowd';
+import { ALL_SYMBOLS, cotTicker } from '@/config/symbols.config';
 
 /** How many weekly reports the retail history sparkline draws. */
 export const RETAIL_HISTORY_WEEKS = 52;
@@ -55,6 +56,58 @@ export interface CrowdRow {
 
   reportDate: string;
   explanation: string;
+}
+
+/**
+ * One instrument in the retail broker feed — the population A1's page actually
+ * shows, which the CFTC rows above are not.
+ *
+ * SEPARATE FROM CrowdRow ON PURPOSE. A `CrowdRow` is a weekly US futures survey
+ * with three years of history, a percentile and an institutional side to
+ * compare against; this is a daily spot broker book with one number and no
+ * history stored yet. Merging them into one list would sort a Tuesday survey
+ * against this morning's book and invite the reader to compare the two shares
+ * directly, which is the exact substitution the Crowd column spent months
+ * separating.
+ */
+export interface RetailPairRow {
+  symbol: string;
+  longPct: number;
+  /** As the provider stated it where it did, else the complement. */
+  shortPct: number;
+  /** The contrarian vote this produces, by the same rule the board uses. */
+  cell: number;
+  source: string;
+  observedAt: string;
+  /** True where this instrument is one of the board's own rows. */
+  onBoard: boolean;
+}
+
+/**
+ * Every FX pair the retail feed answered for, most-long first.
+ *
+ * The cell comes from `scoreRetailLongPct`, which is the function the Crowd
+ * column itself calls — so a pair shown here as bearish cannot disagree with
+ * the cell on its scorecard.
+ *
+ * Empty when no feed is configured, which is a state the page has to render:
+ * with no credentials the whole panel is absent rather than showing zeroes.
+ */
+export function buildRetailPairRows(feed: RetailPositioningFeed | undefined): RetailPairRow[] {
+  if (!feed || feed.size === 0) return [];
+  const board = new Set(ALL_SYMBOLS.map((s) => s.symbol));
+
+  return [...feed.values()]
+    .map((r) => ({
+      symbol: r.symbol,
+      longPct: round1(r.longPct),
+      shortPct: round1(r.shortPct ?? 100 - r.longPct),
+      cell: scoreRetailLongPct(r.longPct),
+      source: r.source,
+      observedAt: r.observedAt,
+      onBoard: board.has(r.symbol),
+    }))
+    .sort((a, b) => b.longPct - a.longPct);
 }
 
 /** Net as a share of the book, so contracts of wildly different size compare. */

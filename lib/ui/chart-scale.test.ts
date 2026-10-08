@@ -44,3 +44,10 @@ describe('axisTicks', () => {
     expect(axisTicks(Number.NaN, 1)).toEqual([Number.NaN, 1]);
   });
 });
+
+describe('axisTicks on a threshold step', () => {
+  it('labels a 0–1.6 sentiment axis every 0.2, the way A1 does', () => {
+    const ticks = axisTicks(0, 1.6, 9);
+    expect(ticks.map((t) => Number(t.toFixed(2)))).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6]);
+  });
+});

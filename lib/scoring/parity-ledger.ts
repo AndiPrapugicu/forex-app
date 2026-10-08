@@ -1958,6 +1958,34 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       "A1's own forecast (their heatmap cards) on a second date before any consensus source is swapped.",
   },
   {
+    key: 'put-call:bands-are-not-one-pair-of-numbers',
+    component: 'Put-Call Ratio (context page, scores nothing)',
+    symbol: 'GOLD',
+    date: '2026-09-20',
+    ours: 'every market banded at 1.07 High Call Volume and 1.20 High Put Volume',
+    a1: 'their GOLD chart bands at roughly 0.39 and 0.71 on the same fixed 0-1.6 axis',
+    classification: 'UNKNOWN',
+    evidence:
+      'Livestream frame of their Put-Call Ratio page, Symbol: GOLD, Aug 12 - Sep 11 2026. Measured off the ' +
+      'image: the plot runs y=164 (1.6) to y=880 (0), so 447.5px per unit; the red dashed band sits at ' +
+      'y=563.5 and the blue at y=705.5, giving 0.707 and 0.390 (+/-0.01 for line width). The axis itself is ' +
+      'the 0-1.6 we already draw, and the zone captions are the same words, so this is the same chart with ' +
+      'different band values. Our 1.07 / 1.20 came from the accessible tree of that page during the free ' +
+      'week (fixtures/a1-full-access/INDEX.md, p_p6qyxgf9nd), which did not record WHICH symbol was ' +
+      'selected - most likely the default, SPX500.',
+    confidence: 'WEAK',
+    rootCause:
+      'A put-call ratio sits at a different level per underlying - SPY lives near 1.2, GLD near 0.5 - so one ' +
+      'pair of thresholds cannot read every market, and A1 evidently varies them. WHAT THE RULE IS remains ' +
+      'unknown: one symbol gives two numbers, which fits a per-symbol constant, a trailing percentile and a ' +
+      'mean-plus-sigma equally well. Nothing observed separates them.',
+    productionAction:
+      'NONE. The bands stay 1.07 / 1.20, which is the only pair we have ever read off their page, and the ' +
+      'page now says in its info panel that their Gold chart bands elsewhere. Fitting 0.39 / 0.71 to GOLD ' +
+      'would be a snapshot-tuned threshold on thirteen other markets we have no reading for. A second ' +
+      'symbol at a known date would separate the candidates; the page scores nothing either way.',
+  },
+  {
     key: 'board:livestream-2026-09-17-gap-breakdown',
     component: 'board total',
     symbol: '60 legible rows over three frames',

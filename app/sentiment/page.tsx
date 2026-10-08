@@ -6,15 +6,22 @@
  */
 
 import { runSetupsPipeline } from '@/lib/setups-pipeline';
-import { buildCrowdRows } from '@/lib/scoring/sentiment';
+import { buildCrowdRows, buildRetailPairRows } from '@/lib/scoring/sentiment';
 import { SentimentPanel } from '@/components/SentimentPanel';
 import { EmptyState, Panel } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SentimentPage() {
-  const { cot, matrix } = await runSetupsPipeline();
+  const { cot, matrix, retailPositioning } = await runSetupsPipeline();
   const rows = buildCrowdRows(cot);
+  /**
+   * The broker feed the Crowd column already scores from, rendered as its own
+   * list. It is the population A1's Retail Sentiment page shows — and the only
+   * one that covers PAIRS, which is what the CFTC rows structurally cannot: a
+   * weekly futures file has a euro contract, not a EURUSD book.
+   */
+  const pairs = buildRetailPairRows(retailPositioning);
 
   if (rows.length === 0) {
     return (
@@ -29,5 +36,5 @@ export default async function SentimentPage() {
     );
   }
 
-  return <SentimentPanel rows={rows} reportDate={matrix.cotReportDate} />;
+  return <SentimentPanel rows={rows} pairs={pairs} reportDate={matrix.cotReportDate} />;
 }

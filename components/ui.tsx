@@ -115,6 +115,9 @@ export function BiasPill({
   /**
    * `block` is A1's scorecard shape: a filled rectangle spanning its column,
    * carrying the WORD alone, so consecutive rows read as one strip of colour.
+   * It fills its cell's height, so a cell that spans several legs is one tall
+   * block rather than a chip floating beside them — give the `td` a `h-px` so
+   * the percentage has something to resolve against.
    * The integer goes to the tooltip — on its own it is not readable anyway,
    * since +2 is maximal in one column and middling in the next.
    *
@@ -152,7 +155,7 @@ export function BiasPill({
 
   const shape =
     variant === 'block'
-      ? `m-0.5 flex items-center justify-center gap-1 rounded-[2px] px-2 py-1.5 ${painted ? '' : 'bg-[var(--color-surface-2)]'}`
+      ? `flex h-full items-center justify-center gap-1 rounded-[2px] px-2 py-1.5 ${painted ? '' : 'bg-[var(--color-surface-2)]'}`
       : 'inline-flex items-baseline gap-1 rounded px-1.5 py-0.5';
 
   return (

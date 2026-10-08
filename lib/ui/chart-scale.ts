@@ -57,7 +57,15 @@ export function axisTicks(lo: number, hi: number, count = 4): number[] {
   const raw = (hi - lo) / (count - 1);
   const magnitude = 10 ** Math.floor(Math.log10(raw));
   const normalized = raw / magnitude;
-  const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+  /**
+   * Compared with a hair of slack, because the step that lands exactly ON a
+   * threshold is the common case — a 0-to-1.6 axis in nine ticks wants 0.2, and
+   * 0.2 / 0.1 is not always 2 in binary. Without it the step silently doubles
+   * and the axis loses half its labels.
+   */
+  const e = 1e-9;
+  const step =
+    (normalized <= 1 + e ? 1 : normalized <= 2 + e ? 2 : normalized <= 5 + e ? 5 : 10) * magnitude;
 
   const ticks: number[] = [];
   const first = Math.ceil(lo / step) * step;

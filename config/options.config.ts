@@ -42,6 +42,16 @@ export const OPTIONS_UNDERLYINGS: readonly OptionsUnderlying[] = [
  * A1's rule, read off their Put-Call Ratio page (fixtures/a1-full-access/INDEX.md):
  * a 5-day moving average of the ratio, with reference lines at 1.07 "High Call
  * Volume" and 1.20 "High Put Volume". Not tuned here — these are their numbers.
+ *
+ * ONE PAIR OF NUMBERS, AND THEY ARE PROBABLY NOT UNIVERSAL. A livestream frame
+ * of their GOLD chart bands at roughly 0.39 and 0.71 on the same fixed 0-1.6
+ * axis, which makes sense — SPY's ratio lives near 1.2 and GLD's near 0.5, so
+ * one threshold cannot read both. The capture above did not record which symbol
+ * was selected. Left alone deliberately: one symbol's two numbers fit a
+ * per-symbol constant, a trailing percentile and a mean-plus-sigma equally
+ * well, and picking one would be fitting a threshold to a single screenshot for
+ * thirteen markets we have no reading for. See the ledger entry
+ * put-call:bands-are-not-one-pair-of-numbers.
  */
 export const PUT_CALL_MA_DAYS = 5;
 export const PUT_CALL_BANDS = { highCallVolume: 1.07, highPutVolume: 1.2 } as const;

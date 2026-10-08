@@ -241,6 +241,8 @@ export function BandedLine({
   format = (v) => v.toFixed(2),
   domain,
   zones = false,
+  variant = 'plain',
+  cornerLabels,
 }: {
   points: { label: string; value: number | null }[];
   /**
@@ -257,7 +259,8 @@ export function BandedLine({
   /**
    * Viewport width. The SVG scales to its container either way, so this is
    * really a TEXT SIZE control: at the default 640 the axis labels render
-   * unreadably small inside a narrow sidebar panel.
+   * unreadably small inside a narrow sidebar panel, and a full-width chart
+   * drawn at 640 would be as tall as the screen.
    */
   width?: number;
   format?: (v: number) => string;
@@ -269,10 +272,26 @@ export function BandedLine({
   domain?: readonly [number, number];
   /** Wash the area beyond each band, the way A1 shades its sentiment zones. */
   zones?: boolean;
+  /**
+   * `sentiment` is the shape A1 gives a ratio read between two thresholds: the
+   * whole plot carries a bear-to-bull gradient instead of two flat washes, the
+   * band captions sit at the left edge on filled tags, the axis is repeated on
+   * the right, and the series is a plain white line with no markers.
+   *
+   * It is a preset rather than six props because it is one design, copied
+   * whole: turning the gradient on without moving the captions off the right
+   * edge puts white text on the darkest part of the wash.
+   */
+  variant?: 'plain' | 'sentiment';
+  /** The corner tags a sentiment chart names its zones with. */
+  cornerLabels?: { top?: string; bottom?: string };
 }) {
+  const sentiment = variant === 'sentiment';
   const W = width;
   const H = height;
   const padL = 40;
+  // The sentiment chart repeats its axis on the right, so it needs room there.
+  const padR = sentiment ? 40 : 4;
   const padB = 22;
   const padT = 8;
   const vals = points.map((p) => p.value).filter((v): v is number => v !== null);
@@ -284,7 +303,7 @@ export function BandedLine({
     return <p className="py-8 text-center text-small text-[var(--color-muted)]">Not enough history to draw yet.</p>;
   }
   const [lo, hi] = scaleDomain(vals, { domain, pad: 0.1, include: bands.map((b) => b.value) });
-  const plotW = W - padL - 4;
+  const plotW = W - padL - padR;
   const plotH = H - padB - padT;
   const x = (i: number) => padL + (i / Math.max(1, points.length - 1)) * plotW;
   const y = (v: number) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
@@ -300,6 +319,15 @@ export function BandedLine({
   });
   const labelEvery = Math.ceil(points.length / 7);
   const toneColor = { bull: BULL, bear: BEAR, muted: MUTED } as const;
+  const ticks = axisTicks(lo, hi, sentiment ? 9 : 5);
+
+  /**
+   * A gradient needs an id, and two charts on one page must not share it. There
+   * are no hooks here on purpose — these draw from server components — so the
+   * id comes from the label, which is already unique per chart because it is
+   * the accessible name.
+   */
+  const gradientId = `bandedline-${label.replace(/[^a-zA-Z0-9]/g, '')}`;
 
   /**
    * A zone runs from its band to the far edge of the axis, on the side the band
@@ -317,30 +345,129 @@ export function BandedLine({
 
   return (
     <svg role="img" aria-label={label} viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full">
-      {zoneRects.map((z) => (
-        <rect key={z.key} x={padL} y={z.top} width={W - padL - 4} height={z.height} fill={z.fill} />
-      ))}
-      {axisTicks(lo, hi, 5).map((t) => (
+      {sentiment && (
+        <defs>
+          {/* Red at the top of the range, blue at the bottom, meeting in the
+              middle — the plot itself says which way is bearish before any line
+              is read. */}
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(var(--color-heat-bear-rgb))" stopOpacity="0.45" />
+            <stop offset="45%" stopColor="rgb(var(--color-heat-bear-rgb))" stopOpacity="0.1" />
+            <stop offset="55%" stopColor="rgb(var(--color-heat-bull-rgb))" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="rgb(var(--color-heat-bull-rgb))" stopOpacity="0.45" />
+          </linearGradient>
+        </defs>
+      )}
+      {sentiment ? (
+        <rect x={padL} y={padT} width={plotW} height={plotH} fill={`url(#${gradientId})`} />
+      ) : (
+        zoneRects.map((z) => <rect key={z.key} x={padL} y={z.top} width={plotW} height={z.height} fill={z.fill} />)
+      )}
+      {ticks.map((t) => (
         <g key={t}>
-          <line x1={padL} x2={W - 4} y1={y(t)} y2={y(t)} stroke="var(--color-border)" />
+          <line
+            x1={padL}
+            x2={W - padR}
+            y1={y(t)}
+            y2={y(t)}
+            stroke="var(--color-border)"
+            opacity={sentiment ? 0.35 : 1}
+          />
           <text x={padL - 4} y={y(t) + 3} textAnchor="end" fontSize={10} fill="var(--color-faint)">
             {format(t)}
           </text>
+          {/* A1 repeats the scale on the right, so a reading near the right
+              edge does not have to be traced back across the whole plot. */}
+          {sentiment && (
+            <text x={W - padR + 4} y={y(t) + 3} textAnchor="start" fontSize={10} fill="var(--color-faint)">
+              {format(t)}
+            </text>
+          )}
         </g>
       ))}
       {bands.map((b) => (
         <g key={b.label}>
-          <line x1={padL} x2={W} y1={y(b.value)} y2={y(b.value)} stroke={toneColor[b.tone]} strokeDasharray="4 3" />
-          <text x={W - 4} y={y(b.value) - 4} textAnchor="end" fontSize={10} fill={toneColor[b.tone]}>
-            {`${b.label} ${format(b.value)}`}
-          </text>
+          <line
+            x1={padL}
+            x2={W - padR}
+            y1={y(b.value)}
+            y2={y(b.value)}
+            stroke={toneColor[b.tone]}
+            strokeDasharray="4 3"
+          />
+          {sentiment ? (
+            /* A filled tag at the LEFT edge, where A1 puts it: on a gradient
+               plot, plain coloured text on the right sat on its own colour. */
+            <>
+              <rect
+                x={padL + 2}
+                y={y(b.value) - 13}
+                width={b.label.length * 5.1 + 10}
+                height={13}
+                rx={2}
+                fill={toneColor[b.tone]}
+                opacity={0.9}
+              />
+              <text x={padL + 7} y={y(b.value) - 3.5} fontSize={9} fill="var(--color-bg)" fontWeight={600}>
+                {b.label}
+              </text>
+              <text x={W - padR - 4} y={y(b.value) - 4} textAnchor="end" fontSize={9} fill={toneColor[b.tone]}>
+                {format(b.value)}
+              </text>
+            </>
+          ) : (
+            <text x={W - padR} y={y(b.value) - 4} textAnchor="end" fontSize={10} fill={toneColor[b.tone]}>
+              {`${b.label} ${format(b.value)}`}
+            </text>
+          )}
         </g>
       ))}
-      <path d={d} fill="none" stroke="var(--color-text)" strokeWidth={1.6} strokeLinejoin="round" />
-      {/* A lone reading draws no path, so mark every point. */}
+      {sentiment && cornerLabels?.top && (
+        <text
+          x={W - padR - 4}
+          y={padT + 12}
+          textAnchor="end"
+          fontSize={10}
+          fontWeight={700}
+          fill={BEAR}
+          letterSpacing="0.08em"
+        >
+          {cornerLabels.top}
+        </text>
+      )}
+      {sentiment && cornerLabels?.bottom && (
+        <text
+          x={W - padR - 4}
+          y={padT + plotH - 5}
+          textAnchor="end"
+          fontSize={10}
+          fontWeight={700}
+          fill={BULL}
+          letterSpacing="0.08em"
+        >
+          {cornerLabels.bottom}
+        </text>
+      )}
+      <path
+        d={d}
+        fill="none"
+        stroke="var(--color-text)"
+        strokeWidth={sentiment ? 2.2 : 1.6}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {/* A lone reading draws no path, so mark every point. A sentiment chart
+          marks none: A1 draws one continuous line, and the dots only exist here
+          so a two-session history is visible at all. */}
       {points.map((p, i) =>
         p.value === null ? null : (
-          <circle key={`dot-${p.label}-${i}`} cx={x(i)} cy={y(p.value)} r={vals.length > 30 ? 0 : 2.2} fill="var(--color-text)">
+          <circle
+            key={`dot-${p.label}-${i}`}
+            cx={x(i)}
+            cy={y(p.value)}
+            r={vals.length > 30 || (sentiment && vals.length > 2) ? 0 : 2.6}
+            fill="var(--color-text)"
+          >
             <title>{`${p.label}: ${format(p.value)}`}</title>
           </circle>
         ),

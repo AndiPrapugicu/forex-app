@@ -14,17 +14,149 @@
  *      first.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { heatStyle } from '@/lib/ui/heat';
+import Link from 'next/link';
 import {
   CROWD_BANDS,
   RETAIL_HISTORY_WEEKS,
   crowdExtremity,
   type CrowdRow,
+  type RetailPairRow,
 } from '@/lib/scoring/sentiment';
 import { DataTable, type Column } from '@/components/DataTable';
 import { PageHeader } from '@/components/primitives';
 import { BiasPill, Panel } from '@/components/ui';
+
+/**
+ * ONE ROW OF A1'S CONTRARIAN CHART: a name chip carrying the contrarian read,
+ * then a 100% bar split long (blue) / short (red).
+ *
+ * Shared by the CFTC contracts and the broker feed because it is one design;
+ * what differs between the two lists is the POPULATION, which their panel
+ * headings state, not the drawing.
+ */
+function ContrarianRow({
+  name,
+  longPct,
+  cell,
+  title,
+  href,
+}: {
+  name: ReactNode;
+  longPct: number;
+  cell: number;
+  title?: string;
+  href?: string;
+}) {
+  const long = Math.max(0, Math.min(100, longPct));
+  const short = 100 - long;
+  const label = typeof name === 'string' ? name : '';
+  /**
+   * The share whose own segment is too narrow to hold its label, printed
+   * outside the bar the way A1 prints it. Without this a 2% side simply loses
+   * its number and the row reads as one share with no way to tell which.
+   */
+  const overflow =
+    long < 12 ? { pct: long, color: 'var(--color-bull-cell)' } : short < 8 ? { pct: short, color: 'var(--color-bear)' } : null;
+  return (
+    <li className="grid grid-cols-[5.5rem_1fr_2.75rem] items-stretch gap-1 md:grid-cols-[8rem_1fr_3rem]">
+      {href ? (
+        <Link
+          href={href}
+          className="flex items-center justify-end rounded-sm px-2 text-small font-medium"
+          style={heatStyle(cell)}
+          title={title}
+        >
+          {name}
+        </Link>
+      ) : (
+        <span
+          className="flex items-center justify-end rounded-sm px-2 text-small font-medium"
+          style={heatStyle(cell)}
+          title={title}
+        >
+          {name}
+        </span>
+      )}
+      <div
+        role="img"
+        aria-label={`${label}: ${long.toFixed(1)}% long, ${(100 - long).toFixed(1)}% short`}
+        className="flex h-8 overflow-hidden rounded-sm text-caption font-semibold text-white"
+      >
+        <span
+          className="tnum flex items-center justify-end px-2"
+          style={{ width: `${long}%`, backgroundColor: 'rgb(var(--color-heat-bull-rgb))' }}
+        >
+          {long >= 12 ? `${long.toFixed(1)}%` : ''}
+        </span>
+        <span
+          className="tnum flex flex-1 items-center justify-end px-2"
+          style={{ backgroundColor: 'rgb(var(--color-heat-bear-rgb))' }}
+        >
+          {short >= 8 ? `${short.toFixed(1)}%` : ''}
+        </span>
+      </div>
+      <span className="tnum flex items-center justify-end text-caption font-semibold" style={{ color: overflow?.color }}>
+        {overflow ? `${overflow.pct.toFixed(1)}%` : ''}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * The broker feed's pairs, which is the list A1's page leads with.
+ *
+ * Defaults to the board's own pairs because those are the rows every other page
+ * can be compared against; the feed carries roughly four times as many, and the
+ * toggle shows them without pretending they are scored anywhere.
+ */
+function PairBars({ pairs }: { pairs: RetailPairRow[] }) {
+  const [scope, setScope] = useState<'board' | 'all'>('board');
+  const onBoard = useMemo(() => pairs.filter((p) => p.onBoard), [pairs]);
+  const shown = scope === 'board' ? onBoard : pairs;
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1 border-b border-[var(--color-border)] px-3 py-2" role="group" aria-label="Scope">
+        {(
+          [
+            ['board', `On the board (${onBoard.length})`],
+            ['all', `Every pair the feed carries (${pairs.length})`],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={scope === key}
+            onClick={() => setScope(key)}
+            className={`min-h-9 rounded-[var(--radius-control)] px-3 text-caption ${
+              scope === key
+                ? 'bg-[var(--color-surface-2)] text-[var(--color-text)]'
+                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <ul className="flex flex-col gap-1 p-3">
+        {shown.map((p) => (
+          <ContrarianRow
+            key={p.symbol}
+            name={<span className="font-mono">{p.symbol}</span>}
+            longPct={p.longPct}
+            cell={p.cell}
+            href={p.onBoard ? `/scorecard/${p.symbol}` : undefined}
+            title={`${p.longPct.toFixed(1)}% of retail is long ${p.symbol} (${p.source}, ${p.observedAt}), read contrarian${
+              p.onBoard ? '' : ' — not a board row'
+            }`}
+          />
+        ))}
+      </ul>
+    </>
+  );
+}
 
 /**
  * The crowd bar.
@@ -161,38 +293,9 @@ function CrowdBars({ rows }: { rows: CrowdRow[] }) {
         ))}
       </div>
       <ul className="flex flex-col gap-1 p-3">
-        {shown.map((r) => {
-          const long = Math.max(0, Math.min(100, r.retailLongPct));
-          return (
-            <li key={r.contract} className="grid grid-cols-[5.5rem_1fr] items-stretch gap-1 md:grid-cols-[8rem_1fr]">
-              <span
-                className="flex items-center justify-end rounded-sm px-2 text-small font-medium"
-                style={heatStyle(r.cell)}
-                title={r.explanation}
-              >
-                {r.ticker}
-              </span>
-              <div
-                role="img"
-                aria-label={`${r.ticker}: ${long.toFixed(1)}% long, ${(100 - long).toFixed(1)}% short`}
-                className="flex h-8 overflow-hidden rounded-sm text-caption font-semibold text-white"
-              >
-                <span
-                  className="tnum flex items-center justify-end px-2"
-                  style={{ width: `${long}%`, backgroundColor: 'rgb(var(--color-heat-bull-rgb))' }}
-                >
-                  {long >= 12 ? `${long.toFixed(1)}%` : ''}
-                </span>
-                <span
-                  className="tnum flex flex-1 items-center justify-end px-2"
-                  style={{ backgroundColor: 'rgb(var(--color-heat-bear-rgb))' }}
-                >
-                  {100 - long >= 8 ? `${(100 - long).toFixed(1)}%` : ''}
-                </span>
-              </div>
-            </li>
-          );
-        })}
+        {shown.map((r) => (
+          <ContrarianRow key={r.contract} name={r.ticker} longPct={r.retailLongPct} cell={r.cell} title={r.explanation} />
+        ))}
       </ul>
     </>
   );
@@ -268,7 +371,15 @@ const COLUMNS: Column<CrowdRow>[] = [
   },
 ];
 
-export function SentimentPanel({ rows, reportDate }: { rows: CrowdRow[]; reportDate: string | null }) {
+export function SentimentPanel({
+  rows,
+  pairs,
+  reportDate,
+}: {
+  rows: CrowdRow[];
+  pairs: RetailPairRow[];
+  reportDate: string | null;
+}) {
   const divergent = useMemo(
     () => [...rows].filter((r) => r.divergent).sort((a, b) => Math.abs(b.spread) - Math.abs(a.spread)),
     [rows],
@@ -280,7 +391,7 @@ export function SentimentPanel({ rows, reportDate }: { rows: CrowdRow[]; reportD
     <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
       <PageHeader
         title="Retail Sentiment"
-        description={`Small-trader positioning, read against them · ${stretched} of ${rows.length} contracts past the ${CROWD_BANDS.bullish}/${CROWD_BANDS.bearish} line`}
+        description={`Retail positioning, read against them · ${pairs.length > 0 ? `${pairs.length} pairs from the broker feed, ` : ''}${stretched} of ${rows.length} contracts past the ${CROWD_BANDS.bullish}/${CROWD_BANDS.bearish} line`}
         updated={reportDate ? `CFTC report of ${reportDate}` : undefined}
         info={
           <>
@@ -292,9 +403,24 @@ export function SentimentPanel({ rows, reportDate }: { rows: CrowdRow[]; reportD
         }
       />
 
+      {/*
+        PAIRS FIRST, because they are the rows the board scores from. The feed
+        is the Crowd column's own input, so a pair shown bearish here is the
+        cell on its scorecard, one click away on the chip.
+      */}
+      {pairs.length > 0 && (
+        <Panel
+          title="Forex pairs · broker positioning"
+          subtitle={`Retail long (blue) and short (red) share, most-long first. ${pairs[0].source}, ${pairs[0].observedAt}.`}
+          className="mb-4"
+        >
+          <PairBars pairs={pairs} />
+        </Panel>
+      )}
+
       <Panel
-        title="Contrarian signal"
-        subtitle="Small traders' long (blue) and short (red) share. The name is coloured by the contrarian read."
+        title="Contracts · CFTC small traders"
+        subtitle="A different population: weekly futures, not the spot book above. The name is coloured by the contrarian read."
         className="mb-4"
       >
         <CrowdBars rows={rows} />
@@ -367,15 +493,17 @@ export function SentimentPanel({ rows, reportDate }: { rows: CrowdRow[]; reportD
           <Panel title="What this measures" padded>
             <div className="space-y-2 text-caption leading-relaxed text-[var(--color-muted)]">
               <p>
-                EdgeFinder&rsquo;s Crowd Sentiment is retail broker positioning from a vendor they do not name. No free,
-                documented equivalent covers the crosses: IG client sentiment needs a logged-in account, Dukascopy&rsquo;s
-                SWFX index is only served through its widget or an account API, and Myfxbook rejects its own session.
+                EdgeFinder&rsquo;s Crowd Sentiment is retail broker positioning from a vendor they do not name. Ours is
+                Myfxbook&rsquo;s Community Outlook — the same kind of measure: a <em>daily spot broker book</em>, and the
+                only source here that covers PAIRS. It feeds the Crowd column on the board, so the pair rows above are
+                the cells those symbols score.
               </p>
               <p>
-                <strong className="text-[var(--color-text)]">So this is the CFTC&rsquo;s non-reportable positions</strong>{' '}
-                — traders too small to be required to file, published free in the same weekly report as the institutional
-                data. Genuinely small-trader money, but <em>futures rather than spot</em> and <em>weekly</em>, surveyed on
-                a Tuesday for release on a Friday.
+                <strong className="text-[var(--color-text)]">The contracts below it are the CFTC&rsquo;s
+                non-reportable positions</strong> — traders too small to be required to file, published free in the same
+                weekly report as the institutional data. Genuinely small-trader money, but <em>futures rather than
+                spot</em> and <em>weekly</em>, surveyed on a Tuesday for release on a Friday. It still answers for gold,
+                silver and the indices, where it reproduces A1&rsquo;s own cells and the broker feed carries nothing.
               </p>
               <p>
                 Contracts where small traders hold fewer than 500 positions in total are omitted. A percentage off a

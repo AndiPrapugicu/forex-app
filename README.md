@@ -68,6 +68,9 @@ Every source below was probed live before being wired in.
 | **ECB Data Portal** | none | Euro-area AAA 2-year spot rate, daily |
 | DBnomics | none | Policy rates |
 | OpenAI *or* Ollama | optional | Plain-English commentary only |
+| OpenRouter (free Nemotron) | optional | The AI Analysis page. Refused unless priced at zero |
+| Google News RSS search | none | AI Analysis live headline search (personal, non-commercial use) |
+| Central-bank feeds (Fed, ECB, BoE, BoJ, SNB, BoC, RBNZ) | none | The banks' own statements and minutes, for AI Analysis |
 
 ¹ FXStreet requires a `Referer: https://www.fxstreet.com/` header — that header *is*
 the auth mechanism, and the API returns 401 without it.
@@ -469,6 +472,99 @@ disagrees, the conflict is **surfaced in the UI, never silently overwritten**.
 
 ---
 
+## AI Analysis
+
+`/ai`, under Board in the sidebar: a fundamental analyst for one symbol at a time, asked in words. It does not
+re-score anything — the board is the rule engine, and the analyst is the judgement layer on top that the rules
+deliberately leave out: rate differentials and where each bank is heading, data surprises, the news since the last
+print, terms of trade, positioning, and what would flip the view.
+
+**What it reads, rebuilt for every question** (`lib/analysis/`):
+
+- **The dossier** (`dossier.ts`, `load.ts`) — the board row with every leg, the currency-index rows on each side, policy
+  rates, the decision calendar, 2-year and real-rate gaps, surprise indices, COT and retail positioning, price context,
+  a list of **levels read off closed daily bars** (`levels.ts`), the next week of HIGH/MEDIUM releases and the last
+  72 hours of prints, up to 30 relevant RSS stories, live Google News searches, cross-asset prices with their channel
+  (`config/ai.config.ts`), and the central banks' own latest statements (`lib/connectors/central-banks.ts`). Every
+  number carries a date; every missing source is named.
+- **Background files** (`knowledge/`) — `ANALYST.md` is the system prompt; `METHODOLOGY.md` explains the board; one file
+  per currency and per asset class covers the central bank's mandate, the economy's structure and dated episodes,
+  **each claim cited to an official source** with an `asOf` date. Picked by currency, not retrieved by similarity: a
+  pair needs two economies, which is exact, and the whole set fits the context many times over. When the corpus
+  outgrows that (years of minutes and speeches), the next step is pgvector in the existing Supabase, not a new service.
+
+**Rules the model is given:** numbers only from the dossier; background labelled as background; state the board's
+verdict first and label any disagreement; entry zones only from the Levels list, each with a fundamental condition,
+an invalidation and the event risk; answer in the language of the question.
+
+**It must stay free**, and four guards in `lib/ai/openrouter.ts` see to it: the model id must end in `:free`;
+OpenRouter's own price list for it is checked before the first request; the request body never carries a fallback
+model list or the web-search plugin (which OpenRouter bills even on free models — live search is Google News RSS
+instead); and a response that reports any cost switches the analyst off for the process. A question costs one or two
+requests of the free allowance (20 a minute, 50 a day under 10 lifetime credits).
+
+**Locked by a passphrase**, `AI_ACCESS_KEY`, because the site is public. The cookie holds an HMAC of it, never the key.
+No key configured means the page is off.
+
+Gaps it reports rather than fills: the RBA's feed refuses automated reads, RBNZ pages likewise (its feed titles still
+arrive), and the BoJ publishes PDFs, so those banks contribute a title and a date only.
+
+**Two answer shapes.** A recap question ("what happened in the last 24h") gets a BRIEF answer at low reasoning effort;
+an entry, hold, flip or thesis question gets the full DECISION shape (state → why → what changed → what would flip it →
+what would confirm it → event risk → board vs narrative → answer). `answerMode` in `lib/analysis/prompt.ts` decides;
+the quick prompts carry their own. Seed and temperature are fixed so two runs over the same dossier read alike.
+
+---
+
+## Market Narrative
+
+`/narrative`, **Market Narrative** in the sidebar's Board group. The same reading heads the `/ai` page and the
+analyst's dossier. It answers "what is the market pricing, and what would turn it" **by fixed rules**, so the AI
+restates a state instead of inventing one. It is not the board: nothing here feeds a score, history or parity.
+
+- **Themes per economy** (`lib/analysis/themes.ts`, thresholds in `config/narrative.config.ts`): labour, inflation,
+  growth (releases against forecast, in sigma, polarity-aware; payrolls, unemployment and wages read as one bundle),
+  rate expectations (the CBOT fed funds strip for USD, `lib/connectors/fed-futures.ts`; the 2-year for the rest), energy
+  terms of trade (Brent/WTI/TTF × each currency's import exposure), risk (VIX, equities, safe-haven weights) and fiscal
+  stress. Gold, silver, oil, indices and crypto have their own theme sets. **Market prices decide a state; headlines
+  only explain it** — speaker stance ("no more hikes") is evidence on the rates theme, flagged when it is not priced.
+- **Effects** run −2..+2, tactical (days to two weeks) and structural (one to three months). A pair is base − quote.
+  **Verdict**: BULLISH/BEARISH at a weighted sum of ±3 with at least two themes agreeing (rates count twice), held until
+  the sum falls back inside ±2. Printed as a label with a count, never a number on the board's scale.
+- **Flip conditions** are generated, each with a machine check: the next release at forecast ± one typical miss, the
+  next rate decision against consensus, the fed funds contract back to last week's level, Brent back to last month's,
+  VIX through 25/15, the nearest swing high/low. Each is tagged FLIP (against the verdict), CONFIRM or TIP.
+- **What changed** compares with the stored snapshot from a week ago, or a state rebuilt from dated inputs.
+
+### Positions and the thesis check
+
+Behind the same passphrase as the analyst, `/narrative` (and `/ai` for one symbol) holds **your open positions**:
+symbol, side, entry, SL/TP, size, risk % and the thesis in your words (`positions` table; run
+`lib/db/migrations/2026-10-03-positions.sql` once). Each is checked on every render and every ingest run
+(`lib/analysis/thesis.ts`):
+
+- **RED** on any of: a daily close below the last higher low (above the last lower high for a short); the board leaving
+  the ±4 band the side needs; the tactical narrative turning against; a flip condition firing against it (remembered
+  three days).
+- **YELLOW** on any of: the board down 40% from its reading at entry; a flip event against it within three days; the
+  structural narrative against; price within half an ATR(14) of the structure level.
+
+The analyst gets the position and its check in the dossier and is told to test your thesis point by point. Positions
+never appear for a viewer without the passphrase cookie, and the API refuses every method without it.
+
+### Narrative alerts
+
+The ingest run stores a snapshot in `ai_cache` (`narrative:latest`, `narrative:day:YYYY-MM-DD`) and sends, through
+the existing Telegram path and `alert_log` dedupe:
+
+- **immediately** — a stored flip condition fired against an open position; a position turned RED;
+- **once a day**, at the first run at or after 06:00 UTC — verdict changes since yesterday, every position's status,
+  confirmations, and the flip events due in the next 24 hours.
+
+They name your positions, so they are kept out of the public `/news` feed.
+
+---
+
 ## How the news engine scores
 
 Distinct from the scorecard above, and no longer displayed as a competing score on a
@@ -527,6 +623,9 @@ value is revised, so a genuine revision does re-alert.
 A surprise alert requires a forecast. Without one there is nothing to be surprised
 *against*, and `"54.1 vs n/a forecast, −1.5σ"` is not worth a phone buzz.
 
+The Market Narrative adds three private kinds — flip hit, thesis RED, daily digest — described
+under [Narrative alerts](#narrative-alerts). Telegram only; never in the feed.
+
 **Telegram setup** (optional): message `@BotFather` → `/newbot` → copy the token into
 `TELEGRAM_BOT_TOKEN`. Message your bot once, then open
 `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy the numeric `chat.id`.
@@ -542,6 +641,7 @@ Create a free project, run `lib/db/schema.sql` in the SQL editor, then:
 > **Re-run the schema after pulling.** `score_snapshots` was added for score
 > history; an existing project without it silently records nothing.
 > `npm run check:supabase` lists exactly which tables are missing.
+> `positions` (2026-10-03) has its own file, `lib/db/migrations/2026-10-03-positions.sql`.
 
 
 - `SUPABASE_URL` — **Settings → Data API → Project URL** (`https://<ref>.supabase.co`).

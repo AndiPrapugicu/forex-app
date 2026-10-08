@@ -4,22 +4,17 @@
  * The scorecard's header: which asset, what it costs right now, and a way to
  * get to another one without going back to a list.
  *
- * The switcher is what turns this page from a drill-down into a tab. It is a
- * plain `<select>` rather than a combobox on purpose — fifty-one options grouped
- * by asset class is exactly what a native select is good at, it is keyboard- and
- * touch-native, and it costs no bundle.
+ * The switcher is what turns this page from a drill-down into a tab. It lives
+ * in `SymbolSelect`, shared with AI Analysis, which says why it is a plain
+ * `<select>`.
  */
 
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { freshnessOf, useLiveQuote } from '@/lib/hooks/useLiveQuotes';
+import { SymbolSelect, type SwitcherOption } from '@/components/SymbolSelect';
 import { changeColor, formatChangePct, formatPrice } from '@/components/ui';
 
-export interface SwitcherOption {
-  symbol: string;
-  label: string;
-  assetClass: string;
-}
+export type { SwitcherOption };
 
 export function ScorecardHeader({
   symbol,
@@ -35,20 +30,11 @@ export function ScorecardHeader({
   fallbackPrice: number | null;
   fallbackChangePct: number | null;
 }) {
-  const router = useRouter();
   const quote = useLiveQuote(symbol, true);
 
   const price = quote?.price ?? fallbackPrice;
   const change = quote?.changePct ?? fallbackChangePct;
   const freshness = freshnessOf(quote);
-
-  /** Preserve the order the caller sent, grouped, without re-sorting. */
-  const groups: [string, SwitcherOption[]][] = [];
-  for (const option of options) {
-    const last = groups[groups.length - 1];
-    if (last && last[0] === option.assetClass) last[1].push(option);
-    else groups.push([option.assetClass, [option]]);
-  }
 
   return (
     <header className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -58,22 +44,7 @@ export function ScorecardHeader({
 
       <h1 className="text-xl font-bold">{label}</h1>
 
-      <select
-        value={symbol}
-        onChange={(e) => router.push(`/scorecard/${e.target.value}`)}
-        aria-label="Switch symbol"
-        className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 font-mono text-micro outline-none hover:border-[var(--color-border-bright)]"
-      >
-        {groups.map(([assetClass, list]) => (
-          <optgroup key={assetClass} label={assetClass}>
-            {list.map((o) => (
-              <option key={o.symbol} value={o.symbol}>
-                {o.symbol} · {o.label}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      <SymbolSelect symbol={symbol} options={options} hrefTemplate="/scorecard/{symbol}" />
 
       {price !== null && (
         <span className="tnum flex items-baseline gap-1.5 text-sm text-[var(--color-muted)]">

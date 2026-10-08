@@ -9,7 +9,21 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Alert, EventScore, NewsItem, NormalizedEvent, ScoreSnapshot } from '@/lib/types';
+import type { Alert, EventScore, NewPosition, NewsItem, NormalizedEvent, Position, PositionPatch, ScoreSnapshot } from '@/lib/types';
+
+/**
+ * The positions table is newer than the rest of the schema, so a database that
+ * has run `schema.sql` once may not have it. Said as an instruction, not a
+ * PostgREST code, because the user reads it on the page.
+ */
+export class PositionsTableMissing extends Error {
+  constructor() {
+    super('The positions table does not exist yet — run lib/db/migrations/2026-10-03-positions.sql in the Supabase SQL editor.');
+    this.name = 'PositionsTableMissing';
+  }
+}
+
+const MISSING_TABLE = /schema cache|does not exist|PGRST205|42P01/i;
 
 export interface Store {
   /** False for the memory fallback — alert dedupe is best-effort only. */
@@ -68,6 +82,16 @@ export interface Store {
   saveOptionsSnapshots(rows: OptionsSnapshot[]): Promise<void>;
   /** Every options row on or after `sinceDate` (`YYYY-MM-DD`), oldest first. */
   getOptionsSnapshots(sinceDate: string): Promise<OptionsSnapshot[]>;
+
+  /**
+   * The user's own trades, newest first. Throws `PositionsTableMissing` when the
+   * migration has not been run, so callers can say so instead of showing none.
+   */
+  listPositions(opts?: { open?: boolean }): Promise<Position[]>;
+  savePosition(p: NewPosition): Promise<Position>;
+  /** Null when no row has that id. */
+  updatePosition(id: string, patch: PositionPatch): Promise<Position | null>;
+  deletePosition(id: string): Promise<boolean>;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +113,12 @@ const mem = {
   snapshots: new Map<string, ScoreSnapshot>(),
   /** Keyed `symbol|date`. */
   options: new Map<string, OptionsSnapshot>(),
+  positions: new Map<string, Position>(),
 };
+
+function byOpenedDesc(a: Position, b: Position) {
+  return b.openedAtUtc.localeCompare(a.openedAtUtc);
+}
 
 class MemoryStore implements Store {
   readonly durable = false;
@@ -197,6 +226,38 @@ class MemoryStore implements Store {
     return [...mem.options.values()]
       .filter((r) => r.date >= sinceDate)
       .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async listPositions(opts: { open?: boolean } = {}) {
+    return [...mem.positions.values()]
+      .filter((p) => opts.open === undefined || (p.closedAtUtc === null) === opts.open)
+      .sort(byOpenedDesc);
+  }
+
+  async savePosition(p: NewPosition) {
+    const row: Position = {
+      ...p,
+      id: crypto.randomUUID(),
+      openedAtUtc: new Date().toISOString(),
+      closedAtUtc: null,
+      closePrice: null,
+      lastStatus: null,
+      lastStatusAtUtc: null,
+    };
+    mem.positions.set(row.id, row);
+    return row;
+  }
+
+  async updatePosition(id: string, patch: PositionPatch) {
+    const prev = mem.positions.get(id);
+    if (!prev) return null;
+    const next = { ...prev, ...patch };
+    mem.positions.set(id, next);
+    return next;
+  }
+
+  async deletePosition(id: string) {
+    return mem.positions.delete(id);
   }
 }
 
@@ -565,6 +626,90 @@ class SupabaseStore implements Store {
       putOpenInterest: Number(r.put_open_interest),
     }));
   }
+
+  private positionsError(op: string, error: { message: string; code?: string }): never {
+    if (MISSING_TABLE.test(`${error.code ?? ''} ${error.message}`)) throw new PositionsTableMissing();
+    throw new Error(`${op}: ${error.message}`);
+  }
+
+  async listPositions(opts: { open?: boolean } = {}) {
+    let q = this.db.from('positions').select('*');
+    if (opts.open === true) q = q.is('closed_at', null);
+    if (opts.open === false) q = q.not('closed_at', 'is', null);
+    const { data, error } = await q.order('opened_at', { ascending: false });
+    if (error) this.positionsError('listPositions', error);
+    return (data ?? []).map(rowToPosition);
+  }
+
+  async savePosition(p: NewPosition) {
+    const { data, error } = await this.db
+      .from('positions')
+      .insert({
+        symbol: p.symbol,
+        side: p.side,
+        entry_date: p.entryDate,
+        entry_price: p.entryPrice,
+        stop_loss: p.stopLoss,
+        take_profit: p.takeProfit,
+        size: p.size,
+        risk_pct: p.riskPct,
+        thesis: p.thesis,
+      })
+      .select('*')
+      .single();
+    if (error) this.positionsError('savePosition', error);
+    return rowToPosition(data);
+  }
+
+  async updatePosition(id: string, patch: PositionPatch) {
+    const row: Record<string, unknown> = {};
+    if (patch.stopLoss !== undefined) row.stop_loss = patch.stopLoss;
+    if (patch.takeProfit !== undefined) row.take_profit = patch.takeProfit;
+    if (patch.size !== undefined) row.size = patch.size;
+    if (patch.riskPct !== undefined) row.risk_pct = patch.riskPct;
+    if (patch.thesis !== undefined) row.thesis = patch.thesis;
+    if (patch.closedAtUtc !== undefined) row.closed_at = patch.closedAtUtc;
+    if (patch.closePrice !== undefined) row.close_price = patch.closePrice;
+    if (patch.lastStatus !== undefined) row.last_status = patch.lastStatus;
+    if (patch.lastStatusAtUtc !== undefined) row.last_status_at = patch.lastStatusAtUtc;
+    const { data, error } = await this.db.from('positions').update(row).eq('id', id).select('*').maybeSingle();
+    if (error) this.positionsError('updatePosition', error);
+    return data ? rowToPosition(data) : null;
+  }
+
+  async deletePosition(id: string) {
+    const { data, error } = await this.db.from('positions').delete().eq('id', id).select('id');
+    if (error) this.positionsError('deletePosition', error);
+    return (data ?? []).length > 0;
+  }
+}
+
+function numOrNull(v: unknown): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+function isoOrNull(v: unknown): string | null {
+  return v ? new Date(v as string).toISOString() : null;
+}
+
+function rowToPosition(r: Record<string, unknown>): Position {
+  return {
+    id: r.id as string,
+    symbol: r.symbol as string,
+    side: r.side as Position['side'],
+    entryDate: String(r.entry_date).slice(0, 10),
+    entryPrice: Number(r.entry_price),
+    stopLoss: numOrNull(r.stop_loss),
+    takeProfit: numOrNull(r.take_profit),
+    size: (r.size as string) ?? null,
+    riskPct: numOrNull(r.risk_pct),
+    thesis: (r.thesis as string) ?? null,
+    openedAtUtc: new Date(r.opened_at as string).toISOString(),
+    closedAtUtc: isoOrNull(r.closed_at),
+    closePrice: numOrNull(r.close_price),
+    lastStatus: (r.last_status as Position['lastStatus']) ?? null,
+    lastStatusAtUtc: isoOrNull(r.last_status_at),
+  };
 }
 
 type OptionsSnapshot = import('@/lib/types').OptionsSnapshot;

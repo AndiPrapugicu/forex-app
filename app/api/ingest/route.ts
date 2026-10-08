@@ -8,12 +8,13 @@
 
 import { NextResponse } from 'next/server';
 import { runPipeline } from '@/lib/pipeline';
-import { runSetupsPipeline } from '@/lib/setups-pipeline';
+import { runSetupsPipeline, type SetupsPayload } from '@/lib/setups-pipeline';
 import { buildSnapshots } from '@/lib/scoring/history';
 import { getStore, type Store } from '@/lib/db/client';
 import { fetchAllOptionChains } from '@/lib/connectors/yahoo-options';
 import { refreshStoredCrowdFeed } from '@/lib/crowd-feed';
 import { sessionDate, shouldCaptureOptions, toOptionsSnapshot } from '@/lib/scoring/options';
+import { captureNarrative } from '@/lib/analysis/narrative-capture';
 
 // Always dynamic: this route has side effects and must never be cached.
 export const dynamic = 'force-dynamic';
@@ -52,9 +53,9 @@ function authorize(request: Request): string | null {
  * reported in the response rather than thrown, so a persistent failure is still
  * visible in the workflow log.
  */
-async function captureHistory(store: Store): Promise<{ saved: number; error?: string }> {
+async function captureHistory(store: Store, board: Promise<SetupsPayload>): Promise<{ saved: number; error?: string }> {
   try {
-    const { matrix } = await runSetupsPipeline();
+    const { matrix } = await board;
     const snapshots = buildSnapshots(matrix);
     await store.saveSnapshots(snapshots);
     return { saved: snapshots.length };
@@ -96,7 +97,10 @@ async function handle(request: Request) {
     // First, so the snapshot below scores off the refreshed feed. The only
     // caller that logs in to the crowd provider; hourly at most.
     const crowd = await refreshStoredCrowdFeed(store);
-    const [history, options] = await Promise.all([captureHistory(store), captureOptions(store)]);
+    // One board run, read by the score history and the narrative alike.
+    const board = runSetupsPipeline();
+    board.catch(() => {}); // each consumer reports its own failure
+    const [history, options, narrative] = await Promise.all([captureHistory(store, board), captureOptions(store), captureNarrative(store, board)]);
 
     // Configured is not the same as working. With credentials set but no schema,
     // every query fails and alerts are silently suppressed — so dedupe is only
@@ -118,6 +122,12 @@ async function handle(request: Request) {
       crowdSaved: crowd.saved,
       crowdSkipped: crowd.skipped,
       crowdError: crowd.error,
+      narrativeSaved: narrative.saved,
+      narrativePositions: narrative.positions,
+      narrativeAlerts: narrative.alerts,
+      narrativeDigest: narrative.digest,
+      narrativePositionsError: narrative.positionsError,
+      narrativeError: narrative.error,
       // Snapshots in memory vanish between serverless invocations, so history
       // only accumulates for real once Supabase is configured.
       historyDurable: store.durable && storage.ok,

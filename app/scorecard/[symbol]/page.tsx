@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   BIAS_THRESHOLDS,
+  CELL_MAX,
   MATRIX_SLOTS,
   SCORING_SLOTS,
   SLOT_CATEGORIES,
@@ -47,6 +48,16 @@ const BIAS_CUTS = BIAS_THRESHOLDS.map((t) => t.min)
   .sort((a, b) => a - b);
 /** The score that earns a "Very", which is where the banner paints solid. */
 const VERY_BIAS_CUT = BIAS_CUTS[BIAS_CUTS.length - 1];
+
+/**
+ * A single economy's vote, before a pair differences two of them.
+ *
+ * The cell beside the indicator spans ±2 for a pair; each LEG inside it spans
+ * ±1, so the leg rows are read on that scale — otherwise a leg that beat its
+ * forecast would be labelled "Bullish" where the pair cell calls the same
+ * number "Very Bullish".
+ */
+const LEG_CELL_MAX = CELL_MAX;
 
 /** How far back the score-history panel looks. The full page offers 7/30/90. */
 const SCORE_HISTORY_DAYS = 30;
@@ -446,192 +457,200 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                           {blockBias.label}
                         </th>
                         {sectionHasLegs ? (
-                          ['Actual', 'Forecast', 'Surprise', 'Date'].map((h) => (
-                            <th key={h} scope="col" className="px-2 py-1 text-right text-micro font-medium italic">
-                              {h}
+                          [
+                            { label: 'Leg', align: 'text-left' },
+                            { label: 'Reading', align: 'text-left' },
+                            { label: 'Actual', align: 'text-right' },
+                            { label: 'Forecast', align: 'text-right' },
+                            { label: 'Surprise', align: 'text-right' },
+                            { label: 'Date', align: 'text-right' },
+                          ].map((h) => (
+                            <th
+                              key={h.label}
+                              scope="col"
+                              className={`px-1.5 py-1 text-micro font-medium italic ${h.align}`}
+                            >
+                              {h.label}
                             </th>
                           ))
                         ) : (
-                          <th scope="col" colSpan={4} className="px-2 py-1" />
+                          <th scope="col" colSpan={6} className="px-2 py-1" />
                         )}
                       </tr>,
-                      ...slots.map((slot) => {
+                      ...slots.flatMap((slot) => {
                         const cell = row.cells[slot.key];
                         const legs = cell.legs?.filter((l) => l.seriesName !== null) ?? [];
 
-                        return (
-                          <tr key={slot.key} className="border-b border-[var(--color-border)]/60 align-top">
-                            <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-1 whitespace-nowrap">
-                                <span title={slot.title}>{slot.label}</span>
-                                {!slot.scoring && (
-                                  <span className="text-micro text-[var(--color-faint)] italic">context</span>
-                                )}
-                                {/*
-                                  The resolved series names moved in HERE.
-                                  "EUR · Gross Domestic Product s.a. (QoQ)" over
-                                  "USD · Gross Domestic Product Annualized" wrapped
-                                  onto five lines and pushed the three numbers that
-                                  matter down the page, for a name that is read
-                                  once. Naming the series still matters — CPI YoY
-                                  for EUR is the euro-area HICP — so it is a tap
-                                  away rather than gone, and works on a phone,
-                                  which a `title` does not.
-                                */}
-                                {legs.length > 0 && (
-                                  <Explain label={`Which series ${slot.label} reads`}>
-                                    <div className="flex flex-col gap-1">
-                                      {legs.map((leg, i) => (
-                                        <div key={i}>
-                                          <span className="font-mono font-semibold">{leg.currency}</span>{' '}
-                                          {leg.seriesName}
-                                          <span className="text-[var(--color-faint)]">
-                                            {' '}
-                                            &middot; scored against the {leg.referenceLabel} &middot; previous{' '}
-                                            {formatValue(leg.previous, leg.unit)}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </Explain>
-                                )}
-                              </div>
-                              {/*
-                                One line per leg, in the same order as the numeric
-                                columns, so "EUR" lines up with the EUR actual.
-                                That alignment is the whole reason the currency
-                                stays visible while the series name does not.
-                              */}
-                              {legs.map((leg, i) => (
-                                <div
-                                  key={i}
-                                  className="font-mono text-micro leading-tight text-[var(--color-faint)]"
-                                  title={leg.seriesName ?? undefined}
-                                >
-                                  {leg.currency}
-                                </div>
-                              ))}
-                            </td>
-
+                        /**
+                         * The indicator's name, and the verdict for the whole
+                         * cell. Both span every leg row: the score is one number
+                         * per indicator, not one per economy, and a block that
+                         * spans its legs says so by its shape.
+                         */
+                        const name = (
+                          <div className="flex items-center gap-1 whitespace-nowrap">
+                            <span title={slot.title}>{slot.label}</span>
+                            {!slot.scoring && <span className="text-micro text-[var(--color-faint)] italic">context</span>}
                             {/*
-                              The cell as A1 draws it: a filled block spanning the
-                              column, carrying the WORD alone. Consecutive rows
-                              then read as one strip of colour, which is the whole
-                              point of their layout — the verdict is legible
-                              before a single number is.
-
-                              The integer moved into the block's tooltip and the
-                              row's disclosure. It is not lost, and it was never
-                              readable on its own anyway: "+2" means maximal on a
-                              seasonality row and middling on a trend row, which
-                              is why the word exists.
+                              A single-economy asset reads its home economy
+                              UPSIDE DOWN — strong US growth weighs on gold — and
+                              the cell carried that sentence all along without
+                              anything rendering it. Once each leg shows its own
+                              reading, leaving it out is worse than untidy: the
+                              row says "USD Bearish" beside a Bullish block and
+                              looks like a bug.
                             */}
-                            <td className="w-[88px] p-0 align-middle md:w-[104px]">
-                              <BiasPill
-                                variant="block"
-                                cell={cell.cell}
-                                maxCell={maxCellFor(slot.key, def.kind)}
-                                stale={cell.stale ?? false}
-                                partial={cell.status === 'partial' ? (cell.missingLeg ?? null) : null}
-                              />
-                            </td>
-
+                            {cell.note && (
+                              <span className="text-micro text-[var(--color-uncertain)] italic" title={cell.note}>
+                                inverted
+                              </span>
+                            )}
                             {/*
-                              Actual / Forecast / SURPRISE / DATE, which is the
-                              set A1's own widget prints. The surprise is what
-                              the cell is actually made of — every economic
-                              column is "vs. forecast" — and it was left for the
-                              reader to do in their head, from two columns that
-                              are not in the same units as each other. Previous
-                              moved into the disclosure above: it is the scoring
-                              basis only for PMI, where the Forecast column is
-                              already showing it.
+                              The resolved series names live in HERE.
+                              "EUR · Gross Domestic Product s.a. (QoQ)" over
+                              "USD · Gross Domestic Product Annualized" wrapped
+                              onto five lines and pushed the numbers that matter
+                              off screen, for a name that is read once. Naming
+                              the series still matters — CPI YoY for EUR is the
+                              euro-area HICP — so it is a tap away rather than
+                              gone, and it works on a phone, which `title` does
+                              not.
                             */}
-                            {/*
-                              Trend, seasonality, COT and the rate cell have no
-                              calendar release behind them, so there is nothing to
-                              put in four numeric columns. They get the width
-                              instead — cramming a sentence into "Actual" truncated
-                              exactly the part that explains the score.
-                            */}
-                            {legs.length === 0 ? (
-                              <td colSpan={4} className="px-2 py-1.5 text-micro leading-snug text-[var(--color-muted)]">
-                                {cell.explanation}
-                              </td>
-                            ) : (
-                              <>
-                                {/*
-                                  Actual and Forecast are PLAIN, as A1 prints
-                                  them. They used to be painted by the leg's own
-                                  reading, which put three coloured numbers on a
-                                  row whose verdict is already a filled block —
-                                  and a colour on "1.50%" says nothing anyway,
-                                  since the reading is the DIFFERENCE. Only the
-                                  surprise is coloured now.
-                                */}
-                                {(['actual', 'reference'] as const).map((field) => (
-                                  <td key={field} className="px-2 py-1.5 text-right">
-                                    {legs.map((leg, i) => (
-                                      <div
-                                        key={i}
-                                        className={`tnum text-micro leading-tight ${
-                                          field === 'actual' ? 'text-[var(--color-text)]' : 'text-[var(--color-muted)]'
-                                        }`}
-                                        title={
-                                          field === 'reference'
-                                            ? `Scored against the ${leg.referenceLabel}`
-                                            : undefined
-                                        }
-                                      >
-                                        {formatValue(leg[field], leg.unit)}
-                                      </div>
-                                    ))}
-                                  </td>
-                                ))}
-
-                                {/*
-                                  Coloured by the LEG'S OWN CELL, never by the
-                                  sign of the difference: a rise in unemployment
-                                  is a positive surprise and a bearish one, and
-                                  painting that blue would contradict the pill two
-                                  columns to its left.
-                                */}
-                                <td className="px-2 py-1.5 text-right">
+                            {legs.length > 0 && (
+                              <Explain label={`Which series ${slot.label} reads`}>
+                                <div className="flex flex-col gap-1">
                                   {legs.map((leg, i) => (
-                                    <div key={i} className={`tnum text-micro leading-tight ${cellColor(leg.cell)}`}>
-                                      {surpriseOf(leg)}
+                                    <div key={i}>
+                                      <span className="font-mono font-semibold">{leg.currency}</span> {leg.seriesName}
+                                      <span className="text-[var(--color-faint)]">
+                                        {' '}
+                                        · scored against the {leg.referenceLabel} · previous{' '}
+                                        {formatValue(leg.previous, leg.unit)}
+                                      </span>
                                     </div>
                                   ))}
-                                </td>
-
-                                <td className="px-2 py-1.5 text-right">
-                                  {legs.map((leg, i) => {
-                                    const age = ageInDays(leg.dateUtc, now);
-                                    const past = age !== null && age > maxAgeFor(slot, leg.currency);
-                                    return (
-                                      <div
-                                        key={i}
-                                        className={`tnum text-micro leading-tight ${
-                                          past ? 'text-[var(--color-uncertain)]' : 'text-[var(--color-faint)]'
-                                        }`}
-                                        title={
-                                          age === null
-                                            ? undefined
-                                            : past
-                                              ? `${age} days old, past this series' usual cadence — still scored, as A1 scores theirs`
-                                              : `${age} days old`
-                                        }
-                                      >
-                                        {releaseDay(leg.dateUtc)}
-                                        {past && '*'}
-                                      </div>
-                                    );
-                                  })}
-                                </td>
-                              </>
+                                  {cell.note && <div className="text-[var(--color-uncertain)]">{cell.note}</div>}
+                                </div>
+                              </Explain>
                             )}
-                          </tr>
+                          </div>
                         );
+
+                        const verdict = (
+                          <BiasPill
+                            variant="block"
+                            cell={cell.cell}
+                            maxCell={maxCellFor(slot.key, def.kind)}
+                            stale={cell.stale ?? false}
+                            partial={cell.status === 'partial' ? (cell.missingLeg ?? null) : null}
+                          />
+                        );
+
+                        /*
+                          Trend, seasonality, COT and the rate cell have no
+                          calendar release behind them, so there is nothing to put
+                          in six columns. They get the width instead — cramming a
+                          sentence into "Actual" truncated exactly the part that
+                          explains the score.
+                        */
+                        if (legs.length === 0) {
+                          return [
+                            <tr key={slot.key} className="border-b border-[var(--color-border)]/60">
+                              <td className="px-3 py-1.5 align-middle">{name}</td>
+                              <td className="h-px w-[88px] p-1 align-middle md:w-[104px]">{verdict}</td>
+                              <td colSpan={6} className="px-2 py-1.5 text-micro leading-snug text-[var(--color-muted)]">
+                                {cell.explanation}
+                              </td>
+                            </tr>,
+                          ];
+                        }
+
+                        /**
+                         * ONE ROW PER LEG, with the name and the verdict spanning
+                         * them.
+                         *
+                         * The legs used to be stacked as lines inside single
+                         * cells, which meant the coloured block could only ever
+                         * be as tall as one line of text while the row beside it
+                         * was two, and every column had to be read by eye to know
+                         * which line belonged to which economy. As real rows, the
+                         * grid does that alignment, the block fills its own
+                         * height, and each economy gets its own reading — which is
+                         * the arithmetic: a pair cell is the base leg minus the
+                         * quote leg.
+                         */
+                        return legs.map((leg, i) => {
+                          const legBias = cellBias(leg.cell, LEG_CELL_MAX);
+                          const age = ageInDays(leg.dateUtc, now);
+                          const past = age !== null && age > maxAgeFor(slot, leg.currency);
+                          const last = i === legs.length - 1;
+
+                          return (
+                            <tr
+                              key={`${slot.key}-${leg.currency}-${i}`}
+                              className={last ? 'border-b border-[var(--color-border)]/60' : ''}
+                            >
+                              {i === 0 && (
+                                <>
+                                  <td rowSpan={legs.length} className="px-3 py-1.5 align-middle">
+                                    {name}
+                                  </td>
+                                  <td rowSpan={legs.length} className="h-px w-[88px] p-1 align-middle md:w-[104px]">
+                                    {verdict}
+                                  </td>
+                                </>
+                              )}
+
+                              <td className="border-l border-[var(--color-border)]/40 px-1.5 py-1 font-mono text-micro text-[var(--color-faint)]">
+                                {leg.currency}
+                              </td>
+                              <td className={`px-1.5 py-1 text-micro font-medium ${legBias.tone}`}>{legBias.label}</td>
+
+                              {/*
+                                Actual and Forecast are PLAIN, as A1 prints them.
+                                Painting them put three coloured numbers on a row
+                                whose verdict is already a filled block, and a
+                                colour on "1.50%" says nothing anyway: the reading
+                                is the DIFFERENCE, which is the next column.
+                              */}
+                              <td className="tnum px-1.5 py-1 text-right text-micro text-[var(--color-text)]">
+                                {formatValue(leg.actual, leg.unit)}
+                              </td>
+                              <td
+                                className="tnum px-1.5 py-1 text-right text-micro text-[var(--color-muted)]"
+                                title={`Scored against the ${leg.referenceLabel}`}
+                              >
+                                {formatValue(leg.reference, leg.unit)}
+                              </td>
+
+                              {/*
+                                Coloured by the LEG'S OWN CELL, never by the sign
+                                of the difference: a rise in unemployment is a
+                                positive surprise and a bearish one, and painting
+                                that blue would contradict the word beside it.
+                              */}
+                              <td className={`tnum px-1.5 py-1 text-right text-micro ${cellColor(leg.cell)}`}>
+                                {surpriseOf(leg)}
+                              </td>
+
+                              <td
+                                className={`tnum px-1.5 py-1 text-right text-micro ${
+                                  past ? 'text-[var(--color-uncertain)]' : 'text-[var(--color-faint)]'
+                                }`}
+                                title={
+                                  age === null
+                                    ? undefined
+                                    : past
+                                      ? `${age} days old, past this series' usual cadence — still scored, as A1 scores theirs`
+                                      : `${age} days old`
+                                }
+                              >
+                                {releaseDay(leg.dateUtc)}
+                                {past && '*'}
+                              </td>
+                            </tr>
+                          );
+                        });
                       }),
                     ];
                   })}

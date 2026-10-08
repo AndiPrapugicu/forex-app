@@ -273,7 +273,12 @@ export type AlertKind =
   | 'surprise-deviation'
   | 'geopolitical'
   | 'central-bank'
-  | 'news-cluster';
+  | 'news-cluster'
+  // The narrative engine's (lib/alerts/narrative.ts). They name the user's own
+  // positions, so they go to Telegram but never to the public feed.
+  | 'narrative-flip'
+  | 'thesis-red'
+  | 'narrative-digest';
 
 export interface Alert {
   id: string;
@@ -416,3 +421,35 @@ export interface OptionsSnapshot {
   callOpenInterest: number;
   putOpenInterest: number;
 }
+
+/**
+ * A trade the user holds, entered on /narrative or /ai behind the AI passphrase.
+ *
+ * Kept server-side (Supabase `positions`) so the ingest run can check each
+ * thesis and send a Telegram when one breaks. The narrative never trades and
+ * never changes a position; it only reads them.
+ */
+export interface Position {
+  id: string;
+  symbol: string;
+  side: 'long' | 'short';
+  /** `YYYY-MM-DD`. */
+  entryDate: string;
+  entryPrice: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  /** Free text, for the user's own records ("0.5 lots"). Nothing is computed from it. */
+  size: string | null;
+  riskPct: number | null;
+  /** The user's thesis in their own words; the analyst checks it point by point. */
+  thesis: string | null;
+  openedAtUtc: string;
+  closedAtUtc: string | null;
+  closePrice: number | null;
+  /** As of the last ingest run, so a Telegram goes out on the change, not every run. */
+  lastStatus: 'green' | 'yellow' | 'red' | null;
+  lastStatusAtUtc: string | null;
+}
+
+export type NewPosition = Pick<Position, 'symbol' | 'side' | 'entryDate' | 'entryPrice' | 'stopLoss' | 'takeProfit' | 'size' | 'riskPct' | 'thesis'>;
+export type PositionPatch = Partial<Pick<Position, 'stopLoss' | 'takeProfit' | 'size' | 'riskPct' | 'thesis' | 'closedAtUtc' | 'closePrice' | 'lastStatus' | 'lastStatusAtUtc'>>;

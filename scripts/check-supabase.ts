@@ -22,6 +22,9 @@ const REQUIRED_TABLES = [
   // the tail of lib/db/schema.sql re-run — this is what makes that visible
   // instead of surfacing as an empty history chart.
   'score_snapshots',
+  // Open trades for the thesis check (2026-10-03). Its own migration file exists
+  // too: lib/db/migrations/2026-10-03-positions.sql.
+  'positions',
 ];
 
 function isPlaceholder(v: string | undefined): boolean {

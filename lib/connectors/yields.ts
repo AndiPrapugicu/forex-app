@@ -147,6 +147,40 @@ function parseEcbCsv(body: string): { value: number; observedOn: string } | null
 }
 
 /**
+ * The ECB's 2-year spot curve as a daily series, oldest first.
+ *
+ * Same series as the level above, asked for its last 45 observations, so the
+ * narrative engine can read a week's repricing for EUR the way FRED's DGS2
+ * gives it for USD. Verified 2026-10-03: 30 rows returned for 30 asked.
+ */
+export async function fetchEcbTwoYearSeries(observations = 45): Promise<DatedObservation[]> {
+  if (fixturesEnabled()) return [];
+  const res = await fetchText(ECB.name, ECB.url.replace('lastNObservations=1', `lastNObservations=${observations}`), {
+    cacheTtlSeconds: ECB.cacheTtlSeconds,
+    cacheKey: `ecb:yc:2y:${observations}`,
+    timeoutMs: 15_000,
+  });
+  return res.ok ? parseEcbSeries(res.data) : [];
+}
+
+export function parseEcbSeries(body: string): DatedObservation[] {
+  const lines = body.trim().split('\n');
+  if (lines.length < 2) return [];
+  const header = lines[0].split(',');
+  const timeIdx = header.indexOf('TIME_PERIOD');
+  const valueIdx = header.indexOf('OBS_VALUE');
+  if (timeIdx === -1 || valueIdx === -1) return [];
+  const out: DatedObservation[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const value = Number.parseFloat(cols[valueIdx] ?? '');
+    const date = cols[timeIdx]?.trim();
+    if (date && Number.isFinite(value)) out.push({ date, value });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
  * One currency's 2-year from TradingView.
  *
  * Null on anything unexpected rather than a guess: a missing currency falls back

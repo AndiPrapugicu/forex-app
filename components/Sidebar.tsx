@@ -46,6 +46,9 @@ const ICON = {
   calendar: 'M3 5h18v16H3zM3 10h18M8 3v4M16 3v4M8 14h2M14 14h2',
   chart: 'M3 21h18M7 17V9m5 8V5m5 12v-6M4 12l4-4 4 3 5-6',
   news: 'M4 5h16M4 10h16M4 15h10M4 20h7',
+  ai: 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z',
+  /** A compass: which way each economy is being pushed. */
+  narrative: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   menu: 'M4 6h16M4 12h16M4 18h16',
   close: 'M6 6l12 12M18 6L6 18',
   chevron: 'M9 6l6 6-6 6',
@@ -58,6 +61,8 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/', label: 'Top Setups', hint: 'Every symbol, every indicator', icon: ICON.board },
       { href: '/scorecard', label: 'Scorecard', hint: 'One asset in full', icon: ICON.card },
+      { href: '/ai', label: 'AI Analysis', hint: 'Fundamentals, rates and news, in words', icon: ICON.ai },
+      { href: '/narrative', label: 'Market Narrative', hint: 'What each economy is pricing, and what would flip it', icon: ICON.narrative },
     ],
   },
   {

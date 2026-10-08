@@ -12,6 +12,7 @@ import { stableId } from '@/lib/connectors/base';
 import { clusterSeverity, isCorroborated } from '@/lib/scoring/news';
 import type {
   Alert,
+  AlertKind,
   AlertSeverity,
   Currency,
   EventScore,
@@ -290,6 +291,12 @@ export const ALERT_DISPLAY_WINDOW_HOURS = 48;
  * reappear: an alert has to be recent, and a news alert has to come from a feed
  * we still trust.
  */
+/**
+ * Delivered to the owner's Telegram and logged for dedupe, never shown in the
+ * feed: they name the user's private positions, and the feed is public.
+ */
+export const PRIVATE_ALERT_KINDS: readonly AlertKind[] = ['narrative-flip', 'thesis-red', 'narrative-digest'];
+
 export function isCurrentAlert(
   alert: Alert,
   now: Date,
@@ -297,6 +304,7 @@ export function isCurrentAlert(
   windowHours = ALERT_DISPLAY_WINDOW_HOURS,
 ): boolean {
   if (!isDeliverable(alert)) return false;
+  if (PRIVATE_ALERT_KINDS.includes(alert.kind)) return false;
   const created = new Date(alert.createdUtc).getTime();
   if (!Number.isFinite(created)) return false;
   const ageHours = (now.getTime() - created) / 3_600_000;

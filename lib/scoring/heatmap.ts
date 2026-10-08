@@ -12,7 +12,7 @@
  * number, it is a property of a number and an asset.
  */
 
-import { CARD_SLOTS, type SlotCategory, type SlotDefinition } from '@/config/setups.config';
+import { CARD_SLOTS, SLOT_CATEGORIES, type SlotCategory, type SlotDefinition } from '@/config/setups.config';
 import { RISK_ASSET_POLARITY } from '@/config/symbols.config';
 import { scoreSlot, type SlotResult } from '@/lib/scoring/discrete';
 import type { Currency, NormalizedEvent } from '@/lib/types';
@@ -52,6 +52,12 @@ export interface CurrencyHeatmap {
   rows: HeatmapRow[];
   /** Sum of the scored currency impacts — the currency's own macro score. */
   macroScore: number;
+  /**
+   * The same sum, per block, in the scorecard's order (growth, inflation,
+   * jobs). Only blocks that have a row; a composite counts once, as it does in
+   * `macroScore`, however many sub-rows it shows.
+   */
+  categories: { key: SlotCategory; label: string; score: number; scored: number }[];
   scored: number;
   total: number;
   /**
@@ -170,6 +176,7 @@ export function buildCurrencyHeatmap(
   const rows: HeatmapRow[] = [];
   let macroScore = 0;
   let scored = 0;
+  const byCategory = new Map<SlotCategory, { score: number; scored: number }>();
 
   /**
    * `CARD_SLOTS`, not `SLOTS`. Their per-country cards and their Top Setups
@@ -196,9 +203,13 @@ export function buildCurrencyHeatmap(
      */
     if (result.status === 'no-data' && result.event === null) continue;
 
+    const block = byCategory.get(slot.category) ?? { score: 0, scored: 0 };
+    byCategory.set(slot.category, block);
     if (result.status === 'scored' && result.cell !== null) {
       macroScore += result.cell;
       scored++;
+      block.score += result.cell;
+      block.scored++;
     }
 
     // A composite with resolved sub-series shows them individually.
@@ -209,13 +220,23 @@ export function buildCurrencyHeatmap(
     }
   }
 
-  // Most recent release first — a heatmap is read as "what has just happened".
-  rows.sort((a, b) => (b.dateUtc ?? '').localeCompare(a.dateUtc ?? ''));
+  // Grouped the way the scorecard reads: growth, then inflation, then jobs, and
+  // inside each block the slot order the scorecard uses (GDP, PMIs, retail…).
+  // Rows are pushed in CARD_SLOTS order, and the sort is stable, so ordering by
+  // block alone keeps that. A date order mixed CPI between retail sales and PMI.
+  const blockIndex = (c: SlotCategory) => SLOT_CATEGORIES.findIndex((k) => k.key === c);
+  rows.sort((a, b) => blockIndex(a.category) - blockIndex(b.category));
+  const categories = SLOT_CATEGORIES.filter((c) => byCategory.has(c.key) && rows.some((r) => r.category === c.key)).map((c) => ({
+    key: c.key,
+    label: c.label,
+    ...byCategory.get(c.key)!,
+  }));
 
   return {
     currency,
     rows,
     macroScore,
+    categories,
     scored,
     total: rows.length,
     currencyImpactPct: bullishShare(rows.map((r) => r.currencyImpact)),

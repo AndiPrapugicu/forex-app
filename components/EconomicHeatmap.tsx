@@ -15,6 +15,7 @@
  * next to a Bullish badge is what the previous version did.
  */
 
+import { Fragment } from 'react';
 import Link from 'next/link';
 import type { CurrencyHeatmap } from '@/lib/scoring/heatmap';
 import { Panel } from '@/components/ui';
@@ -131,6 +132,28 @@ function ImpactGauge({ label, pct }: { label: string; pct: number | null }) {
   );
 }
 
+/**
+ * A block header, as the scorecard draws one: the block's name and how its
+ * scored rows sum. The same arithmetic as the headline, split by block.
+ */
+function CategoryRow({ label, score, scored }: { label: string; score: number; scored: number }) {
+  const tone =
+    score > 0 ? 'text-[var(--color-bull-cell)]' : score < 0 ? 'text-[var(--color-bear)]' : 'text-[var(--color-muted)]';
+  const word = score > 0 ? 'Bullish' : score < 0 ? 'Bearish' : 'Neutral';
+  return (
+    <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)]">
+      <td colSpan={8} className="px-3 py-1.5 text-left">
+        <span className="text-caption font-semibold text-[var(--color-text)] italic">{label}</span>
+        <span className={`ml-3 text-caption font-semibold ${tone}`}>
+          {word} {score > 0 ? '+' : score < 0 ? '−' : ''}
+          {Math.abs(score)}
+        </span>
+        <span className="ml-2 text-micro text-[var(--color-faint)]">from {scored} scored</span>
+      </td>
+    </tr>
+  );
+}
+
 export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
   const label =
     data.macroScore >= 4
@@ -201,84 +224,91 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row) => (
-                  <tr
-                    key={`${row.slotKey}:${row.label}`}
-                    className="border-b border-[var(--color-border)]/60 hover:bg-[var(--color-surface-2)]/40"
-                    title={row.explanation}
-                  >
-                    <td className="px-3 py-1.5 text-left">
-                      <span className="font-medium">{row.label}</span>
-                      {row.eventName && (
-                        // Naming the exact series matters: "CPI YoY" for EUR is
-                        // the euro-area HICP, not any member state's CPI.
-                        <span className="ml-2 text-micro text-[var(--color-faint)]">
-                          {row.eventName}
-                        </span>
-                      )}
-                    </td>
+                {data.categories.map((cat) => (
+                  <Fragment key={cat.key}>
+                    <CategoryRow label={cat.label} score={cat.score} scored={cat.scored} />
+                    {data.rows
+                      .filter((row) => row.category === cat.key)
+                      .map((row) => (
+                      <tr
+                        key={`${row.slotKey}:${row.label}`}
+                        className="border-b border-[var(--color-border)]/60 hover:bg-[var(--color-surface-2)]/40"
+                        title={row.explanation}
+                      >
+                        <td className="px-3 py-1.5 text-left">
+                          <span className="font-medium">{row.label}</span>
+                          {row.eventName && (
+                            // Naming the exact series matters: "CPI YoY" for EUR is
+                            // the euro-area HICP, not any member state's CPI.
+                            <span className="ml-2 text-micro text-[var(--color-faint)]">
+                              {row.eventName}
+                            </span>
+                          )}
+                        </td>
 
-                    <td className="px-2 py-1.5 text-left text-micro whitespace-nowrap text-[var(--color-muted)]">
-                      {row.dateUtc ? row.dateUtc.slice(0, 10) : '—'}
-                      {row.stale && (
-                        <span
-                          className="ml-1.5 text-micro text-[var(--color-uncertain)] italic"
-                          title={`${row.ageDays ?? '?'} days old — past this series' usual cadence, and scored anyway, as A1 does`}
+                        <td className="px-2 py-1.5 text-left text-micro whitespace-nowrap text-[var(--color-muted)]">
+                          {row.dateUtc ? row.dateUtc.slice(0, 10) : '—'}
+                          {row.stale && (
+                            <span
+                              className="ml-1.5 text-micro text-[var(--color-uncertain)] italic"
+                              title={`${row.ageDays ?? '?'} days old — past this series' usual cadence, and scored anyway, as A1 does`}
+                            >
+                              {row.ageDays === null ? 'stale' : `${row.ageDays}d`}
+                            </span>
+                          )}
+                        </td>
+
+                        <td
+                          className="tnum px-2 py-1.5 font-semibold"
+                          style={surpriseStyle(row.surprise, row.reference, row.stocksImpact)}
+                          title={`Actual minus ${row.referenceLabel}`}
                         >
-                          {row.ageDays === null ? 'stale' : `${row.ageDays}d`}
-                        </span>
-                      )}
-                    </td>
+                          {row.surprise === null
+                            ? '—'
+                            : `${row.surprise > 0 ? '+' : ''}${fmt(row.surprise, row.unit)}`}
+                        </td>
 
-                    <td
-                      className="tnum px-2 py-1.5 font-semibold"
-                      style={surpriseStyle(row.surprise, row.reference, row.stocksImpact)}
-                      title={`Actual minus ${row.referenceLabel}`}
-                    >
-                      {row.surprise === null
-                        ? '—'
-                        : `${row.surprise > 0 ? '+' : ''}${fmt(row.surprise, row.unit)}`}
-                    </td>
+                        <td className="tnum px-2 py-1.5 font-semibold">{fmt(row.actual, row.unit)}</td>
+                        {/*
+                          PMI scores against the PREVIOUS print, so on those rows the
+                          forecast is dimmed and the previous is promoted — the
+                          emphasis has to follow which number the score actually used,
+                          or the table implies the wrong comparison.
+                        */}
+                        <td
+                          className={`tnum px-2 py-1.5 ${
+                            row.referenceLabel === 'previous'
+                              ? 'text-[var(--color-faint)] line-through decoration-1'
+                              : 'text-[var(--color-muted)]'
+                          }`}
+                          title={
+                            row.referenceLabel === 'previous'
+                              ? 'Not used — this indicator scores against the previous print'
+                              : undefined
+                          }
+                        >
+                          {fmt(row.consensus, row.unit)}
+                        </td>
+                        <td
+                          className={`tnum px-2 py-1.5 ${
+                            row.referenceLabel === 'previous'
+                              ? 'font-semibold text-[var(--color-muted)]'
+                              : 'text-[var(--color-faint)]'
+                          }`}
+                          title={row.referenceLabel === 'previous' ? 'Scored against this' : undefined}
+                        >
+                          {fmt(row.previous, row.unit)}
+                        </td>
 
-                    <td className="tnum px-2 py-1.5 font-semibold">{fmt(row.actual, row.unit)}</td>
-                    {/*
-                      PMI scores against the PREVIOUS print, so on those rows the
-                      forecast is dimmed and the previous is promoted — the
-                      emphasis has to follow which number the score actually used,
-                      or the table implies the wrong comparison.
-                    */}
-                    <td
-                      className={`tnum px-2 py-1.5 ${
-                        row.referenceLabel === 'previous'
-                          ? 'text-[var(--color-faint)] line-through decoration-1'
-                          : 'text-[var(--color-muted)]'
-                      }`}
-                      title={
-                        row.referenceLabel === 'previous'
-                          ? 'Not used — this indicator scores against the previous print'
-                          : undefined
-                      }
-                    >
-                      {fmt(row.consensus, row.unit)}
-                    </td>
-                    <td
-                      className={`tnum px-2 py-1.5 ${
-                        row.referenceLabel === 'previous'
-                          ? 'font-semibold text-[var(--color-muted)]'
-                          : 'text-[var(--color-faint)]'
-                      }`}
-                      title={row.referenceLabel === 'previous' ? 'Scored against this' : undefined}
-                    >
-                      {fmt(row.previous, row.unit)}
-                    </td>
-
-                    <td className="px-2 py-1.5 text-center">
-                      <ImpactBadge value={row.currencyImpact} status={row.status} />
-                    </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <ImpactBadge value={row.stocksImpact} status={row.status} />
-                    </td>
-                  </tr>
+                        <td className="px-2 py-1.5 text-center">
+                          <ImpactBadge value={row.currencyImpact} status={row.status} />
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <ImpactBadge value={row.stocksImpact} status={row.status} />
+                        </td>
+                      </tr>
+                      ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

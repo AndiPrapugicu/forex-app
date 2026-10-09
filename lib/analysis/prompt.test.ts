@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answerMode, buildMessages, formatSearchResults, parseSearchArgs, trimThread } from '@/lib/analysis/prompt';
+import { answerMode, buildMessages, formatSearchResults, modeInstruction, parseSearchArgs, trimThread, WORD_CAP } from '@/lib/analysis/prompt';
 
 const knowledge = { system: 'INSTRUCTIONS', background: 'BACKGROUND', files: [], missing: [] };
 
@@ -67,5 +67,20 @@ describe('answerMode', () => {
   it('tells the model which mode it is in', () => {
     expect(buildMessages(knowledge, 'D', [{ role: 'user', content: 'q' }], 'brief')[0].content).toContain('ANSWER MODE: BRIEF');
     expect(buildMessages(knowledge, 'D', [{ role: 'user', content: 'q' }])[0].content).toContain('ANSWER MODE: DECISION');
+  });
+});
+
+describe('short answers', () => {
+  it('ends the system prompt with the mode, its word cap and the bottom-line rule', () => {
+    const sys = String(buildMessages(knowledge, 'DOSSIER', [{ role: 'user', content: 'q' }], 'reaction')[0].content);
+    expect(sys.indexOf('DOSSIER')).toBeLessThan(sys.indexOf('ANSWER MODE: REACTION'));
+    expect(sys.trimEnd().endsWith('End with the one-line not-advice note.')).toBe(true);
+    expect(sys).toContain('LENGTH: at most 220 words. Open with "**Bottom line:**"');
+  });
+
+  it('keeps every mode short except the full read', () => {
+    expect(WORD_CAP).toEqual({ brief: 120, explain: 150, event: 200, compare: 200, reaction: 220, decision: 250, full: 600 });
+    expect(modeInstruction('full')).toContain('FULL READ');
+    expect(modeInstruction('reaction')).toContain('NO MATCH');
   });
 });

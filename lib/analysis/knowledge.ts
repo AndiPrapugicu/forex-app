@@ -91,20 +91,37 @@ const ASSET_FILE: Record<string, string | null> = {
   copper: null,
 };
 
-/** Which background files a symbol reads, in the order the model sees them. */
-export function knowledgeIdsFor(def: SymbolDefinition): string[] {
-  const asset = assetReadingKey(def);
-  const assetFile = asset ? ASSET_FILE[asset] : null;
-  return ['METHODOLOGY', ...(assetFile ? [assetFile] : []), ...economiesOf(def).map((c) => `currencies/${c}`)];
+/** The playbooks each kind of question reads, beyond the symbol's own files. */
+const PLAYBOOKS: Record<string, string[]> = {
+  reaction: ['playbook/cross-asset', 'playbook/events'],
+  explain: ['playbook/cross-asset', 'playbook/events'],
+  event: ['playbook/events'],
+  compare: ['playbook/cross-asset'],
+};
+
+/**
+ * Which background files a symbol reads, in the order the model sees them:
+ * the method, the playbooks the question needs, then the asset and economy
+ * files of the page symbol and of any other market the question names.
+ */
+export function knowledgeIdsFor(def: SymbolDefinition, opts: { mode?: string; others?: SymbolDefinition[] } = {}): string[] {
+  const ids: string[] = ['METHODOLOGY', ...(opts.mode ? (PLAYBOOKS[opts.mode] ?? []) : [])];
+  for (const d of [def, ...(opts.others ?? [])]) {
+    const asset = assetReadingKey(d);
+    const assetFile = asset ? ASSET_FILE[asset] : null;
+    if (assetFile) ids.push(assetFile);
+    ids.push(...economiesOf(d).map((c) => `currencies/${c}`));
+  }
+  return [...new Set(ids)];
 }
 
-export function selectKnowledge(def: SymbolDefinition, dir = KNOWLEDGE_DIR): KnowledgeSelection {
+export function selectKnowledge(def: SymbolDefinition, dir = KNOWLEDGE_DIR, opts: { mode?: string; others?: SymbolDefinition[] } = {}): KnowledgeSelection {
   const analyst = readKnowledge('ANALYST', dir);
   if (!analyst) throw new Error('knowledge/ANALYST.md is missing — the analyst has no instructions');
 
   const files: KnowledgeFile[] = [];
   const missing: string[] = [];
-  for (const id of knowledgeIdsFor(def)) {
+  for (const id of knowledgeIdsFor(def, opts)) {
     const file = readKnowledge(id, dir);
     if (file) files.push(file);
     else missing.push(id);

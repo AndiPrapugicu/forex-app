@@ -509,25 +509,63 @@ No key configured means the page is off.
 Gaps it reports rather than fills: the RBA's feed refuses automated reads, RBNZ pages likewise (its feed titles still
 arrive), and the BoJ publishes PDFs, so those banks contribute a title and a date only.
 
-**Two answer shapes.** A recap question ("what happened in the last 24h") gets a BRIEF answer at low reasoning effort;
-an entry, hold, flip or thesis question gets the full DECISION shape (state → why → what changed → what would flip it →
-what would confirm it → event risk → board vs narrative → answer). `answerMode` in `lib/analysis/prompt.ts` decides;
-the quick prompts carry their own. Seed and temperature are fixed so two runs over the same dossier read alike.
+**Answer shapes.** A recap or an explanation runs at low reasoning effort, everything else at medium. Seed and temperature are fixed, so two runs over the same dossier read alike. Quick prompts and the follow-up buttons carry their own kind.
 
-**"It just dropped — what happened?"** A question with a move verb ("dropped", "spiked", "a scăzut") or a pasted link
-gets a third shape, REACTION, and a section R in the dossier (`lib/analysis/reaction.ts`). Yahoo's 5-minute bars for a
-fixed panel (Nasdaq/S&P/Russell futures, the 2Y from ZT futures, 5Y/10Y/30Y yields, DXY, USD/JPY, USD/CHF, gold, WTI,
-Brent, copper, VIX, Bitcoin; `config/reaction.config.ts`) are measured over the symbol's largest swing of the last eight
-hours. Fixed rules then read stocks against yields (risk-off, rates shock, dovish relief, reflation), the curve (bull or
-bear, steepener or flattener), the havens, oil and breadth, and time every headline against the start of the move. A
-pasted link is never opened: the words in its address are searched on Google News, and its first appearance is timed
-against the move ("184 minutes after the move began: it cannot have started it").
+**Reading the question first.** Before anything is fetched, fixed rules in `lib/analysis/intent.ts` read the question. No model request is spent on this. They work out:
+- **the kind of answer:** reaction, event, decision, brief, explain, compare, or full read;
+- **when** it is about: "yesterday", "this morning", "Monday", "8 Oct", "at 17:00", "the last 3 hours", in the user's zone (`Europe/Bucharest`). A date on an attached chart takes precedence;
+- **the move described:** "dropped ~2% in ~2 hours", or the ruler on the chart;
+- **the markets named:** "Nasdaq", "US02Y", "aur", "cable";
+- **the release named:** CPI, NFP, the Fed, an auction.
 
-**Chart screenshots.** Up to two per question, by button, paste or drag-and-drop, shrunk in the browser. Nemotron
-reads text only, so a free vision model (`google/gemma-4-31b-it:free`, override with `OPENROUTER_VISION_MODEL`) reads
-the chart first, through the same four free-only guards, and the analyst gets its description as text. Images are
-never stored; the thread keeps only the reading. If your OpenRouter privacy settings exclude that provider, the chart
-is reported as unreadable and the answer proceeds without it.
+That reading chooses the extra sections the dossier gets. They are printed first, all deterministic:
+- **F:** what the server understood. The chat shows it under the question as "Read as: …".
+- **R:** the move.
+- **E:** how this symbol moved on past releases of the event asked about. It uses hourly bars from the last few prints in the calendar, split above and below the forecast (`lib/analysis/event-study.ts`).
+- **O:** a compact read of any other market named (`lib/analysis/other-markets.ts`).
+
+Background playbooks (`knowledge/playbook/`) cover how markets move together and how releases usually land. They are added for the question kinds that need them.
+
+**Short by default.** Every answer opens with a bottom line, followed by at most five dated bullets and one "Watch" line. Each kind has its own word cap (`WORD_CAP` in `lib/analysis/prompt.ts`), from 120 words for a recap to 250 for a decision. The instruction comes last in the prompt. The long template is used only for "Full read", available as a quick prompt and as a follow-up under each answer.
+
+**"It just dropped — what happened?"** A question with a move verb ("dropped", "spiked", "a scăzut") or a pasted link gets the REACTION shape and a section R (`lib/analysis/reaction.ts`).
+
+Yahoo's 5-minute bars, five days of them, cover a fixed panel (`config/reaction.config.ts`):
+- Nasdaq, S&P and Russell futures;
+- the 2Y from ZT futures, and the 5Y, 10Y and 30Y yields;
+- DXY, USD/JPY and USD/CHF;
+- gold, WTI, Brent and copper;
+- VIX and Bitcoin.
+
+The reader searches the window the user means and finds the move they describe: the right direction, close to the size and length they gave. It never swaps in a bigger move the other way. If the bars hold no such move, it prints **NO MATCH**, and the analyst asks for the time instead of explaining something else.
+
+Fixed rules then read:
+- stocks against yields, the curve, the havens, oil and breadth;
+- **when each asset broke**. A gap of more than 30 minutes between the symbol and the yields is flagged **SPLIT**: two causes are possible;
+- **scheduled events inside the move**: calendar releases, and US Treasury auctions with a strong or weak demand verdict from TreasuryDirect (`lib/connectors/treasury-auctions.ts`);
+- the **market attribution**: headlines written after the move that name its cause ("Nasdaq falls after report says OpenAI revenue missed"), grouped by cause and counted by outlet.
+
+The searches are dated to the days around the move, using Google News `after:`/`before:`. A pasted link is never opened: the words in its address are searched, and its first appearance is timed against the move.
+
+Checked against 2026-10-08:
+- the Nasdaq fell from 14:25Z to 17:25Z, the yields broke later;
+- the 30-year auction at 17:00Z drew STRONG demand;
+- stocks were attributed to the OpenAI revenue report and yields to the auction;
+- Iran explained neither.
+
+**Chart screenshots.** Up to two per question, by button, paste or drag-and-drop, shrunk in the browser. Nemotron reads text only, so a free vision model reads the chart first, through the same four free-only guards. It tries `google/gemma-4-31b-it:free` first. That endpoint is often rate limited upstream, so it then tries `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, each as its own counted request and never through OpenRouter's fallback list. `OPENROUTER_VISION_MODEL` pins a single model. Any verdict the reader adds on its own is cut off.
+
+The model is asked for a fixed header per image: symbol, timeframe, the chart's clock ("UTC+3"), the crosshair date and the measuring tool's text. `lib/analysis/chart-reading.ts` parses that header as data, so the chart's date and ruler choose the window and the move. The full reading reaches the analyst as text.
+
+Images are never stored; the thread keeps only the reading. If your OpenRouter privacy settings exclude that provider, the chart is reported as unreadable and the answer goes ahead without it.
+
+**Proving a change.** `npm run eval:ai` asks eight fixed questions through the same `answerQuestion` the route runs (`lib/analysis/answer.ts`). It checks each answer:
+- the kind it was read as;
+- that it opens with a bottom line;
+- the word cap;
+- the facts expected, and the causes ruled out.
+
+It spends one or two free requests per question, so run it when the analyst changes, not on every commit.
 
 ---
 

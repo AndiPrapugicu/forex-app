@@ -31,6 +31,15 @@ export const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free'
  * endpoints priced at zero — and it passes through the same four guards.
  */
 export const DEFAULT_VISION_MODEL = 'google/gemma-4-31b-it:free';
+/**
+ * Tried in order when the one before is rate limited or unavailable — each as
+ * its own request, through every free-only guard; never OpenRouter's `models`
+ * fallback list. Gemma's free endpoint is often rate limited upstream (seen
+ * 2026-10-09); NVIDIA's Nemotron Nano Omni reads images on a different
+ * provider, and the analyst already runs on NVIDIA, so the user's privacy
+ * settings allow it. Both were listed free with image input on 2026-10-09.
+ */
+export const DEFAULT_VISION_MODELS = [DEFAULT_VISION_MODEL, 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'];
 
 /** How long a passed pricing check is trusted before it is read again. */
 const PRICING_TTL_MS = 60 * 60 * 1000;
@@ -522,18 +531,42 @@ async function* streamOnce(
 // ---------------------------------------------------------------------------
 
 export function visionModel(): string {
-  return (process.env.OPENROUTER_VISION_MODEL ?? DEFAULT_VISION_MODEL).trim();
+  return visionModels()[0];
 }
 
+/**
+ * The reading without any verdict the chart reader added on its own: it is
+ * told to describe, not explain, but small models append "**Answer:** …" or a
+ * conclusion. Explaining is the analyst's job, from the data.
+ */
+export function describedOnly(text: string): string {
+  const cut = text.search(/^\s*\**\s*(answer|conclusion|summary|in summary|interpretation|analysis)\s*\**\s*:/im);
+  return (cut >= 0 ? text.slice(0, cut) : text).trim();
+}
+
+/** `OPENROUTER_VISION_MODEL` pins one model; otherwise the default list, in order. */
+export function visionModels(): string[] {
+  const pinned = process.env.OPENROUTER_VISION_MODEL?.trim();
+  return pinned ? [pinned] : DEFAULT_VISION_MODELS;
+}
+
+/**
+ * A fixed header per image first, so lib/analysis/chart-reading.ts can read
+ * the chart's date, clock and the user's measurement as data; then free bullets.
+ */
 const VISION_PROMPT = [
-  'You read trading chart screenshots for a macro analyst who cannot see them. Report ONLY what is visible, as short bullet points:',
-  '- instrument / ticker and timeframe, if labelled; the platform if obvious;',
-  '- the time span on the x-axis and the price range on the y-axis;',
-  '- the latest price shown, and the main move: from what price at what time to what price at what time, with the percent if you can compute it;',
-  '- trend structure (higher highs / lower lows), gaps, wicks or a sharp candle near the end;',
-  '- every drawn line, zone, label or annotation, with its price;',
-  '- indicators shown and their readings.',
-  'Do not predict, do not advise, do not explain causes. If a value is not legible, say "not legible" rather than guess. Under 220 words.',
+  'You read trading chart screenshots for a macro analyst who cannot see them. Report ONLY what is visible.',
+  'For EACH image, start with a line "IMAGE n" (n = 1, 2 in the order given), then exactly these header lines, copying text as printed on the chart:',
+  'SYMBOL: the ticker in the top-left legend or the symbol box (e.g. NDQ100, US02Y, EURUSD)',
+  'TIMEFRAME: the selected interval (e.g. 5m, 15m, 1h, 4h, D)',
+  'TIMEZONE: the chart clock, usually printed bottom-right (e.g. UTC+3); "not visible" if absent',
+  'CROSSHAIR_TIME: the date and time in the highlighted label on the time axis (e.g. Thu 08 Oct \'26 12:00); "not visible" if absent',
+  'MEASURE: the text of any measuring-tool box, verbatim (e.g. -578.29 (-1.86%) -57,829, 2 bars, -2h); "not visible" if absent',
+  'X_AXIS_DATES: the first and last dates printed on the time axis',
+  'LAST_PRICE: the latest price shown',
+  'Then short bullets: the main move (from what price at what time to what price at what time); trend structure (higher highs, lower lows); ' +
+    'every drawn line, zone, label or annotation with its price; indicators shown and their readings.',
+  'Do not predict, do not advise, do not explain causes. If a value is not legible, write "not legible" rather than guess. Under 260 words in total.',
 ].join('\n');
 
 /**
@@ -543,10 +576,14 @@ const VISION_PROMPT = [
 export async function describeImages(
   images: string[],
   question: string,
-  opts: { signal?: AbortSignal; onRetry?: (e: Extract<StreamEvent, { type: 'retry' }>) => void } = {},
+  opts: {
+    signal?: AbortSignal;
+    onRetry?: (e: Extract<StreamEvent, { type: 'retry' }>) => void;
+    /** Called before each model after the first: another request against the free allowance. */
+    onFallback?: (model: string) => void;
+  } = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ text: string; model: string; cost: number | null }> {
-  const model = visionModel();
   const messages: ChatMessage[] = [
     { role: 'system', content: VISION_PROMPT },
     {
@@ -557,13 +594,27 @@ export async function describeImages(
       ],
     },
   ];
-  let text = '';
-  let cost: number | null = null;
-  for await (const event of streamChat(messages, { model, effort: 'low', maxTokens: 1200, signal: opts.signal }, fetchImpl)) {
-    if (event.type === 'content') text += event.text;
-    else if (event.type === 'usage' && event.cost !== null) cost = (cost ?? 0) + event.cost;
-    else if (event.type === 'retry') opts.onRetry?.(event);
+  const models = visionModels();
+  let lastError: unknown = null;
+  for (const [k, model] of models.entries()) {
+    if (k > 0) opts.onFallback?.(model);
+    let text = '';
+    let cost: number | null = null;
+    try {
+      // Reasoning models spend part of the budget thinking: leave room for the header and bullets.
+      for await (const event of streamChat(messages, { model, effort: 'low', maxTokens: 2400, signal: opts.signal }, fetchImpl)) {
+        if (event.type === 'content') text += event.text;
+        else if (event.type === 'usage' && event.cost !== null) cost = (cost ?? 0) + event.cost;
+        else if (event.type === 'retry') opts.onRetry?.(event);
+      }
+      const reading = describedOnly(text);
+      if (!reading) throw new OpenRouterError(`The chart reader (${model}) returned nothing for the image.`);
+      return { text: reading, model, cost };
+    } catch (err) {
+      // A bad key, a negative balance or a stopped request will not get better on the next model.
+      if (opts.signal?.aborted || (err instanceof OpenRouterError && (err.status === 401 || err.status === 402))) throw err;
+      lastError = err;
+    }
   }
-  if (!text.trim()) throw new OpenRouterError('The chart reader returned nothing for the image.');
-  return { text: text.trim(), model, cost };
+  throw lastError instanceof Error ? lastError : new OpenRouterError('No chart reader answered.');
 }

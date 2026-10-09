@@ -8,7 +8,7 @@
  */
 
 import { ANALYST_LIMITS } from '@/config/ai.config';
-import { REACTION_WORDS } from '@/config/reaction.config';
+import { parseQuestion, type IntentKind } from '@/lib/analysis/intent';
 import type { ChatMessage, ToolDefinition } from '@/lib/ai/openrouter';
 import type { KnowledgeSelection } from '@/lib/analysis/knowledge';
 import type { SearchHit } from '@/lib/connectors/news-search';
@@ -62,68 +62,97 @@ export function trimThread(thread: ThreadMessage[]): ThreadMessage[] {
   return recent;
 }
 
-export type AnswerMode = 'brief' | 'decision' | 'reaction';
+export type AnswerMode = IntentKind;
 
 /**
- * Words that ask for a decision: an entry, a hold, a level, a thesis. Checked
- * before the brief words, because "what changed, and do I still hold?" is a
- * decision question that happens to start as a recap.
+ * Which answer the question wants (lib/analysis/intent.ts). A quick prompt
+ * says which; free text is read with fixed word lists, and anything unclear
+ * gets a DECISION answer.
  */
-const DECISION_WORDS =
-  /\b(entry|enter|entries|intrare|intru|intra|hold|holding|țin|ţin|tin|close|închid|inchid|tp|sl|take profit|stop loss|flip\w*|invalid\w*|teza|teză|thesis|setup|long|short|buy|sell|cumpăr\w*|cumpar\w*|vând\w*|vand\w*|zones?|zona|zonă|nivel\w*|levels?|scenari\w*|full|complet\w*|analiz\w*|analysis)\b/i;
-const BRIEF_WORDS =
-  /(\b24 ?h\b|\bazi\b|\btoday\b|\bieri\b|\byesterday\b|ce s-a (întâmplat|intamplat)|what happened|what changed|\brecap\b|\brezumat\b|\bnews\b|știri|stiri|\bheadlines?\b|pe scurt|\bbriefly\b|\bquick\b)/i;
-
-/** A trade action in the question: then it is a decision even if it starts with a move. */
-const TRADE_WORDS = /\b(entry|enter|intrare|intru|hold|holding|țin|ţin|tp|sl|take profit|stop loss|thesis|teza|teză|setup)\b/i;
-const LINK = /https?:\/\//i;
-
-/**
- * How deep the answer goes. A quick prompt says which it is; free text is read
- * with fixed word lists, and anything unclear gets the full treatment.
- *
- * REACTION first: "the Nasdaq just dropped 2% — why?" or a pasted article is a
- * question about a move that already happened, unless it also asks for a trade.
- */
-export function answerMode(question: string, requested?: unknown): AnswerMode {
-  if (requested === 'brief' || requested === 'decision' || requested === 'reaction') return requested;
-  if ((REACTION_WORDS.test(question) || LINK.test(question)) && !TRADE_WORDS.test(question)) return 'reaction';
-  if (DECISION_WORDS.test(question)) return 'decision';
-  if (BRIEF_WORDS.test(question)) return 'brief';
-  return 'decision';
+export function answerMode(question: string, requested?: unknown, pageSymbol = ''): AnswerMode {
+  return parseQuestion(question, pageSymbol, Date.now(), { requested }).kind;
 }
+
+/** The most words an answer may use, per mode. Short by default; FULL only on request. */
+export const WORD_CAP: Record<AnswerMode, number> = {
+  brief: 120,
+  explain: 150,
+  event: 200,
+  compare: 200,
+  reaction: 220,
+  decision: 250,
+  full: 600,
+};
 
 const MODE_TEXT: Record<AnswerMode, string> = {
   brief: [
     '# ANSWER MODE: BRIEF',
-    'Open with ONE line restating the tactical verdict from section 0 (MARKET STATE). Then answer the question directly and shortly: ' +
-      'what changed, with dates and sources, and whether it moves the state. No full template, no execution section.',
+    'A recap. Bottom line: what changed, and whether it moves the tactical verdict in section 0 (name the verdict in a few words). ' +
+      'Then up to four dated bullets. Then one Watch line.',
   ].join('\n'),
-  decision: [
-    '# ANSWER MODE: DECISION',
-    'Use the DECISION template from your instructions: Current state → Why (themes, dated) → What changed this week → What would flip it → ' +
-      'What would confirm it → Event risk → Board vs narrative → the answer to the question. Take the state, the flips and the confirmations from ' +
-      'section 0 (MARKET STATE) as given; quote their thresholds and dates.',
+  explain: [
+    '# ANSWER MODE: EXPLAIN',
+    'The user asks how something works. Bottom line: the mechanism in one or two plain sentences. Then up to three bullets: the channel ' +
+      '(what moves what, and why), a current example from the dossier with its date if there is one, and when the relationship breaks down. ' +
+      'No market-state recital and no levels unless asked.',
+  ].join('\n'),
+  event: [
+    '# ANSWER MODE: EVENT',
+    'The user asks what a release or meeting does to this market. Use section E (how this symbol moved on past releases of it) and the ' +
+      'flip conditions in section 0. Bottom line: the typical reaction from section E with its sample size, and the threshold from section 0 ' +
+      'that would tip the state. Bullets: the next release with its date and forecast; above- vs below-forecast tendency; what else is on the ' +
+      'calendar around it; the levels to watch from section 7. If section E is missing, say the reaction history is not in the data and label ' +
+      'anything you add as background.',
+  ].join('\n'),
+  compare: [
+    '# ANSWER MODE: COMPARE',
+    'Use section O for the other markets and the board and section 0 for this one. Bottom line: which is stronger and why, in one sentence. ' +
+      'Then one bullet per market: board total and bias, the cells or themes that drive it, the 1-week change. Then the one thing that would ' +
+      'change the ranking.',
   ].join('\n'),
   reaction: [
     '# ANSWER MODE: REACTION',
-    'The question is about a move that already happened. Use the REACTION template from your instructions: What moved → The pattern → ' +
-      'Candidate catalysts → Most likely explanation, and what does not fit → What it means for this market → What to watch next. ' +
-      'Take every number and time from section R (WHAT JUST MOVED) as given. A headline can only be a cause if its time is at or before the ' +
-      'start of the move; say "inference" when you connect them. Repeat any MISMATCH line from section R in plain words. If the user\'s numbers ' +
-      'differ from section R, say so and use section R.',
+    'The question is about a move that already happened. Section R measured it on OUR 5-minute bars; take every number and time from it. ' +
+      'If section R says NO MATCH, say what was measured, ask for the date and time, and stop: never explain a different move. ' +
+      'Bottom line: what moved and the most likely cause. If section R prints SPLIT, give the cause of the symbol\'s move and the cause of ' +
+      'the bond move separately. Bullets: the move (size, from-to times, in UTC); the pattern and what it rules out; the evidence for each cause ' +
+      '(a scheduled event inside the move, the market attribution with its outlet count and first time, a trigger published before the start); ' +
+      'what does not fit (a trigger or story first seen after the start cannot have STARTED the move, though a story first seen inside it can have ' +
+      'accelerated it; attribution headlines are after the fact by nature, so judge them by "story first seen"). One Watch line. Say "our 5-minute data" ' +
+      'for section R and "your chart" for a chart reading; never present our bars as the user\'s timeframe.',
+  ].join('\n'),
+  decision: [
+    '# ANSWER MODE: DECISION',
+    'Bottom line: the answer to the question, with the tactical and structural verdicts from section 0 in a few words. Then at most five ' +
+      'bullets: the two or three themes that carry the state, dated; the nearest flip condition with its threshold and date; the event risk ' +
+      'before it; for an entry, zones from section 7 only, each with its condition and invalidation; for a hold, the thesis check. ' +
+      'One Watch line. Mention once that a full read is available.',
+  ].join('\n'),
+  full: [
+    '# ANSWER MODE: FULL READ',
+    'Use the FULL READ template from your instructions: Current state → Why (themes, dated) → What changed this week → What would flip it → ' +
+      'What would confirm it → Event risk → Board vs narrative → the answer to the question. Take the state, the flips and the confirmations ' +
+      'from section 0 (MARKET STATE) as given; quote their thresholds and dates.',
   ].join('\n'),
 };
 
-/** How long the model thinks: a recap is quick, a decision or a reaction is not. */
+/** The closing instruction: mode, length, and the shape every answer takes. Last, so it is what the model read most recently. */
+export function modeInstruction(mode: AnswerMode): string {
+  return [
+    MODE_TEXT[mode],
+    `LENGTH: at most ${WORD_CAP[mode]} words. Open with "**Bottom line:**" and answer the question in it. Bullets, not paragraphs. ` +
+      'Answer in the language of the question. End with the one-line not-advice note.',
+  ].join('\n');
+}
+
+/** How long the model thinks: a recap or an explanation is quick; the rest are not. */
 export function effortFor(mode: AnswerMode): 'low' | 'medium' {
-  return mode === 'brief' ? 'low' : 'medium';
+  return mode === 'brief' || mode === 'explain' ? 'low' : 'medium';
 }
 
 export function buildMessages(knowledge: KnowledgeSelection, dossier: string, thread: ThreadMessage[], mode: AnswerMode = 'decision'): ChatMessage[] {
   const system = [
     knowledge.system,
-    MODE_TEXT[mode],
     '---',
     '# BACKGROUND FILES',
     'Durable knowledge with dates and sources. Label anything you take from here as background. It is never today\'s data.',
@@ -132,6 +161,8 @@ export function buildMessages(knowledge: KnowledgeSelection, dossier: string, th
     '# DOSSIER',
     'Live data built for this question. The ONLY source of numbers, levels and dates you may cite.',
     dossier,
+    '---',
+    modeInstruction(mode),
   ].join('\n\n');
 
   return [{ role: 'system', content: system }, ...trimThread(thread)];

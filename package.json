@@ -18,6 +18,7 @@
     "parity:a1": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/parity.ts --profile=a1",
     "build:pmi-seed": "npx tsx --tsconfig tsconfig.tsx.json scripts/build-pmi-seed.ts",
     "check:ai": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/check-ai.ts",
+    "eval:ai": "npx tsx --tsconfig tsconfig.tsx.json --env-file=.env.local scripts/ai-eval.ts",
     "verify:board": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/board-stability.ts",
     "board:diff": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/board-diff.ts",
     "legs": "npx tsx --tsconfig tsconfig.tsx.json --env-file-if-exists=.env.local scripts/legs.ts",

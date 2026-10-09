@@ -3,6 +3,8 @@ import {
   buildRequestBody,
   DEFAULT_OPENROUTER_MODEL,
   DEFAULT_VISION_MODEL,
+  DEFAULT_VISION_MODELS,
+  describedOnly,
   describeImages,
   endpointsAreFree,
   FORBIDDEN_BODY_KEYS,
@@ -239,6 +241,44 @@ describe('streamChat', () => {
       { type: 'text', text: "The trader's question, for context only: why did it drop?" },
       { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } },
     ]);
+  });
+
+  it('moves to the next free chart reader when the first is rate limited, as a separate request', async () => {
+    delete process.env.OPENROUTER_VISION_MODEL;
+    const models: string[] = [];
+    const fallbacks: string[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/endpoints')) return new Response(JSON.stringify(FREE_ENDPOINTS));
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      models.push(String(body.model));
+      for (const key of FORBIDDEN_BODY_KEYS) expect(body).not.toHaveProperty(key);
+      if (body.model === DEFAULT_VISION_MODELS[0]) return new Response('rate limited', { status: 429 });
+      return sse(['data: {"choices":[{"delta":{"content":"IMAGE 1"},"finish_reason":"stop"}]}\n\n', 'data: [DONE]\n\n']);
+    }) as unknown as typeof fetch;
+
+    const out = await describeImages(['data:image/png;base64,AAAA'], 'q', { onFallback: (m) => fallbacks.push(m) }, fetchImpl);
+    expect(out.model).toBe(DEFAULT_VISION_MODELS[1]);
+    expect(models).toEqual(DEFAULT_VISION_MODELS);
+    expect(fallbacks).toEqual([DEFAULT_VISION_MODELS[1]]);
+    expect(DEFAULT_VISION_MODELS.every((m) => m.endsWith(':free'))).toBe(true);
+  });
+
+  it("drops a verdict the chart reader adds on its own; explaining is the analyst's job", () => {
+    const raw = 'IMAGE 1\nSYMBOL: NDQ100\n- Price fell 1.86%.\n\n**Answer:** The cause cannot be determined from the images.';
+    expect(describedOnly(raw)).toBe('IMAGE 1\nSYMBOL: NDQ100\n- Price fell 1.86%.');
+    expect(describedOnly('SYMBOL: US02Y')).toBe('SYMBOL: US02Y');
+  });
+
+  it('does not try another reader when the key or the balance is the problem', async () => {
+    delete process.env.OPENROUTER_VISION_MODEL;
+    let chats = 0;
+    const fetchImpl = (async (url: string) => {
+      if (url.endsWith('/endpoints')) return new Response(JSON.stringify(FREE_ENDPOINTS));
+      chats++;
+      return new Response('payment required', { status: 402 });
+    }) as unknown as typeof fetch;
+    await expect(describeImages(['data:image/png;base64,AAAA'], 'q', {}, fetchImpl)).rejects.toThrow(/402/);
+    expect(chats).toBe(1);
   });
 
   it('refuses a paid vision model before sending the image', async () => {

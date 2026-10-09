@@ -144,7 +144,7 @@ describe('the fingerprint of the user’s afternoon', () => {
       computedAtMs: NOW,
     });
     const text = lines.join('\n');
-    expect(lines[0]).toBe('## R. WHAT JUST MOVED (deterministic, 5-minute bars, computed 17:00Z — restate it; do not re-derive it)');
+    expect(lines[0]).toBe('## R. WHAT JUST MOVED (deterministic, OUR 5-minute bars, computed 17:00Z — restate it; do not re-derive it)');
     expect(text).toContain('Move: NAS100 (NQ=F) −2.01% from 30870 at 14:30Z to 30250 at 16:30Z (120 minutes).');
     expect(text).toContain('- US 10Y yield: −7.0bp |');
     expect(text).toContain('Pattern: RISK-OFF WITH BONDS BID');

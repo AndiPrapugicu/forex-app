@@ -47,8 +47,14 @@ export function sanitizeQuery(raw: string): string {
     .trim();
 }
 
-export function searchUrl(query: string, days = 2): string {
-  const q = encodeURIComponent(`${query} when:${days}d`);
+/**
+ * `after`/`before` (YYYY-MM-DD, set by our own code, never by the model) pin
+ * the search to the days around a move; Google News honours them (verified
+ * 2026-10-09). Otherwise `when:` keeps it to the last few days.
+ */
+export function searchUrl(query: string, days = 2, range?: { after: string; before: string }): string {
+  const scope = range && /^\d{4}-\d{2}-\d{2}$/.test(range.after) && /^\d{4}-\d{2}-\d{2}$/.test(range.before) ? `after:${range.after} before:${range.before}` : `when:${days}d`;
+  const q = encodeURIComponent(`${query} ${scope}`);
   return `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
 }
 
@@ -110,12 +116,12 @@ export async function searchNews(
    * narrative engine runs one per bank and one per economy); a question typed
    * into the analyst keeps the five-minute horizon.
    */
-  opts: { limit?: number; days?: number; cacheTtlSeconds?: number } = {},
+  opts: { limit?: number; days?: number; cacheTtlSeconds?: number; range?: { after: string; before: string } } = {},
 ): Promise<SearchHit[]> {
   const query = sanitizeQuery(rawQuery);
   if (!query || fixturesEnabled()) return [];
 
-  const res = await fetchText(`Google News: ${query}`, searchUrl(query, opts.days ?? 2), {
+  const res = await fetchText(`Google News: ${query}`, searchUrl(query, opts.days ?? 2, opts.range), {
     headers: { 'User-Agent': 'Mozilla/5.0' },
     cacheTtlSeconds: opts.cacheTtlSeconds ?? SEARCH_CACHE_TTL_SECONDS,
     timeoutMs: 8_000,

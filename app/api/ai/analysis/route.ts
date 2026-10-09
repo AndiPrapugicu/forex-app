@@ -12,16 +12,15 @@
  * endpoints) is retried twice per round before giving up, and every retry is
  * counted in the `requests` the answer reports.
  *
- * A question may carry up to two chart screenshots. The analyst model reads
- * text only, so the images go to a free vision model first and its description
- * is appended to the question (`describeImages` in lib/ai/openrouter.ts).
- * A question about a move that already happened (REACTION mode) also gets
- * section R: the same window measured across stocks, rates, the dollar,
- * havens and oil (lib/analysis/reaction.ts).
+ * The work itself — reading the question (lib/analysis/intent.ts), the
+ * question-specific dossier sections F, R, E and O, the chart reader and the
+ * model rounds — is `answerQuestion` in lib/analysis/answer.ts, which the
+ * evaluation script runs too.
  *
  * The response is NDJSON, one event per line:
  *   {type:'status', text}      what the server is doing
  *   {type:'vision', text, model} what the attached chart shows, as read
+ *   {type:'understood', text}   how the question was read: the window, the move
  *   {type:'reasoning'}         the model is thinking (throttled; no text)
  *   {type:'delta', text}       answer text
  *   {type:'done', model, cost, requests, mode, seconds}
@@ -32,17 +31,12 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { ANALYST_LIMITS } from '@/config/ai.config';
 import { findSymbol } from '@/config/symbols.config';
-import { describeImages, getOpenRouterConfig, OpenRouterError, streamChat, type ChatMessage, type ChatOptions, type ToolCall } from '@/lib/ai/openrouter';
+import { getOpenRouterConfig, OpenRouterError } from '@/lib/ai/openrouter';
 import { ACCESS_COOKIE, createRateLimiter, hasAccess, isAccessConfigured } from '@/lib/analysis/access';
-import { buildDossier } from '@/lib/analysis/dossier';
-import { selectKnowledge } from '@/lib/analysis/knowledge';
-import { loadAnalysisInputs } from '@/lib/analysis/load';
-import { readOpenPositions } from '@/lib/analysis/positions-load';
-import { answerMode, buildMessages, effortFor, formatSearchResults, parseSearchArgs, SEARCH_TOOL, trimThread, type ThreadMessage } from '@/lib/analysis/prompt';
+import { answerQuestion } from '@/lib/analysis/answer';
 import { checkImages } from '@/lib/analysis/attachments';
-import { reactionLines } from '@/lib/analysis/reaction';
-import { loadReaction } from '@/lib/analysis/reaction-load';
-import { sanitizeQuery, searchNews } from '@/lib/connectors/news-search';
+import { readOpenPositions } from '@/lib/analysis/positions-load';
+import { trimThread, type ThreadMessage } from '@/lib/analysis/prompt';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -53,9 +47,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const allowQuestion = createRateLimiter(ANALYST_LIMITS.perMinute);
-
-/** How often a "still thinking" tick may reach the browser. */
-const REASONING_TICK_MS = 1_000;
 
 function refuse(status: number, message: string) {
   return NextResponse.json({ type: 'error', message }, { status });
@@ -89,12 +80,6 @@ export async function POST(request: Request) {
   }
   const checked = checkImages(body.images);
   if (!checked.ok) return refuse(400, checked.reason);
-  const images = checked.images;
-  const thread = trimThread(raw);
-  // Brief for a recap, decision for an entry, a hold or a flip, reaction for a
-  // move that already happened (lib/analysis/prompt.ts).
-  const mode = answerMode(last.content, body.mode);
-  const effort = effortFor(mode);
 
   if (!allowQuestion()) return refuse(429, 'Too many questions this minute. Wait a moment.');
 
@@ -112,125 +97,28 @@ export async function POST(request: Request) {
       };
 
       const started = Date.now();
-      let requests = 0;
-      let cost: number | null = null;
-      let answered = 0;
-      let lastTick = 0;
-
-      /** One model request, streamed through; returns the tool calls it asked for. */
-      const round = async (messages: ChatMessage[], opts: ChatOptions): Promise<ToolCall[]> => {
-        requests++;
-        let calls: ToolCall[] = [];
-        for await (const event of streamChat(messages, { ...opts, signal: request.signal })) {
-          if (event.type === 'content') {
-            answered += event.text.length;
-            send({ type: 'delta', text: event.text });
-          } else if (event.type === 'reasoning') {
-            if (Date.now() - lastTick > REASONING_TICK_MS) {
-              lastTick = Date.now();
-              send({ type: 'reasoning' });
-            }
-          } else if (event.type === 'retry') {
-            // A retry is another request against the free allowance; count it.
-            requests++;
-            send({
-              type: 'status',
-              text: `The free model's provider is busy — trying again in ${Math.round(event.waitMs / 1000)}s (${event.attempt}/${event.of})…`,
-            });
-          } else if (event.type === 'tool_calls') {
-            calls = event.calls;
-          } else if (event.type === 'usage' && event.cost !== null) {
-            cost = (cost ?? 0) + event.cost;
-          }
-        }
-        return calls;
-      };
-
       try {
-        send({
-          type: 'status',
-          text: images.length
-            ? `Reading the attached chart${images.length > 1 ? 's' : ''}, the board, rates, calendar and headlines…`
-            : mode === 'reaction'
-              ? 'Measuring the move across stocks, yields, the dollar, havens and oil, and timing the headlines…'
-              : 'Reading the board, rates, calendar, headlines and central-bank feeds…',
-        });
-        const now = new Date();
-        const knowledge = selectKnowledge(def);
         // Past the passphrase gate above, so the user's own position may go in.
         const { positions } = await readOpenPositions();
-        const [inputs, reaction, vision] = await Promise.all([
-          loadAnalysisInputs(def, now, undefined, { positions }),
-          mode === 'reaction' ? loadReaction(def, last.content, now).catch(() => null) : Promise.resolve(null),
-          images.length
-            ? (async () => {
-                requests++;
-                return describeImages(images, last.content, {
-                  signal: request.signal,
-                  onRetry: () => {
-                    requests++;
-                  },
-                });
-              })().catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
-            : Promise.resolve(null),
-        ]);
-        const dossier = buildDossier(inputs);
-        let threadForModel = thread;
-        if (vision && 'text' in vision) {
-          if (vision.cost !== null) cost = (cost ?? 0) + vision.cost;
-          send({ type: 'vision', text: vision.text, model: vision.model });
-          // The reading rides on the question it came with, so a follow-up still has it.
-          threadForModel = thread.map((m, k) =>
-            k === thread.length - 1
-              ? { ...m, content: `${m.content}\n\n[CHART READING — the user's attached chart, read from pixels by ${vision.model}; approximate]\n${vision.text}` }
-              : m,
-          );
-        } else if (vision && 'error' in vision) {
-          send({ type: 'status', text: `The chart could not be read (${vision.error}); answering from the data alone.` });
-          threadForModel = thread.map((m, k) =>
-            k === thread.length - 1 ? { ...m, content: `${m.content}\n\n[The user attached a chart, but it could not be read: say so.]` } : m,
-          );
-        }
-        const dossierText = reaction ? [...reactionLines(reaction), '', dossier.text].join('\n') : dossier.text;
-        const docs = dossier.summary.banks.filter((b) => b.title).length;
-        send({
-          type: 'status',
-          text: `Dossier ready: ${dossier.summary.news.clusters} stories, ${dossier.summary.news.searchHits} search hits, ${docs} central-bank document${docs === 1 ? '' : 's'}. Asking ${config.model} (${mode} answer)…`,
+        const result = await answerQuestion({
+          def,
+          thread: trimThread(raw),
+          question: last.content,
+          requestedMode: body.mode,
+          images: checked.images,
+          positions,
+          model: config.model,
+          signal: request.signal,
+          emit: send,
         });
-
-        const messages = buildMessages(knowledge, dossierText, threadForModel, mode);
-        const calls = await round(messages, { tools: [SEARCH_TOOL], toolChoice: 'auto', effort });
-
-        if (calls.length > 0) {
-          const perCall = calls.map((call) => ({
-            call,
-            queries: call.function.name === 'search_news' ? parseSearchArgs(call.function.arguments) : [],
-          }));
-          const all = [...new Set(perCall.flatMap((p) => p.queries).map(sanitizeQuery).filter(Boolean))].slice(0, ANALYST_LIMITS.queriesPerRound);
-          send({ type: 'status', text: all.length ? `Searching: ${all.join(' · ')}` : 'The model asked for an unknown tool; continuing without it.' });
-
-          const hits = new Map(await Promise.all(all.map(async (q) => [q, await searchNews(q, { limit: 8 })] as const)));
-          const followUp: ChatMessage[] = [
-            ...messages,
-            { role: 'assistant', content: '', tool_calls: calls },
-            ...perCall.map(({ call, queries }) => ({
-              role: 'tool' as const,
-              tool_call_id: call.id,
-              content:
-                call.function.name === 'search_news'
-                  ? formatSearchResults(
-                      queries.map(sanitizeQuery).filter((q) => hits.has(q)).map((q) => ({ query: q, hits: hits.get(q)! })),
-                      now,
-                    ) || '(no queries run)'
-                  : 'Unknown tool. Answer from the dossier.',
-            })),
-          ];
-          if (answered > 0) send({ type: 'delta', text: '\n\n' });
-          await round(followUp, { tools: [SEARCH_TOOL], toolChoice: 'none', effort });
-        }
-
-        if (answered === 0) throw new OpenRouterError('The model returned an empty answer. Try again, or rephrase the question.');
-        send({ type: 'done', model: config.model, cost, requests, mode, seconds: Math.round((Date.now() - started) / 1000) });
+        send({
+          type: 'done',
+          model: config.model,
+          cost: result.cost,
+          requests: result.requests,
+          mode: result.mode,
+          seconds: Math.round((Date.now() - started) / 1000),
+        });
       } catch (err) {
         if (request.signal.aborted) return;
         const message =

@@ -50,17 +50,23 @@ export function parseSpark(payload: unknown): Map<string, IntradaySeries> {
 }
 
 /** Every ticker's bars; missing tickers are simply absent, never an error. */
-export async function fetchIntraday(tickers: string[]): Promise<Map<string, IntradaySeries>> {
+export async function fetchIntraday(
+  tickers: string[],
+  /** Hourly bars over two years for the event study; the reaction reader's 5-minute bars otherwise. */
+  opts: { range?: string; interval?: string; cacheTtlSeconds?: number } = {},
+): Promise<Map<string, IntradaySeries>> {
+  const range = opts.range ?? REACTION.range;
+  const interval = opts.interval ?? REACTION.interval;
   const out = new Map<string, IntradaySeries>();
   if (fixturesEnabled()) return out;
   const unique = [...new Set(tickers)];
   for (let i = 0; i < unique.length; i += YAHOO.sparkMaxSymbols) {
     const chunk = unique.slice(i, i + YAHOO.sparkMaxSymbols);
-    const url = `${YAHOO.sparkBase}?symbols=${chunk.map(encodeURIComponent).join(',')}&range=${REACTION.range}&interval=${REACTION.interval}`;
+    const url = `${YAHOO.sparkBase}?symbols=${chunk.map(encodeURIComponent).join(',')}&range=${range}&interval=${interval}`;
     const res = await fetchJson<SparkPayload>(YAHOO.name, url, {
       headers: { ...YAHOO.headers },
-      cacheTtlSeconds: REACTION.cacheTtlSeconds,
-      cacheKey: `yahoo:spark:${REACTION.interval}:${chunk.join(',')}`,
+      cacheTtlSeconds: opts.cacheTtlSeconds ?? REACTION.cacheTtlSeconds,
+      cacheKey: `yahoo:spark:${range}:${interval}:${chunk.join(',')}`,
       timeoutMs: 12_000,
       retries: 1,
     });

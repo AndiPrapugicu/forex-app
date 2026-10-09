@@ -22,7 +22,18 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Dra
 import { Markdown } from '@/components/Markdown';
 import { Panel } from '@/components/ui';
 
-type Mode = 'brief' | 'decision' | 'reaction';
+/** The server's answer kinds (lib/analysis/intent.ts). */
+type Mode = 'brief' | 'decision' | 'reaction' | 'explain' | 'event' | 'compare' | 'full';
+
+const MODE_LABEL: Record<Mode, string> = {
+  brief: 'recap',
+  decision: 'short answer',
+  reaction: 'move explained',
+  explain: 'explained',
+  event: 'event read',
+  compare: 'comparison',
+  full: 'full read',
+};
 
 interface Meta {
   model: string;
@@ -43,21 +54,31 @@ interface Turn {
   imageCount?: number;
   /** What the vision model read off the attached charts; sent again with follow-ups. */
   vision?: string;
+  /** How the server read the question: the kind, the window, the move. */
+  understood?: string;
   meta?: Meta;
   error?: string;
 }
 
 /**
- * Each carries its answer depth: a recap is BRIEF (short, quick thinking); the
- * rest are DECISION (the full template). Free text is routed on the server.
+ * Each carries its answer kind; free text is routed on the server. Answers are
+ * short by default; "Full fundamental read" is the long template.
  */
 const QUICK_PROMPTS: { label: string; text: string; mode: Mode; needsPosition?: boolean }[] = [
   { label: 'What just moved?', mode: 'reaction', text: 'What just moved in this market over the last few hours, and why? Measure it across stocks, yields, the dollar, havens and oil, and time it against the headlines.' },
-  { label: 'Full fundamental read', mode: 'decision', text: 'Give me the full fundamental analysis: rates and policy, macro momentum, news, cross-asset drivers, positioning, and scenarios with catalysts.' },
+  { label: 'Full fundamental read', mode: 'full', text: 'Give me the full fundamental analysis: rates and policy, macro momentum, news, cross-asset drivers, positioning, and scenarios with catalysts.' },
   { label: 'What changed in 24h', mode: 'brief', text: 'What has changed in the last 24 hours for this market — data, central-bank communication and headlines — and does it move the state?' },
   { label: 'Where to enter, given the bias', mode: 'decision', text: 'Given the current bias, where would I look to enter, under what fundamental conditions, and what invalidates the idea?' },
   { label: 'What would flip this', mode: 'decision', text: 'What would flip this view? Name the catalysts on the calendar and the thresholds that matter.' },
   { label: 'Is my thesis intact?', mode: 'decision', needsPosition: true, text: 'I hold the open position in the dossier. Check my thesis point by point against the current state: is it intact, what is eroding it, and what would make me close?' },
+];
+
+/** One click under an answer: the follow-ups a trader asks most. */
+const FOLLOW_UPS: { label: string; text: string; mode: Mode }[] = [
+  { label: 'Full read', mode: 'full', text: 'Give me the full read on this market now.' },
+  { label: 'What would flip it', mode: 'decision', text: 'What would flip this view? Name the catalysts on the calendar and the thresholds that matter.' },
+  { label: 'Levels', mode: 'decision', text: 'Which levels matter here, from the Levels list, and what would a break of each one mean?' },
+  { label: 'Explain simpler', mode: 'explain', text: 'Explain your last answer more simply, in plain words, as if to a new trader.' },
 ];
 
 const MAX_CHARS = 2000;
@@ -214,6 +235,10 @@ export function AiAnalysisChat({
         history[history.length - 1] = { ...history[history.length - 1], vision: reading };
         update();
       };
+      const setUnderstood = (text: string) => {
+        history[history.length - 1] = { ...history[history.length - 1], understood: text };
+        update();
+      };
 
       try {
         const res = await fetch('/api/ai/analysis', {
@@ -249,6 +274,7 @@ export function AiAnalysisChat({
             const event = JSON.parse(line) as { type: string; text?: string; message?: string } & Partial<Meta>;
             if (event.type === 'status') setStatus(event.text ?? null);
             else if (event.type === 'vision') setVision(event.text ?? '');
+            else if (event.type === 'understood') setUnderstood(event.text ?? '');
             else if (event.type === 'reasoning') setThinking(true);
             else if (event.type === 'delta') {
               setThinking(false);
@@ -376,6 +402,7 @@ export function AiAnalysisChat({
                 <span className="text-micro text-[var(--color-faint)]">{t.imageCount} chart{t.imageCount > 1 ? 's' : ''} attached (not kept after reload)</span>
               ) : null}
               <div className="rounded-[var(--radius-card)] bg-[var(--color-surface-2)] px-3 py-2 text-sm whitespace-pre-wrap text-[var(--color-text)]">{t.content}</div>
+              {t.understood && <span className="text-micro text-[var(--color-faint)]">Read as: {t.understood}</span>}
               {t.vision && (
                 <details className="w-full rounded border border-[var(--color-border)] px-3 py-1.5 text-left">
                   <summary className="cursor-pointer text-micro text-[var(--color-muted)]">What the chart reader saw</summary>
@@ -410,10 +437,24 @@ export function AiAnalysisChat({
               )}
               {t.meta && (
                 <p className="mt-2 text-micro text-[var(--color-faint)]">
-                  {t.meta.model} · {t.meta.mode === 'brief' ? 'brief answer · ' : t.meta.mode === 'decision' ? 'full answer · ' : t.meta.mode === 'reaction' ? 'move explained · ' : ''}
+                  {t.meta.model} · {t.meta.mode && MODE_LABEL[t.meta.mode] ? `${MODE_LABEL[t.meta.mode]} · ` : ''}
                   {t.meta.requests} request{t.meta.requests === 1 ? '' : 's'} · {t.meta.seconds}s ·{' '}
                   {t.meta.cost === null ? 'cost not reported' : t.meta.cost === 0 ? 'free' : `cost ${t.meta.cost}`}
                 </p>
+              )}
+              {t.meta && !busy && k === turns.length - 1 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {FOLLOW_UPS.filter((f) => f.mode !== t.meta?.mode).map((f) => (
+                    <button
+                      key={f.label}
+                      type="button"
+                      onClick={() => void ask(f.text, undefined, f.mode)}
+                      className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-0.5 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)]"
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           ),

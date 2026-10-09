@@ -11,14 +11,18 @@
  * The answer streams as NDJSON (see app/api/ai/analysis/route.ts): status
  * lines while the dossier is built, a thinking tick while the model reasons,
  * then the text.
+ *
+ * Chart screenshots can be attached (button, paste or drop). They are shrunk
+ * in the browser before sending, read by a free vision model on the server, and
+ * never stored: the thread keeps only what the chart reader saw, in words.
  */
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Markdown } from '@/components/Markdown';
 import { Panel } from '@/components/ui';
 
-type Mode = 'brief' | 'decision';
+type Mode = 'brief' | 'decision' | 'reaction';
 
 interface Meta {
   model: string;
@@ -33,6 +37,12 @@ interface Turn {
   content: string;
   /** On a user turn: the depth asked for, so Retry asks the same way. */
   mode?: Mode;
+  /** On a user turn: the attached charts. Kept for this page view only, never stored. */
+  images?: string[];
+  /** How many charts were attached, so a reloaded thread can still say so. */
+  imageCount?: number;
+  /** What the vision model read off the attached charts; sent again with follow-ups. */
+  vision?: string;
   meta?: Meta;
   error?: string;
 }
@@ -42,6 +52,7 @@ interface Turn {
  * rest are DECISION (the full template). Free text is routed on the server.
  */
 const QUICK_PROMPTS: { label: string; text: string; mode: Mode; needsPosition?: boolean }[] = [
+  { label: 'What just moved?', mode: 'reaction', text: 'What just moved in this market over the last few hours, and why? Measure it across stocks, yields, the dollar, havens and oil, and time it against the headlines.' },
   { label: 'Full fundamental read', mode: 'decision', text: 'Give me the full fundamental analysis: rates and policy, macro momentum, news, cross-asset drivers, positioning, and scenarios with catalysts.' },
   { label: 'What changed in 24h', mode: 'brief', text: 'What has changed in the last 24 hours for this market — data, central-bank communication and headlines — and does it move the state?' },
   { label: 'Where to enter, given the bias', mode: 'decision', text: 'Given the current bias, where would I look to enter, under what fundamental conditions, and what invalidates the idea?' },
@@ -50,6 +61,39 @@ const QUICK_PROMPTS: { label: string; text: string; mode: Mode; needsPosition?: 
 ];
 
 const MAX_CHARS = 2000;
+const MAX_IMAGES = 2;
+/** Long side of an attached chart after shrinking; plenty for a vision model to read labels. */
+const IMAGE_MAX_SIDE = 1600;
+/** Stay under the server's per-image cap (2,000,000 characters of data URL). */
+const IMAGE_MAX_CHARS = 1_900_000;
+
+/** A screenshot shrunk to a JPEG data URL the server accepts. */
+async function shrinkImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('This browser cannot read images.');
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  for (const quality of [0.85, 0.7, 0.55]) {
+    const url = canvas.toDataURL('image/jpeg', quality);
+    if (url.length <= IMAGE_MAX_CHARS) return url;
+  }
+  throw new Error('That image is too large even after shrinking.');
+}
+
+/** What goes back to the server for a turn: the words, plus what the chart reader saw. */
+function wireContent(t: Turn): string {
+  return t.vision ? `${t.content}\n\n[CHART READING — from the user's chart, read earlier by the vision model; approximate]\n${t.vision}` : t.content;
+}
+
+/** For localStorage: images are too large to keep, the reading is not. */
+function storable(turns: Turn[]): Turn[] {
+  return turns.map(({ images, ...rest }) => (images?.length ? { ...rest, imageCount: images.length } : rest));
+}
 const storageKey = (symbol: string) => `ai-analysis:thread:${symbol}`;
 
 function loadThread(symbol: string): Turn[] {
@@ -64,7 +108,7 @@ function loadThread(symbol: string): Turn[] {
 
 function saveThread(symbol: string, turns: Turn[]) {
   try {
-    window.localStorage.setItem(storageKey(symbol), JSON.stringify(turns.slice(-30)));
+    window.localStorage.setItem(storageKey(symbol), JSON.stringify(storable(turns.slice(-30))));
   } catch {
     // private window or full storage: the thread just will not survive a reload
   }
@@ -95,8 +139,12 @@ export function AiAnalysisChat({
   const [status, setStatus] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [attached, setAttached] = useState<string[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   // A new symbol is a new thread. Loaded after mount so the server render and
   // the first client render agree.
@@ -117,15 +165,39 @@ export function AiAnalysisChat({
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [turns.length]);
 
+  const addFiles = useCallback(
+    async (files: File[]) => {
+      setAttachError(null);
+      const pictures = files.filter((f) => f.type.startsWith('image/'));
+      if (pictures.length === 0) return;
+      const room = MAX_IMAGES - attached.length;
+      if (room <= 0) {
+        setAttachError(`At most ${MAX_IMAGES} charts per question.`);
+        return;
+      }
+      try {
+        const urls = await Promise.all(pictures.slice(0, room).map(shrinkImage));
+        setAttached((prev) => [...prev, ...urls].slice(0, MAX_IMAGES));
+        if (pictures.length > room) setAttachError(`Only ${MAX_IMAGES} charts per question; the rest were left out.`);
+      } catch (err) {
+        setAttachError(err instanceof Error ? err.message : 'Could not read that image.');
+      }
+    },
+    [attached.length],
+  );
+
   const ask = useCallback(
-    async (question: string, base?: Turn[], mode?: Mode) => {
-      const text = question.trim();
+    async (question: string, base?: Turn[], mode?: Mode, images?: string[]) => {
+      const text = question.trim() || (images?.length ? 'What does this chart show, and what does it mean for this market given the dossier?' : '');
       if (!text || busy) return;
 
-      const history: Turn[] = [...(base ?? turns), { role: 'user', content: text, ...(mode ? { mode } : {}) }];
+      const userTurn: Turn = { role: 'user', content: text, ...(mode ? { mode } : {}), ...(images?.length ? { images } : {}) };
+      const history: Turn[] = [...(base ?? turns), userTurn];
       const pending: Turn = { role: 'assistant', content: '' };
       setTurns([...history, pending]);
       setInput('');
+      setAttached([]);
+      setAttachError(null);
       setBusy(true);
       setElapsed(0);
       setThinking(false);
@@ -138,6 +210,10 @@ export function AiAnalysisChat({
       let error: string | undefined;
 
       const update = () => setTurns([...history, { role: 'assistant', content: answer, meta, error }]);
+      const setVision = (reading: string) => {
+        history[history.length - 1] = { ...history[history.length - 1], vision: reading };
+        update();
+      };
 
       try {
         const res = await fetch('/api/ai/analysis', {
@@ -146,8 +222,9 @@ export function AiAnalysisChat({
           body: JSON.stringify({
             symbol,
             ...(mode ? { mode } : {}),
-            // Only the words go back: answers that failed carry no content worth re-sending.
-            messages: history.filter((t) => t.content.trim() !== '').map(({ role, content }) => ({ role, content })),
+            ...(images?.length ? { images } : {}),
+            // Only the words go back (with any earlier chart reading): answers that failed carry nothing worth re-sending.
+            messages: history.filter((t) => t.content.trim() !== '').map((t) => ({ role: t.role, content: wireContent(t) })),
           }),
           signal: controller.signal,
         });
@@ -171,6 +248,7 @@ export function AiAnalysisChat({
             if (!line.trim()) continue;
             const event = JSON.parse(line) as { type: string; text?: string; message?: string } & Partial<Meta>;
             if (event.type === 'status') setStatus(event.text ?? null);
+            else if (event.type === 'vision') setVision(event.text ?? '');
             else if (event.type === 'reasoning') setThinking(true);
             else if (event.type === 'delta') {
               setThinking(false);
@@ -199,23 +277,39 @@ export function AiAnalysisChat({
     [busy, model, symbol, turns],
   );
 
+  const send = () => void ask(input, undefined, undefined, attached);
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    void ask(input);
+    send();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      void ask(input);
+      send();
     }
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = [...e.clipboardData.files];
+    if (files.some((f) => f.type.startsWith('image/'))) {
+      e.preventDefault();
+      void addFiles(files);
+    }
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    void addFiles([...e.dataTransfer.files]);
   };
 
   /** Asks the failed question again, in place of the failed attempt. */
   const retry = () => {
     const lastUser = turns.length - 2;
     if (lastUser < 0 || turns[lastUser].role !== 'user') return;
-    void ask(turns[lastUser].content, turns.slice(0, lastUser), turns[lastUser].mode);
+    void ask(turns[lastUser].content, turns.slice(0, lastUser), turns[lastUser].mode, turns[lastUser].images);
   };
 
   const clear = () => {
@@ -269,8 +363,27 @@ export function AiAnalysisChat({
 
         {turns.map((t, k) =>
           t.role === 'user' ? (
-            <div key={k} className="self-end rounded-[var(--radius-card)] bg-[var(--color-surface-2)] px-3 py-2 text-sm whitespace-pre-wrap text-[var(--color-text)] md:max-w-[80%]">
-              {t.content}
+            <div key={k} className="flex flex-col items-end gap-1.5 self-end md:max-w-[80%]">
+              {t.images && t.images.length > 0 && (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {t.images.map((src, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise
+                    <img key={i} src={src} alt={`Attached chart ${i + 1}`} className="max-h-40 rounded border border-[var(--color-border)] object-contain" />
+                  ))}
+                </div>
+              )}
+              {!t.images?.length && t.imageCount ? (
+                <span className="text-micro text-[var(--color-faint)]">{t.imageCount} chart{t.imageCount > 1 ? 's' : ''} attached (not kept after reload)</span>
+              ) : null}
+              <div className="rounded-[var(--radius-card)] bg-[var(--color-surface-2)] px-3 py-2 text-sm whitespace-pre-wrap text-[var(--color-text)]">{t.content}</div>
+              {t.vision && (
+                <details className="w-full rounded border border-[var(--color-border)] px-3 py-1.5 text-left">
+                  <summary className="cursor-pointer text-micro text-[var(--color-muted)]">What the chart reader saw</summary>
+                  <div className="mt-1 text-xs">
+                    <Markdown source={t.vision} />
+                  </div>
+                </details>
+              )}
             </div>
           ) : (
             <div key={k} className="min-w-0">
@@ -297,7 +410,7 @@ export function AiAnalysisChat({
               )}
               {t.meta && (
                 <p className="mt-2 text-micro text-[var(--color-faint)]">
-                  {t.meta.model} · {t.meta.mode === 'brief' ? 'brief answer · ' : t.meta.mode === 'decision' ? 'full answer · ' : ''}
+                  {t.meta.model} · {t.meta.mode === 'brief' ? 'brief answer · ' : t.meta.mode === 'decision' ? 'full answer · ' : t.meta.mode === 'reaction' ? 'move explained · ' : ''}
                   {t.meta.requests} request{t.meta.requests === 1 ? '' : 's'} · {t.meta.seconds}s ·{' '}
                   {t.meta.cost === null ? 'cost not reported' : t.meta.cost === 0 ? 'free' : `cost ${t.meta.cost}`}
                 </p>
@@ -321,34 +434,92 @@ export function AiAnalysisChat({
           ))}
         </div>
 
-        <form onSubmit={onSubmit} className="flex flex-col gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
-            onKeyDown={onKeyDown}
-            rows={3}
-            placeholder={`e.g. "${label} is bullish on the board — given the rate gap and today's news, where is the best area to get in?"`}
-            className="w-full resize-y rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-faint)] focus:border-[var(--color-border-bright)]"
-            aria-label="Your question"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-micro text-[var(--color-faint)]">
-              {model} · free via OpenRouter · analysis, not financial advice
-            </span>
-            {busy ? (
-              <button type="button" onClick={() => abortRef.current?.abort()} className="rounded border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)]">
-                Stop
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="rounded bg-[var(--color-bull)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-              >
-                Ask
-              </button>
+        <form onSubmit={onSubmit}>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            className={`rounded-[var(--radius-card)] border bg-[var(--color-surface)] transition-colors focus-within:border-[var(--color-border-bright)] ${
+              dragging ? 'border-[var(--color-bull)]' : 'border-[var(--color-border)]'
+            }`}
+          >
+            {attached.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pt-3">
+                {attached.map((src, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL preview */}
+                    <img src={src} alt={`Chart ${i + 1} to send`} className="h-16 w-24 rounded border border-[var(--color-border)] object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setAttached((prev) => prev.filter((_, j) => j !== i))}
+                      aria-label={`Remove chart ${i + 1}`}
+                      className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-micro text-[var(--color-text)]"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              rows={3}
+              placeholder={`Ask about ${label}, paste a news link, or drop a chart screenshot here`}
+              className="block w-full resize-y bg-transparent px-3 py-2.5 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-faint)]"
+              aria-label="Your question"
+            />
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--color-border)] px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    void addFiles([...(e.target.files ?? [])]);
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={busy || attached.length >= MAX_IMAGES}
+                  className="flex items-center gap-1.5 rounded px-2 py-1 text-micro text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] disabled:opacity-40"
+                  aria-label="Attach a chart screenshot"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                    <path d="M21 12.5 12.7 20.8a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Chart
+                </button>
+                <span className="hidden truncate text-micro text-[var(--color-faint)] sm:inline">Enter to send · Shift+Enter for a new line · paste or drop up to {MAX_IMAGES} charts</span>
+              </div>
+              {busy ? (
+                <button type="button" onClick={() => abortRef.current?.abort()} className="rounded border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)]">
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() && attached.length === 0}
+                  className="rounded bg-[var(--color-bull)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  Ask
+                </button>
+              )}
+            </div>
           </div>
+          {attachError && <p className="mt-1.5 text-micro text-[var(--color-bear)]">{attachError}</p>}
+          <p className="mt-1.5 text-micro text-[var(--color-faint)]">
+            {model} · charts read by a free vision model · free via OpenRouter · analysis, not financial advice
+          </p>
         </form>
       </div>
     </Panel>

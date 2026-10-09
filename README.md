@@ -514,6 +514,21 @@ an entry, hold, flip or thesis question gets the full DECISION shape (state → 
 what would confirm it → event risk → board vs narrative → answer). `answerMode` in `lib/analysis/prompt.ts` decides;
 the quick prompts carry their own. Seed and temperature are fixed so two runs over the same dossier read alike.
 
+**"It just dropped — what happened?"** A question with a move verb ("dropped", "spiked", "a scăzut") or a pasted link
+gets a third shape, REACTION, and a section R in the dossier (`lib/analysis/reaction.ts`). Yahoo's 5-minute bars for a
+fixed panel (Nasdaq/S&P/Russell futures, the 2Y from ZT futures, 5Y/10Y/30Y yields, DXY, USD/JPY, USD/CHF, gold, WTI,
+Brent, copper, VIX, Bitcoin; `config/reaction.config.ts`) are measured over the symbol's largest swing of the last eight
+hours. Fixed rules then read stocks against yields (risk-off, rates shock, dovish relief, reflation), the curve (bull or
+bear, steepener or flattener), the havens, oil and breadth, and time every headline against the start of the move. A
+pasted link is never opened: the words in its address are searched on Google News, and its first appearance is timed
+against the move ("184 minutes after the move began: it cannot have started it").
+
+**Chart screenshots.** Up to two per question, by button, paste or drag-and-drop, shrunk in the browser. Nemotron
+reads text only, so a free vision model (`google/gemma-4-31b-it:free`, override with `OPENROUTER_VISION_MODEL`) reads
+the chart first, through the same four free-only guards, and the analyst gets its description as text. Images are
+never stored; the thread keeps only the reading. If your OpenRouter privacy settings exclude that provider, the chart
+is reported as unreadable and the answer proceeds without it.
+
 ---
 
 ## Market Narrative

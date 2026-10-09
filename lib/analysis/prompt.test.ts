@@ -7,7 +7,7 @@ describe('buildMessages', () => {
   it('puts instructions, background and dossier in that order, then the thread', () => {
     const msgs = buildMessages(knowledge, 'DOSSIER', [{ role: 'user', content: 'q' }]);
     expect(msgs[0].role).toBe('system');
-    const sys = msgs[0].content;
+    const sys = String(msgs[0].content);
     expect(sys.indexOf('INSTRUCTIONS')).toBeLessThan(sys.indexOf('BACKGROUND'));
     expect(sys.indexOf('BACKGROUND')).toBeLessThan(sys.indexOf('DOSSIER'));
     expect(msgs.slice(1)).toEqual([{ role: 'user', content: 'q' }]);

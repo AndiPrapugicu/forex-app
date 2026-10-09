@@ -8,6 +8,7 @@
  */
 
 import { ANALYST_LIMITS } from '@/config/ai.config';
+import { REACTION_WORDS } from '@/config/reaction.config';
 import type { ChatMessage, ToolDefinition } from '@/lib/ai/openrouter';
 import type { KnowledgeSelection } from '@/lib/analysis/knowledge';
 import type { SearchHit } from '@/lib/connectors/news-search';
@@ -61,7 +62,7 @@ export function trimThread(thread: ThreadMessage[]): ThreadMessage[] {
   return recent;
 }
 
-export type AnswerMode = 'brief' | 'decision';
+export type AnswerMode = 'brief' | 'decision' | 'reaction';
 
 /**
  * Words that ask for a decision: an entry, a hold, a level, a thesis. Checked
@@ -73,12 +74,20 @@ const DECISION_WORDS =
 const BRIEF_WORDS =
   /(\b24 ?h\b|\bazi\b|\btoday\b|\bieri\b|\byesterday\b|ce s-a (întâmplat|intamplat)|what happened|what changed|\brecap\b|\brezumat\b|\bnews\b|știri|stiri|\bheadlines?\b|pe scurt|\bbriefly\b|\bquick\b)/i;
 
+/** A trade action in the question: then it is a decision even if it starts with a move. */
+const TRADE_WORDS = /\b(entry|enter|intrare|intru|hold|holding|țin|ţin|tp|sl|take profit|stop loss|thesis|teza|teză|setup)\b/i;
+const LINK = /https?:\/\//i;
+
 /**
  * How deep the answer goes. A quick prompt says which it is; free text is read
- * with two fixed word lists, and anything unclear gets the full treatment.
+ * with fixed word lists, and anything unclear gets the full treatment.
+ *
+ * REACTION first: "the Nasdaq just dropped 2% — why?" or a pasted article is a
+ * question about a move that already happened, unless it also asks for a trade.
  */
 export function answerMode(question: string, requested?: unknown): AnswerMode {
-  if (requested === 'brief' || requested === 'decision') return requested;
+  if (requested === 'brief' || requested === 'decision' || requested === 'reaction') return requested;
+  if ((REACTION_WORDS.test(question) || LINK.test(question)) && !TRADE_WORDS.test(question)) return 'reaction';
   if (DECISION_WORDS.test(question)) return 'decision';
   if (BRIEF_WORDS.test(question)) return 'brief';
   return 'decision';
@@ -96,7 +105,20 @@ const MODE_TEXT: Record<AnswerMode, string> = {
       'What would confirm it → Event risk → Board vs narrative → the answer to the question. Take the state, the flips and the confirmations from ' +
       'section 0 (MARKET STATE) as given; quote their thresholds and dates.',
   ].join('\n'),
+  reaction: [
+    '# ANSWER MODE: REACTION',
+    'The question is about a move that already happened. Use the REACTION template from your instructions: What moved → The pattern → ' +
+      'Candidate catalysts → Most likely explanation, and what does not fit → What it means for this market → What to watch next. ' +
+      'Take every number and time from section R (WHAT JUST MOVED) as given. A headline can only be a cause if its time is at or before the ' +
+      'start of the move; say "inference" when you connect them. Repeat any MISMATCH line from section R in plain words. If the user\'s numbers ' +
+      'differ from section R, say so and use section R.',
+  ].join('\n'),
 };
+
+/** How long the model thinks: a recap is quick, a decision or a reaction is not. */
+export function effortFor(mode: AnswerMode): 'low' | 'medium' {
+  return mode === 'brief' ? 'low' : 'medium';
+}
 
 export function buildMessages(knowledge: KnowledgeSelection, dossier: string, thread: ThreadMessage[], mode: AnswerMode = 'decision'): ChatMessage[] {
   const system = [

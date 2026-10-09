@@ -12,8 +12,16 @@
  * endpoints) is retried twice per round before giving up, and every retry is
  * counted in the `requests` the answer reports.
  *
+ * A question may carry up to two chart screenshots. The analyst model reads
+ * text only, so the images go to a free vision model first and its description
+ * is appended to the question (`describeImages` in lib/ai/openrouter.ts).
+ * A question about a move that already happened (REACTION mode) also gets
+ * section R: the same window measured across stocks, rates, the dollar,
+ * havens and oil (lib/analysis/reaction.ts).
+ *
  * The response is NDJSON, one event per line:
  *   {type:'status', text}      what the server is doing
+ *   {type:'vision', text, model} what the attached chart shows, as read
  *   {type:'reasoning'}         the model is thinking (throttled; no text)
  *   {type:'delta', text}       answer text
  *   {type:'done', model, cost, requests, mode, seconds}
@@ -24,13 +32,16 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { ANALYST_LIMITS } from '@/config/ai.config';
 import { findSymbol } from '@/config/symbols.config';
-import { getOpenRouterConfig, OpenRouterError, streamChat, type ChatMessage, type ChatOptions, type ToolCall } from '@/lib/ai/openrouter';
+import { describeImages, getOpenRouterConfig, OpenRouterError, streamChat, type ChatMessage, type ChatOptions, type ToolCall } from '@/lib/ai/openrouter';
 import { ACCESS_COOKIE, createRateLimiter, hasAccess, isAccessConfigured } from '@/lib/analysis/access';
 import { buildDossier } from '@/lib/analysis/dossier';
 import { selectKnowledge } from '@/lib/analysis/knowledge';
 import { loadAnalysisInputs } from '@/lib/analysis/load';
 import { readOpenPositions } from '@/lib/analysis/positions-load';
-import { answerMode, buildMessages, formatSearchResults, parseSearchArgs, SEARCH_TOOL, trimThread, type ThreadMessage } from '@/lib/analysis/prompt';
+import { answerMode, buildMessages, effortFor, formatSearchResults, parseSearchArgs, SEARCH_TOOL, trimThread, type ThreadMessage } from '@/lib/analysis/prompt';
+import { checkImages } from '@/lib/analysis/attachments';
+import { reactionLines } from '@/lib/analysis/reaction';
+import { loadReaction } from '@/lib/analysis/reaction-load';
 import { sanitizeQuery, searchNews } from '@/lib/connectors/news-search';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +69,7 @@ export async function POST(request: Request) {
   const config = getOpenRouterConfig();
   if (!config) return refuse(503, 'No OpenRouter key on the server (OPENROUTER_API_KEY).');
 
-  let body: { symbol?: unknown; messages?: unknown; mode?: unknown };
+  let body: { symbol?: unknown; messages?: unknown; mode?: unknown; images?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -76,10 +87,14 @@ export async function POST(request: Request) {
   if (last.content.length > ANALYST_LIMITS.messageChars) {
     return refuse(400, `Keep a question under ${ANALYST_LIMITS.messageChars} characters.`);
   }
+  const checked = checkImages(body.images);
+  if (!checked.ok) return refuse(400, checked.reason);
+  const images = checked.images;
   const thread = trimThread(raw);
-  // Brief for a recap, decision for an entry, a hold or a flip (lib/analysis/prompt.ts).
+  // Brief for a recap, decision for an entry, a hold or a flip, reaction for a
+  // move that already happened (lib/analysis/prompt.ts).
   const mode = answerMode(last.content, body.mode);
-  const effort = mode === 'brief' ? 'low' : 'medium';
+  const effort = effortFor(mode);
 
   if (!allowQuestion()) return refuse(429, 'Too many questions this minute. Wait a moment.');
 
@@ -132,19 +147,58 @@ export async function POST(request: Request) {
       };
 
       try {
-        send({ type: 'status', text: 'Reading the board, rates, calendar, headlines and central-bank feeds…' });
+        send({
+          type: 'status',
+          text: images.length
+            ? `Reading the attached chart${images.length > 1 ? 's' : ''}, the board, rates, calendar and headlines…`
+            : mode === 'reaction'
+              ? 'Measuring the move across stocks, yields, the dollar, havens and oil, and timing the headlines…'
+              : 'Reading the board, rates, calendar, headlines and central-bank feeds…',
+        });
         const now = new Date();
         const knowledge = selectKnowledge(def);
         // Past the passphrase gate above, so the user's own position may go in.
         const { positions } = await readOpenPositions();
-        const dossier = buildDossier(await loadAnalysisInputs(def, now, undefined, { positions }));
+        const [inputs, reaction, vision] = await Promise.all([
+          loadAnalysisInputs(def, now, undefined, { positions }),
+          mode === 'reaction' ? loadReaction(def, last.content, now).catch(() => null) : Promise.resolve(null),
+          images.length
+            ? (async () => {
+                requests++;
+                return describeImages(images, last.content, {
+                  signal: request.signal,
+                  onRetry: () => {
+                    requests++;
+                  },
+                });
+              })().catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+            : Promise.resolve(null),
+        ]);
+        const dossier = buildDossier(inputs);
+        let threadForModel = thread;
+        if (vision && 'text' in vision) {
+          if (vision.cost !== null) cost = (cost ?? 0) + vision.cost;
+          send({ type: 'vision', text: vision.text, model: vision.model });
+          // The reading rides on the question it came with, so a follow-up still has it.
+          threadForModel = thread.map((m, k) =>
+            k === thread.length - 1
+              ? { ...m, content: `${m.content}\n\n[CHART READING — the user's attached chart, read from pixels by ${vision.model}; approximate]\n${vision.text}` }
+              : m,
+          );
+        } else if (vision && 'error' in vision) {
+          send({ type: 'status', text: `The chart could not be read (${vision.error}); answering from the data alone.` });
+          threadForModel = thread.map((m, k) =>
+            k === thread.length - 1 ? { ...m, content: `${m.content}\n\n[The user attached a chart, but it could not be read: say so.]` } : m,
+          );
+        }
+        const dossierText = reaction ? [...reactionLines(reaction), '', dossier.text].join('\n') : dossier.text;
         const docs = dossier.summary.banks.filter((b) => b.title).length;
         send({
           type: 'status',
           text: `Dossier ready: ${dossier.summary.news.clusters} stories, ${dossier.summary.news.searchHits} search hits, ${docs} central-bank document${docs === 1 ? '' : 's'}. Asking ${config.model} (${mode} answer)…`,
         });
 
-        const messages = buildMessages(knowledge, dossier.text, thread, mode);
+        const messages = buildMessages(knowledge, dossierText, threadForModel, mode);
         const calls = await round(messages, { tools: [SEARCH_TOOL], toolChoice: 'auto', effort });
 
         if (calls.length > 0) {

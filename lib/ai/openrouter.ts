@@ -24,6 +24,13 @@
 
 export const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 export const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+/**
+ * Reads chart screenshots. Nemotron takes text only (`input_modalities:
+ * ['text']` on OpenRouter, 2026-10-08), so an attached image goes to this model
+ * first and the analyst gets its description as text. Free, image input, all
+ * endpoints priced at zero — and it passes through the same four guards.
+ */
+export const DEFAULT_VISION_MODEL = 'google/gemma-4-31b-it:free';
 
 /** How long a passed pricing check is trusted before it is read again. */
 const PRICING_TTL_MS = 60 * 60 * 1000;
@@ -53,9 +60,12 @@ export interface ToolCall {
   function: { name: string; arguments: string };
 }
 
+export type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  /** Parts only for an image, and only to the vision model. */
+  content: string | ContentPart[];
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }
@@ -78,6 +88,8 @@ export interface ChatOptions {
    * minutes of reasoning; an entry plan does. Defaults to medium.
    */
   effort?: 'low' | 'medium';
+  /** Another free model for this request (the vision model); still guarded. */
+  model?: string;
 }
 
 /**
@@ -171,10 +183,12 @@ export function endpointsAreFree(payload: unknown): { free: boolean; reason: str
   return { free: true, reason: `${endpoints.length} endpoint(s), all priced at zero` };
 }
 
-let pricingCheck: { model: string; at: number; free: boolean; reason: string } | null = null;
+/** One passed (or failed) price check per model. */
+const pricingChecks = new Map<string, { at: number; free: boolean; reason: string }>();
 
 async function verifyFree(config: OpenRouterConfig, fetchImpl: typeof fetch): Promise<void> {
-  if (pricingCheck && pricingCheck.model === config.model && Date.now() - pricingCheck.at < PRICING_TTL_MS) {
+  const pricingCheck = pricingChecks.get(config.model);
+  if (pricingCheck && Date.now() - pricingCheck.at < PRICING_TTL_MS) {
     if (!pricingCheck.free) throw new OpenRouterError(`Refused: ${pricingCheck.reason}.`);
     return;
   }
@@ -195,7 +209,7 @@ async function verifyFree(config: OpenRouterConfig, fetchImpl: typeof fetch): Pr
   }
 
   const verdict = endpointsAreFree(payload);
-  pricingCheck = { model: config.model, at: Date.now(), ...verdict };
+  pricingChecks.set(config.model, { at: Date.now(), ...verdict });
   if (!verdict.free) throw new OpenRouterError(`Refused: ${verdict.reason}.`);
 }
 
@@ -248,7 +262,7 @@ export function recordCost(cost: number | null, model: string): boolean {
 /** Test seam: every guard's memory, forgotten. */
 export function resetOpenRouterStateForTests(): void {
   killed = null;
-  pricingCheck = null;
+  pricingChecks.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -349,8 +363,9 @@ export async function* streamChat(
   opts: ChatOptions = {},
   fetchImpl: typeof fetch = fetch,
 ): AsyncGenerator<StreamEvent> {
-  const config = getOpenRouterConfig();
-  if (!config) throw new OpenRouterError('No OpenRouter key configured (OPENROUTER_API_KEY).');
+  const base = getOpenRouterConfig();
+  if (!base) throw new OpenRouterError('No OpenRouter key configured (OPENROUTER_API_KEY).');
+  const config = opts.model ? { ...base, model: opts.model.trim() } : base;
   if (killed) throw new OpenRouterError(killed);
   if (!isFreeModelId(config.model)) {
     throw new OpenRouterError(`Refused: "${config.model}" is not a free model id (it must end in ":free").`);
@@ -478,7 +493,7 @@ async function* streamOnce(
 
         if (chunk.usage) {
           const cost = typeof chunk.usage.cost === 'number' ? chunk.usage.cost : null;
-          recordCost(cost, config.model);
+          recordCost(cost, body.model);
           yield {
             type: 'usage',
             cost,
@@ -500,4 +515,55 @@ async function* streamOnce(
     };
   }
   yield { type: 'finish', reason: finish };
+}
+
+// ---------------------------------------------------------------------------
+// Chart screenshots
+// ---------------------------------------------------------------------------
+
+export function visionModel(): string {
+  return (process.env.OPENROUTER_VISION_MODEL ?? DEFAULT_VISION_MODEL).trim();
+}
+
+const VISION_PROMPT = [
+  'You read trading chart screenshots for a macro analyst who cannot see them. Report ONLY what is visible, as short bullet points:',
+  '- instrument / ticker and timeframe, if labelled; the platform if obvious;',
+  '- the time span on the x-axis and the price range on the y-axis;',
+  '- the latest price shown, and the main move: from what price at what time to what price at what time, with the percent if you can compute it;',
+  '- trend structure (higher highs / lower lows), gaps, wicks or a sharp candle near the end;',
+  '- every drawn line, zone, label or annotation, with its price;',
+  '- indicators shown and their readings.',
+  'Do not predict, do not advise, do not explain causes. If a value is not legible, say "not legible" rather than guess. Under 220 words.',
+].join('\n');
+
+/**
+ * What the attached charts show, in words, from the vision model. Images are
+ * data URLs; the route has already checked their type and size.
+ */
+export async function describeImages(
+  images: string[],
+  question: string,
+  opts: { signal?: AbortSignal; onRetry?: (e: Extract<StreamEvent, { type: 'retry' }>) => void } = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ text: string; model: string; cost: number | null }> {
+  const model = visionModel();
+  const messages: ChatMessage[] = [
+    { role: 'system', content: VISION_PROMPT },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: `The trader's question, for context only: ${question.slice(0, 600)}` },
+        ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+      ],
+    },
+  ];
+  let text = '';
+  let cost: number | null = null;
+  for await (const event of streamChat(messages, { model, effort: 'low', maxTokens: 1200, signal: opts.signal }, fetchImpl)) {
+    if (event.type === 'content') text += event.text;
+    else if (event.type === 'usage' && event.cost !== null) cost = (cost ?? 0) + event.cost;
+    else if (event.type === 'retry') opts.onRetry?.(event);
+  }
+  if (!text.trim()) throw new OpenRouterError('The chart reader returned nothing for the image.');
+  return { text: text.trim(), model, cost };
 }

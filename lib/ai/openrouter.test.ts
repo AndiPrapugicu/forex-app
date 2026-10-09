@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildRequestBody,
   DEFAULT_OPENROUTER_MODEL,
+  DEFAULT_VISION_MODEL,
+  describeImages,
   endpointsAreFree,
   FORBIDDEN_BODY_KEYS,
   isFreeModelId,
@@ -215,5 +217,38 @@ describe('streamChat', () => {
         ? new Response(JSON.stringify(FREE_ENDPOINTS))
         : new Response('rate limited', { status: 429 })) as unknown as typeof fetch;
     await expect(collect(streamChat([], {}, fetchImpl))).rejects.toThrow(/rate limited right now/);
+  });
+
+  it('reads a chart with the vision model, through the same price check', async () => {
+    const urls: string[] = [];
+    let sent: Record<string, unknown> | null = null;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      urls.push(url);
+      if (url.endsWith('/endpoints')) return new Response(JSON.stringify(FREE_ENDPOINTS));
+      sent = JSON.parse(String(init?.body));
+      return sse(['data: {"choices":[{"delta":{"content":"- NQ 5m, 30,870 to 30,220"},"finish_reason":"stop"}]}\n\n', 'data: [DONE]\n\n']);
+    }) as unknown as typeof fetch;
+
+    const out = await describeImages(['data:image/jpeg;base64,AAAA'], 'why did it drop?', {}, fetchImpl);
+    expect(out).toEqual({ text: '- NQ 5m, 30,870 to 30,220', model: DEFAULT_VISION_MODEL, cost: null });
+    expect(urls[0]).toContain(`/models/${DEFAULT_VISION_MODEL}/endpoints`);
+    expect(sent!.model).toBe(DEFAULT_VISION_MODEL);
+    for (const key of FORBIDDEN_BODY_KEYS) expect(sent).not.toHaveProperty(key);
+    const user = (sent!.messages as { role: string; content: unknown }[])[1];
+    expect(user.content).toEqual([
+      { type: 'text', text: "The trader's question, for context only: why did it drop?" },
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } },
+    ]);
+  });
+
+  it('refuses a paid vision model before sending the image', async () => {
+    process.env.OPENROUTER_VISION_MODEL = 'openai/gpt-5.5';
+    let called = false;
+    const fetchImpl = (async () => {
+      called = true;
+      return new Response('{}');
+    }) as unknown as typeof fetch;
+    await expect(describeImages(['data:image/png;base64,AAAA'], 'q', {}, fetchImpl)).rejects.toThrow(/not a free model/);
+    expect(called).toBe(false);
   });
 });

@@ -16,6 +16,7 @@
  * rendered, rather than filled with links to pages that 404.
  */
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -180,10 +181,14 @@ function isActive(pathname: string, href: string): boolean {
   return !ALL_HREFS.some((other) => other.length > href.length && matches(pathname, other));
 }
 
+/** The logo mark (public/logo.png, cut from the same artwork as app/icon.png) and the word mark. */
 function Brand() {
   return (
-    <span className="text-body font-bold tracking-wide">
-      FX<span className="text-[var(--color-bull)]">INTEL</span>
+    <span className="inline-flex items-center gap-2">
+      <Image src="/logo.png" alt="" width={28} height={28} priority className="h-7 w-7 rounded-[22%]" />
+      <span className="text-body font-bold tracking-wide">
+        FX<span className="text-[var(--color-bull)]">INTEL</span>
+      </span>
     </span>
   );
 }

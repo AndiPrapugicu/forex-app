@@ -2,11 +2,13 @@
  * AI Analysis: a fundamental analyst that reads the board, the rates, the
  * calendar, the news and the central banks' own words, and answers in prose.
  *
- * The chat renders immediately. The context cards and the dossier — the exact
- * text the model will read — stream in under Suspense, because building them
- * runs the board pipeline, the news feeds, live search and the central-bank
- * feeds. Every question rebuilds the dossier on the server anyway, so what is
- * shown here is a preview of what the model sees, not a cache of it.
+ * The chat is the page: it renders immediately, first and widest. The context
+ * — what the analyst sees, then the market narrative — sits in a compact column
+ * on the right that stays in view while a long answer scrolls (below the chat
+ * on small screens). Both stream in under Suspense, because building them runs
+ * the board pipeline, the news feeds, live search and the central-bank feeds.
+ * Every question rebuilds the dossier on the server anyway, so what is shown
+ * here is a preview of what the model sees, not a cache of it.
  */
 
 import { Suspense } from 'react';
@@ -79,11 +81,8 @@ export default async function AiAnalysisPage({ searchParams }: { searchParams: P
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_440px] xl:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-          <Suspense fallback={<NarrativeSkeleton />}>
-            <NarrativeSection analysis={analysis} symbol={def.symbol} positions={positions && { error: positions.error, durable: positions.durable }} />
-          </Suspense>
           <AiAnalysisChat
             key={def.symbol}
             symbol={def.symbol}
@@ -94,12 +93,21 @@ export default async function AiAnalysisPage({ searchParams }: { searchParams: P
             unlocked={unlocked}
             hasPosition={mine.length > 0}
           />
+          {positions && (
+            <Suspense fallback={null}>
+              <PositionsSection analysis={analysis} symbol={def.symbol} error={positions.error} durable={positions.durable} />
+            </Suspense>
+          )}
         </div>
-        <div className="min-w-0">
+        {/* Stays in view beside a long answer; scrolls on its own when taller than the screen. */}
+        <aside className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto xl:overscroll-contain">
           <Suspense fallback={<ContextSkeleton />}>
             <ContextCards def={def} analysis={analysis} />
           </Suspense>
-        </div>
+          <Suspense fallback={<NarrativeSkeleton />}>
+            <NarrativeSection analysis={analysis} />
+          </Suspense>
+        </aside>
       </div>
     </div>
   );
@@ -117,43 +125,41 @@ function NarrativeSkeleton() {
 }
 
 /** The deterministic state the analyst restates, or a line saying it could not be built. */
-async function NarrativeSection({
+async function NarrativeSection({ analysis }: { analysis: Promise<AnalysisInputs> }) {
+  const inputs = await analysis;
+  if (!inputs.narrative) {
+    return (
+      <Panel title="Market narrative" padded>
+        <p className="text-micro text-[var(--color-uncertain)]">The narrative engine could not be built on this run; the analyst will answer from the dossier alone.</p>
+      </Panel>
+    );
+  }
+  return <NarrativePanel pair={inputs.narrative.pair} computedAtUtc={inputs.narrative.state.at} compact />;
+}
+
+/** The passphrase holder's position on this symbol, with its thesis check. */
+async function PositionsSection({
   analysis,
   symbol,
-  positions,
+  error,
+  durable,
 }: {
   analysis: Promise<AnalysisInputs>;
   symbol: string;
-  /** Null while locked: then no position block renders at all. */
-  positions: { error: string | null; durable: boolean } | null;
+  error: string | null;
+  durable: boolean;
 }) {
   const inputs = await analysis;
-  const mine = positions ? (
+  return (
     <PositionsPanel
       views={inputs.positions ?? []}
-      error={positions.error}
-      durable={positions.durable}
+      error={error}
+      durable={durable}
       symbols={POSITION_SYMBOLS}
       defaultSymbol={symbol}
       title={`Your ${symbol} position`}
       emptyText={`No open ${symbol} position. Add one and the analyst checks its thesis.`}
     />
-  ) : null;
-  if (!inputs.narrative) {
-    return (
-      <>
-        <Panel title="Market narrative" padded>
-          <p className="text-micro text-[var(--color-uncertain)]">The narrative engine could not be built on this run; the analyst will answer from the dossier alone.</p>
-        </Panel>
-        {mine}
-      </>
-    );
-  }
-  return (
-    <>
-      <NarrativePanel pair={inputs.narrative.pair} computedAtUtc={inputs.narrative.state.at} />
-      {mine}
-    </>
   );
 }
 
@@ -172,13 +178,24 @@ function ContextSkeleton() {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/** One line of the dossier summary: what it is on the left, what it says on the right. */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded border border-[var(--color-border)] px-3 py-2">
-      <p className="text-micro font-semibold tracking-wide text-[var(--color-faint)] uppercase">{title}</p>
-      <div className="mt-1 text-sm text-[var(--color-text)]">{children}</div>
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+      <dt className="pt-px text-micro text-[var(--color-muted)]">{label}</dt>
+      <dd className="min-w-0 text-xs leading-relaxed text-[var(--color-text)]">{children}</dd>
     </div>
   );
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Tue 13 Oct, 06:00 UTC" — or just the day when there is no time. */
+function when(iso: string, withTime = true): string {
+  const d = new Date(iso);
+  const day = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  return withTime ? `${day}, ${iso.slice(11, 16)} UTC` : day;
 }
 
 /**
@@ -212,118 +229,128 @@ async function ContextCards({ def, analysis }: { def: SymbolDefinition; analysis
   const knowledge = readKnowledge(def);
   const s = dossier.summary;
 
+  const rated = s.rates.filter((r) => r.rate !== null);
+
   return (
-    <Panel title="What the analyst sees" subtitle={`Dossier built ${s.generatedAtUtc.slice(11, 16)} UTC · rebuilt for every question`}>
-      <div className="flex flex-col gap-2 px-4 py-4">
-        <Card title="Board">
+    <Panel title="What the analyst sees" subtitle={`The dossier as of ${s.generatedAtUtc.slice(11, 16)} UTC. Every question rebuilds it.`}>
+      <dl className="divide-y divide-[var(--color-border)] px-4">
+        <Row label="Board score">
           {s.board ? (
-            <div className="flex items-center gap-2">
-              <span className="tnum rounded px-2 py-0.5 font-bold" style={heatStyle(s.board.total, { max: VERY_BIAS_CUT })}>
-                {fmtSigned(s.board.total)} · {s.board.bias}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="tnum rounded px-2 py-0.5 text-sm font-bold" style={heatStyle(s.board.total, { max: VERY_BIAS_CUT })}>
+                {fmtSigned(s.board.total)} {s.board.bias}
               </span>
-              <span className="text-micro text-[var(--color-faint)]">of ±{s.board.max}, {s.board.populated} cells</span>
-              <Link href={`/scorecard/${def.symbol}`} className="ml-auto text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]">
-                Scorecard →
+              <span className="text-micro text-[var(--color-faint)]">
+                out of ±{s.board.max}, from {s.board.populated} cells
+              </span>
+              <Link href={`/scorecard/${def.symbol}`} className="ml-auto text-micro text-[var(--color-muted)] underline-offset-2 hover:text-[var(--color-text)] hover:underline">
+                Open scorecard
               </Link>
             </div>
           ) : (
             <span className="text-[var(--color-muted)]">No board row on this run.</span>
           )}
-        </Card>
+        </Row>
 
-        <Card title="Rates">
-          <ul className="space-y-0.5">
+        <Row label="Policy rates">
+          <ul className="space-y-1">
             {s.rates.map((r) => (
-              <li key={r.currency} className="flex flex-wrap gap-x-2">
-                <span className="font-mono text-xs">{r.currency}</span>
-                <span className="tnum">{fmtNum(r.rate, 2, '%')}</span>
-                <span className="text-micro text-[var(--color-faint)]">
+              <li key={r.currency}>
+                <span className="font-semibold">{r.currency}</span> <span className="tnum">{fmtNum(r.rate, 2, '%')}</span>
+                <span className="text-[var(--color-faint)]">
                   {r.next
-                    ? `next ${r.next.dateUtc.slice(0, 10)}${r.next.consensus === null ? ', no consensus yet' : `, consensus ${fmtNum(r.next.consensus, 2, '%')}`}`
+                    ? `, next decision ${when(r.next.dateUtc, false)}${r.next.consensus === null ? '' : `, expected ${fmtNum(r.next.consensus, 2, '%')}`}`
                     : s.decisionCalendar
-                      ? 'no decision on the calendar'
-                      : 'decision calendar unavailable this run'}
+                      ? ', no decision scheduled'
+                      : ', decision calendar unavailable'}
                 </span>
               </li>
             ))}
           </ul>
-          {s.rates.length === 2 && s.rates[0].rate !== null && s.rates[1].rate !== null && (
-            <p className="mt-1 text-micro text-[var(--color-muted)]">
-              Policy gap {s.rates[0].currency} − {s.rates[1].currency}: {fmtSigned(s.rates[0].rate - s.rates[1].rate, 2, 'pp')}
+          {rated.length === 2 && (
+            <p className="mt-1 text-[var(--color-muted)]">
+              {(() => {
+                const [hi, lo] = rated[0].rate! >= rated[1].rate! ? [rated[0], rated[1]] : [rated[1], rated[0]];
+                const gap = hi.rate! - lo.rate!;
+                return gap === 0 ? 'Both pay the same rate' : `${hi.currency} pays ${gap.toFixed(2)}pp more than ${lo.currency}`;
+              })()}
             </p>
           )}
-        </Card>
+        </Row>
 
-        <Card title="Next high-impact event">
+        <Row label="Next release">
           {s.nextEvent ? (
-            <span>
-              {s.nextEvent.currency} {s.nextEvent.name}{' '}
-              <span className="text-micro text-[var(--color-faint)]">{s.nextEvent.dateUtc.slice(0, 16).replace('T', ' ')} UTC</span>
-            </span>
+            <>
+              <span>
+                {s.nextEvent.currency} {s.nextEvent.name}
+              </span>
+              <span className="block text-[var(--color-faint)]">{when(s.nextEvent.dateUtc)}</span>
+            </>
           ) : (
-            <span className="text-[var(--color-muted)]">None in the calendar window.</span>
+            <span className="text-[var(--color-muted)]">Nothing high-impact in the calendar window.</span>
           )}
-        </Card>
+        </Row>
 
-        <Card title="News and official texts">
-          <p>
-            {s.news.clusters} stories in 48h{s.news.newestUtc ? `, newest ${age(s.news.newestUtc, now)}` : ''} · {s.news.searchHits} search hits
-          </p>
-          <ul className="mt-1 space-y-0.5 text-micro text-[var(--color-muted)]">
+        <Row label="News">
+          {s.news.clusters} stories in the last 48 hours{s.news.newestUtc ? `, the newest ${age(s.news.newestUtc, now)}` : ''}, plus {s.news.searchHits} search
+          results
+        </Row>
+
+        <Row label="Central banks">
+          <ul className="space-y-1.5">
             {s.banks.map((b) => (
-              <li key={b.bank}>
-                {b.bank}:{' '}
+              <li key={b.bank} className="min-w-0">
+                <span className="text-[var(--color-muted)]">{b.bank}</span>
                 {b.title ? (
-                  <>
-                    {b.title} <span className="text-[var(--color-faint)]">({b.publishedUtc?.slice(0, 10)})</span>
-                  </>
+                  <span className="block truncate" title={b.title}>
+                    {b.title} <span className="text-[var(--color-faint)]">({b.publishedUtc ? when(b.publishedUtc, false) : 'undated'})</span>
+                  </span>
                 ) : (
-                  <span className="text-[var(--color-uncertain)]">gap — {b.gap}</span>
+                  <span className="block text-[var(--color-uncertain)]">Not readable: {b.gap}</span>
                 )}
               </li>
             ))}
           </ul>
-        </Card>
+        </Row>
 
         {s.gaps.length > 0 && (
-          <Card title="Gaps the analyst will name">
-            <ul className="list-disc space-y-0.5 pl-4 text-micro text-[var(--color-muted)]">
+          <Row label="Missing data">
+            <ul className="space-y-1 text-[var(--color-muted)]">
               {s.gaps.slice(0, 6).map((g) => (
-                <li key={g}>{g.length > 160 ? `${g.slice(0, 160)}…` : g}</li>
+                <li key={g}>{g.length > 140 ? `${g.slice(0, 140)}…` : g}</li>
               ))}
             </ul>
-          </Card>
+          </Row>
         )}
+      </dl>
 
+      <div className="flex flex-col gap-2 border-t border-[var(--color-border)] px-4 py-3">
         {typeof knowledge === 'string' ? (
-          <Card title="Background files">
-            <span className="text-micro text-[var(--color-bear)]">{knowledge}</span>
-          </Card>
+          <p className="text-micro text-[var(--color-bear)]">Background files could not be read: {knowledge}</p>
         ) : (
-          <details className="rounded border border-[var(--color-border)] px-3 py-2">
-            <summary className="cursor-pointer text-micro font-semibold tracking-wide text-[var(--color-faint)] uppercase">
-              Background files ({knowledge.files.length})
+          <details>
+            <summary className="cursor-pointer text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]">
+              Background files the analyst reads ({knowledge.files.length})
             </summary>
             <ul className="mt-2 space-y-0.5 text-micro text-[var(--color-muted)]">
               {knowledge.files.map((f) => (
                 <li key={f.id}>
-                  <span className="font-mono">knowledge/{f.id}.md</span> — {f.title}, as of {f.asOf}
+                  {f.title} <span className="text-[var(--color-faint)]">(checked {f.asOf})</span>
                 </li>
               ))}
               {knowledge.missing.map((m) => (
                 <li key={m} className="text-[var(--color-uncertain)]">
-                  knowledge/{m}.md — not written yet
+                  {m}: not written yet
                 </li>
               ))}
             </ul>
           </details>
         )}
-
-        <details className="rounded border border-[var(--color-border)] px-3 py-2">
-          <summary className="cursor-pointer text-micro font-semibold tracking-wide text-[var(--color-faint)] uppercase">
-            Full dossier (~{Math.round(dossier.text.length / 4 / 100) / 10}k tokens)
+        <details>
+          <summary className="cursor-pointer text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]">
+            The full dossier, as the model reads it (about {Math.round(dossier.text.length / 4 / 100) / 10}k tokens)
           </summary>
-          <pre className="mt-2 max-h-[60vh] overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-[var(--color-muted)]">
+          <pre className="mt-2 max-h-[50vh] overflow-auto rounded bg-[var(--color-surface-2)] p-2 text-[11px] leading-snug whitespace-pre-wrap text-[var(--color-muted)]">
             {dossier.text}
           </pre>
         </details>

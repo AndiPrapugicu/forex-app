@@ -262,7 +262,14 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
 
       <div className="grid grid-cols-1 gap-3 lg:h-[calc(100vh-4.75rem)] lg:grid-cols-12">
         {/* --- Left: the verdict ------------------------------------------ */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:col-span-3">
+        {/*
+          `*:shrink-0` on both side columns: they have a fixed height and scroll,
+          and without it the flex column squeezes its cards to fit instead — the
+          cards clip their own overflow, so the gauge caption, the last breakdown
+          bar and the ends of the right-hand cards were cut off rather than
+          scrolled to.
+        */}
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto *:shrink-0 lg:col-span-3">
           <Panel>
             {/*
               The verdict as a painted banner, the way A1's widget opens: the
@@ -403,11 +410,17 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
 
         {/* --- Centre: the evidence, the tall element --------------------- */}
         <div className="flex min-h-0 flex-col gap-3 overflow-hidden lg:col-span-6">
+          {/*
+            Fills the column and scrolls only the table, so the note under it is
+            always in view. A height of its own (100vh minus a guess at the
+            chrome) overshot the column by 22px and cut the note off.
+          */}
           <Panel
             title="Indicator detail"
             subtitle={`Every slot, and the release it resolved to${matrix.cotReportDate ? ` · COT as of ${matrix.cotReportDate}` : ''}`}
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="max-h-[calc(100vh-13rem)] overflow-auto">
+            <div className="max-h-[70vh] overflow-auto lg:max-h-none lg:min-h-0 lg:flex-1">
               <table className="w-full text-left text-micro">
                 {/*
                   NO GLOBAL HEADER ROW, because A1 has none: every section states
@@ -657,7 +670,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
                 </tbody>
               </table>
             </div>
-            <p className="border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
+            <p className="shrink-0 border-t border-[var(--color-border)] px-3 py-2 text-micro leading-relaxed text-[var(--color-faint)]">
               The Forecast column is what the cell was actually scored against — for PMI that is the
               previous print, not the consensus, which is A1&rsquo;s rule. Surprise is actual minus that
               number, coloured by what it MEANS rather than by its sign, so a rise in unemployment reads
@@ -672,7 +685,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ symb
         </div>
 
         {/* --- Right: context ------------------------------------------- */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:col-span-3">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto *:shrink-0 lg:col-span-3">
           {/* Sentiment detail, where a single contract backs the symbol. */}
           {(cotDetail || crowdDetail) && (
             <Panel title="Positioning detail" subtitle={def.cotContract}>

@@ -40,13 +40,13 @@ export function AiSymbolPicker({ symbol, options }: { symbol: string; options: S
   const scored = options.some((o) => o.score !== undefined);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       {scored && (
         <select
           value={filter}
           onChange={(e) => choose(e.target.value as Filter)}
           aria-label="Filter symbols by bias"
-          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-1 text-xs outline-none hover:border-[var(--color-border-bright)]"
+          className="hidden rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-1 text-xs outline-none hover:border-[var(--color-border-bright)] sm:block"
         >
           <option value="all">All ({options.length})</option>
           <option value="bullish">Bullish only ({count('bullish')})</option>
@@ -58,7 +58,7 @@ export function AiSymbolPicker({ symbol, options }: { symbol: string; options: S
         symbol={symbol}
         options={filterByBias(options, filter, symbol)}
         hrefTemplate="/ai?symbol={symbol}"
-        className="py-1 text-xs"
+        className="min-w-0 max-w-full py-1 text-xs"
       />
     </div>
   );

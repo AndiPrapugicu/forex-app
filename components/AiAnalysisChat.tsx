@@ -15,10 +15,27 @@
  * Chart screenshots can be attached (button, paste or drop). They are shrunk
  * in the browser before sending, read by a free vision model on the server, and
  * never stored: the thread keeps only what the chart reader saw, in words.
+ *
+ * Laid out as a chat app: a top bar, then either a centred greeting with the
+ * composer and the suggestions (an empty thread), or the conversation in a
+ * reading column with the composer pinned under it. It fills whatever height
+ * `AiWorkspace` gives it and scrolls only the conversation.
  */
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import { useSidePanel } from '@/components/AiWorkspace';
 import { Markdown } from '@/components/Markdown';
 import { Panel } from '@/components/ui';
 
@@ -64,13 +81,13 @@ interface Turn {
  * Each carries its answer kind; free text is routed on the server. Answers are
  * short by default; "Full fundamental read" is the long template.
  */
-const QUICK_PROMPTS: { label: string; text: string; mode: Mode; needsPosition?: boolean }[] = [
-  { label: 'What just moved?', mode: 'reaction', text: 'What just moved in this market over the last few hours, and why? Measure it across stocks, yields, the dollar, havens and oil, and time it against the headlines.' },
-  { label: 'Full fundamental read', mode: 'full', text: 'Give me the full fundamental analysis: rates and policy, macro momentum, news, cross-asset drivers, positioning, and scenarios with catalysts.' },
-  { label: 'What changed in 24h', mode: 'brief', text: 'What has changed in the last 24 hours for this market — data, central-bank communication and headlines — and does it move the state?' },
-  { label: 'Where to enter, given the bias', mode: 'decision', text: 'Given the current bias, where would I look to enter, under what fundamental conditions, and what invalidates the idea?' },
-  { label: 'What would flip this', mode: 'decision', text: 'What would flip this view? Name the catalysts on the calendar and the thresholds that matter.' },
-  { label: 'Is my thesis intact?', mode: 'decision', needsPosition: true, text: 'I hold the open position in the dossier. Check my thesis point by point against the current state: is it intact, what is eroding it, and what would make me close?' },
+const QUICK_PROMPTS: { label: string; hint: string; text: string; mode: Mode; needsPosition?: boolean }[] = [
+  { label: 'What just moved?', hint: 'The last few hours, timed against the headlines', mode: 'reaction', text: 'What just moved in this market over the last few hours, and why? Measure it across stocks, yields, the dollar, havens and oil, and time it against the headlines.' },
+  { label: 'Full fundamental read', hint: 'Rates, macro, news, positioning and scenarios', mode: 'full', text: 'Give me the full fundamental analysis: rates and policy, macro momentum, news, cross-asset drivers, positioning, and scenarios with catalysts.' },
+  { label: 'What changed in 24h', hint: 'Data, central banks and headlines since yesterday', mode: 'brief', text: 'What has changed in the last 24 hours for this market — data, central-bank communication and headlines — and does it move the state?' },
+  { label: 'Where to enter, given the bias', hint: 'Conditions, and what would invalidate the idea', mode: 'decision', text: 'Given the current bias, where would I look to enter, under what fundamental conditions, and what invalidates the idea?' },
+  { label: 'What would flip this', hint: 'Catalysts on the calendar and the thresholds', mode: 'decision', text: 'What would flip this view? Name the catalysts on the calendar and the thresholds that matter.' },
+  { label: 'Is my thesis intact?', hint: 'Your open position, point by point', mode: 'decision', needsPosition: true, text: 'I hold the open position in the dossier. Check my thesis point by point against the current state: is it intact, what is eroding it, and what would make me close?' },
 ];
 
 /** One click under an answer: the follow-ups a trader asks most. */
@@ -143,6 +160,7 @@ export function AiAnalysisChat({
   openRouterConfigured,
   unlocked: initiallyUnlocked,
   hasPosition = false,
+  picker,
 }: {
   symbol: string;
   label: string;
@@ -152,6 +170,8 @@ export function AiAnalysisChat({
   unlocked: boolean;
   /** An open position on this symbol: offers "Is my thesis intact?". */
   hasPosition?: boolean;
+  /** The symbol picker, drawn in the top bar. */
+  picker?: ReactNode;
 }) {
   const [unlocked, setUnlocked] = useState(initiallyUnlocked);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -166,6 +186,9 @@ export function AiAnalysisChat({
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const side = useSidePanel();
 
   // A new symbol is a new thread. Loaded after mount so the server render and
   // the first client render agree.
@@ -185,6 +208,21 @@ export function AiAnalysisChat({
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [turns.length]);
+
+  // Follow a streaming answer, unless the reader has scrolled up to read.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !busy) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
+  }, [turns, busy]);
+
+  // The composer grows with what is typed, up to about eight lines.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 208)}px`;
+  }, [input]);
 
   const addFiles = useCallback(
     async (files: File[]) => {
@@ -348,222 +386,324 @@ export function AiAnalysisChat({
     setUnlocked(false);
   };
 
+  const topBar = (
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-2 md:px-4">
+      <Link
+        href="/"
+        title="Back to the board"
+        className="flex h-9 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
+      >
+        <BarIcon path="M15 6l-6 6 6 6" />
+        <span className="hidden text-body font-bold tracking-wide text-[var(--color-text)] sm:inline">
+          FX<span className="text-[var(--color-bull)]">INTEL</span>
+        </span>
+        <span className="sr-only sm:hidden">Back to the board</span>
+      </Link>
+      <span className="h-5 w-px shrink-0 bg-[var(--color-border)]" aria-hidden />
+      <div className="min-w-0 flex-1">{picker}</div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {unlocked && turns.length > 0 && !busy && <BarButton onClick={clear} label="New chat" path="M12 5v14M5 12h14" />}
+        {unlocked && accessConfigured && openRouterConfigured && (
+          <BarButton onClick={() => void lock()} label="Lock" path="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" />
+        )}
+        {side && (
+          <BarButton
+            onClick={side.toggle}
+            label="Context"
+            pressed={side.open}
+            path="M4 4h16v16H4zM15 4v16"
+          />
+        )}
+      </div>
+    </header>
+  );
+
   if (!accessConfigured || !openRouterConfigured) {
     return (
-      <Panel title="Analyst" padded>
-        <p className="text-sm text-[var(--color-muted)]">AI Analysis is switched off on this server.</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--color-faint)]">
-          {!accessConfigured && <li>Set <code>AI_ACCESS_KEY</code> (the passphrase that unlocks this page).</li>}
-          {!openRouterConfigured && <li>Set <code>OPENROUTER_API_KEY</code> (the free Nemotron model is used by default).</li>}
-          <li>Both go in <code>.env.local</code> locally and in the Vercel project&apos;s environment variables for production.</li>
-        </ul>
-      </Panel>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {topBar}
+        <div className="flex flex-1 items-center justify-center overflow-y-auto p-4">
+          <div className="w-full max-w-md">
+            <Panel title="Analyst" padded>
+              <p className="text-sm text-[var(--color-muted)]">AI Analysis is switched off on this server.</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-[var(--color-faint)]">
+                {!accessConfigured && <li>Set <code>AI_ACCESS_KEY</code> (the passphrase that unlocks this page).</li>}
+                {!openRouterConfigured && <li>Set <code>OPENROUTER_API_KEY</code> (the free Nemotron model is used by default).</li>}
+                <li>Both go in <code>.env.local</code> locally and in the Vercel project&apos;s environment variables for production.</li>
+              </ul>
+            </Panel>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  if (!unlocked) return <Unlock onUnlocked={() => setUnlocked(true)} />;
-
-  return (
-    <Panel
-      title={`Ask about ${label}`}
-      subtitle="Fundamentals first. Every number comes from the dossier, rebuilt for each question."
-      action={
-        <div className="flex gap-2">
-          {turns.length > 0 && !busy && (
-            <button type="button" onClick={clear} className="rounded border border-[var(--color-border)] px-2 py-1 text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]">
-              Clear
-            </button>
-          )}
-          <button type="button" onClick={lock} className="rounded border border-[var(--color-border)] px-2 py-1 text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]">
-            Lock
-          </button>
+  if (!unlocked) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {topBar}
+        <div className="flex flex-1 items-center justify-center overflow-y-auto p-4">
+          <div className="w-full max-w-md">
+            <Unlock onUnlocked={() => setUnlocked(true)} />
+          </div>
         </div>
-      }
-    >
-      <div className="flex flex-col gap-4 px-4 py-4">
-        {turns.length === 0 && (
-          <p className="text-xs text-[var(--color-faint)]">
-            Start with a quick prompt or ask your own question, in English or Romanian. One question costs one or two requests of the free model&apos;s daily allowance.
-          </p>
-        )}
+      </div>
+    );
+  }
 
-        {turns.map((t, k) =>
-          t.role === 'user' ? (
-            <div key={k} className="flex flex-col items-end gap-1.5 self-end md:max-w-[80%]">
-              {t.images && t.images.length > 0 && (
-                <div className="flex flex-wrap justify-end gap-2">
-                  {t.images.map((src, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise
-                    <img key={i} src={src} alt={`Attached chart ${i + 1}`} className="max-h-40 rounded border border-[var(--color-border)] object-contain" />
-                  ))}
-                </div>
-              )}
-              {!t.images?.length && t.imageCount ? (
-                <span className="text-micro text-[var(--color-faint)]">{t.imageCount} chart{t.imageCount > 1 ? 's' : ''} attached (not kept after reload)</span>
-              ) : null}
-              <div className="rounded-[var(--radius-card)] bg-[var(--color-surface-2)] px-3 py-2 text-sm whitespace-pre-wrap text-[var(--color-text)]">{t.content}</div>
-              {t.understood && <span className="text-micro text-[var(--color-faint)]">Read as: {t.understood}</span>}
-              {t.vision && (
-                <details className="w-full rounded border border-[var(--color-border)] px-3 py-1.5 text-left">
-                  <summary className="cursor-pointer text-micro text-[var(--color-muted)]">What the chart reader saw</summary>
-                  <div className="mt-1 text-xs">
-                    <Markdown source={t.vision} />
-                  </div>
-                </details>
-              )}
-            </div>
-          ) : (
-            <div key={k} className="min-w-0">
-              {t.content && <Markdown source={t.content} />}
-              {busy && k === turns.length - 1 && (
-                <p className="mt-2 flex items-center gap-2 text-micro text-[var(--color-muted)]" aria-live="polite">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-bull)]" aria-hidden />
-                  {thinking ? 'Thinking' : (status ?? 'Writing')}… {elapsed}s
-                </p>
-              )}
-              {t.error && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-[var(--color-bear)]">{t.error}</p>
-                  {!busy && k === turns.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={retry}
-                      className="rounded border border-[var(--color-border)] px-2 py-0.5 text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]"
-                    >
-                      Retry
-                    </button>
-                  )}
-                </div>
-              )}
-              {t.meta && (
-                <p className="mt-2 text-micro text-[var(--color-faint)]">
-                  {t.meta.model} · {t.meta.mode && MODE_LABEL[t.meta.mode] ? `${MODE_LABEL[t.meta.mode]} · ` : ''}
-                  {t.meta.requests} request{t.meta.requests === 1 ? '' : 's'} · {t.meta.seconds}s ·{' '}
-                  {t.meta.cost === null ? 'cost not reported' : t.meta.cost === 0 ? 'free' : `cost ${t.meta.cost}`}
-                </p>
-              )}
-              {t.meta && !busy && k === turns.length - 1 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {FOLLOW_UPS.filter((f) => f.mode !== t.meta?.mode).map((f) => (
-                    <button
-                      key={f.label}
-                      type="button"
-                      onClick={() => void ask(f.text, undefined, f.mode)}
-                      className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-0.5 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)]"
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ),
-        )}
-        <div ref={endRef} />
-
-        <div className="flex flex-wrap gap-2">
-          {QUICK_PROMPTS.filter((p) => !p.needsPosition || hasPosition).map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              disabled={busy}
-              onClick={() => void ask(p.text, undefined, p.mode)}
-              className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-3 py-1 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)] disabled:opacity-40"
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={onSubmit}>
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            className={`rounded-[var(--radius-card)] border bg-[var(--color-surface)] transition-colors focus-within:border-[var(--color-border-bright)] ${
-              dragging ? 'border-[var(--color-bull)]' : 'border-[var(--color-border)]'
-            }`}
-          >
-            {attached.length > 0 && (
-              <div className="flex flex-wrap gap-2 px-3 pt-3">
-                {attached.map((src, i) => (
-                  <div key={i} className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL preview */}
-                    <img src={src} alt={`Chart ${i + 1} to send`} className="h-16 w-24 rounded border border-[var(--color-border)] object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setAttached((prev) => prev.filter((_, j) => j !== i))}
-                      aria-label={`Remove chart ${i + 1}`}
-                      className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-micro text-[var(--color-text)]"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              rows={3}
-              placeholder={`Ask about ${label}, paste a news link, or drop a chart screenshot here`}
-              className="block w-full resize-y bg-transparent px-3 py-2.5 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-faint)]"
-              aria-label="Your question"
-            />
-            <div className="flex items-center justify-between gap-2 border-t border-[var(--color-border)] px-2 py-1.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    void addFiles([...(e.target.files ?? [])]);
-                    e.target.value = '';
-                  }}
-                />
+  const composer = (
+    <form onSubmit={onSubmit}>
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={`rounded-[20px] border bg-[var(--color-surface)] shadow-[0_10px_32px_rgba(0,0,0,0.35)] transition-colors focus-within:border-[var(--color-border-bright)] ${
+          dragging ? 'border-[var(--color-bull)]' : 'border-[var(--color-border)]'
+        }`}
+      >
+        {attached.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3.5">
+            {attached.map((src, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL preview */}
+                <img src={src} alt={`Chart ${i + 1} to send`} className="h-16 w-24 rounded-lg border border-[var(--color-border)] object-cover" />
                 <button
                   type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={busy || attached.length >= MAX_IMAGES}
-                  className="flex items-center gap-1.5 rounded px-2 py-1 text-micro text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] disabled:opacity-40"
-                  aria-label="Attach a chart screenshot"
+                  onClick={() => setAttached((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label={`Remove chart ${i + 1}`}
+                  className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-micro text-[var(--color-text)]"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                    <path d="M21 12.5 12.7 20.8a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Chart
+                  ×
                 </button>
-                <span className="hidden truncate text-micro text-[var(--color-faint)] sm:inline">Enter to send · Shift+Enter for a new line · paste or drop up to {MAX_IMAGES} charts</span>
               </div>
-              {busy ? (
-                <button type="button" onClick={() => abortRef.current?.abort()} className="rounded border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)]">
-                  Stop
-                </button>
-              ) : (
+            ))}
+          </div>
+        )}
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          rows={1}
+          placeholder={`Ask about ${label}, paste a news link, or drop a chart`}
+          className="block max-h-52 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-sm leading-relaxed text-[var(--color-text)] outline-none placeholder:text-[var(--color-faint)]"
+          aria-label="Your question"
+        />
+        <div className="flex items-center justify-between gap-2 px-2.5 pt-1 pb-2.5">
+          <div className="flex min-w-0 items-center gap-1">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFiles([...(e.target.files ?? [])]);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy || attached.length >= MAX_IMAGES}
+              className="flex h-8 items-center gap-1.5 rounded-full px-2.5 text-micro text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] disabled:opacity-40"
+              aria-label="Attach a chart screenshot"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                <path d="M21 12.5 12.7 20.8a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Chart
+            </button>
+            <span className="hidden truncate text-micro text-[var(--color-faint)] md:inline">
+              Enter to send · Shift+Enter for a new line · up to {MAX_IMAGES} charts
+            </span>
+          </div>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => abortRef.current?.abort()}
+              aria-label="Stop the answer"
+              title="Stop"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-text)] text-[var(--color-bg)]"
+            >
+              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              aria-label="Send"
+              title="Send"
+              disabled={!input.trim() && attached.length === 0}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-bull)] text-[var(--color-bg)] transition-colors disabled:bg-[var(--color-surface-2)] disabled:text-[var(--color-faint)]"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+                <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+      {attachError && <p className="mt-1.5 px-2 text-micro text-[var(--color-bear)]">{attachError}</p>}
+      <p className="mt-2 text-center text-micro text-[var(--color-faint)]">
+        {model} · charts read by a free vision model · analysis, not financial advice
+      </p>
+    </form>
+  );
+
+  if (turns.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {topBar}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-10">
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text)] md:text-[1.75rem]">
+              What do you want to know about {label}?
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-muted)]">
+              Rates, data, news and positioning, read from a dossier rebuilt for every question. Ask in English or Romanian. Each
+              question uses one or two requests of the free model&apos;s daily allowance.
+            </p>
+            <div className="mt-6">{composer}</div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              {QUICK_PROMPTS.filter((p) => !p.needsPosition || hasPosition).map((p) => (
                 <button
-                  type="submit"
-                  disabled={!input.trim() && attached.length === 0}
-                  className="rounded bg-[var(--color-bull)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  key={p.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void ask(p.text, undefined, p.mode)}
+                  className="rounded-xl border border-[var(--color-border)] px-3.5 py-2.5 text-left transition-colors hover:border-[var(--color-border-bright)] hover:bg-[var(--color-surface)] disabled:opacity-40"
                 >
-                  Ask
+                  <span className="block text-sm font-medium text-[var(--color-text)]">{p.label}</span>
+                  <span className="mt-0.5 block text-micro text-[var(--color-faint)]">{p.hint}</span>
                 </button>
-              )}
+              ))}
             </div>
           </div>
-          {attachError && <p className="mt-1.5 text-micro text-[var(--color-bear)]">{attachError}</p>}
-          <p className="mt-1.5 text-micro text-[var(--color-faint)]">
-            {model} · charts read by a free vision model · free via OpenRouter · analysis, not financial advice
-          </p>
-        </form>
+        </div>
       </div>
-    </Panel>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {topBar}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-6">
+          {turns.map((t, k) =>
+            t.role === 'user' ? (
+              <div key={k} className="flex flex-col items-end gap-1.5">
+                {t.images && t.images.length > 0 && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {t.images.map((src, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise
+                      <img key={i} src={src} alt={`Attached chart ${i + 1}`} className="max-h-48 rounded-xl border border-[var(--color-border)] object-contain" />
+                    ))}
+                  </div>
+                )}
+                {!t.images?.length && t.imageCount ? (
+                  <span className="text-micro text-[var(--color-faint)]">
+                    {t.imageCount} chart{t.imageCount > 1 ? 's' : ''} attached (not kept after reload)
+                  </span>
+                ) : null}
+                <div className="max-w-[85%] rounded-[20px] rounded-br-md bg-[var(--color-surface-2)] px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-[var(--color-text)]">
+                  {t.content}
+                </div>
+                {t.understood && <span className="max-w-[85%] text-right text-micro text-[var(--color-faint)]">Read as: {t.understood}</span>}
+                {t.vision && (
+                  <details className="w-full max-w-[85%] rounded-xl border border-[var(--color-border)] px-3 py-1.5 text-left">
+                    <summary className="cursor-pointer text-micro text-[var(--color-muted)]">What the chart reader saw</summary>
+                    <div className="mt-1 text-xs">
+                      <Markdown source={t.vision} />
+                    </div>
+                  </details>
+                )}
+              </div>
+            ) : (
+              <div key={k} className="min-w-0">
+                {t.content && <Markdown source={t.content} />}
+                {busy && k === turns.length - 1 && (
+                  <p className="mt-2 flex items-center gap-2 text-micro text-[var(--color-muted)]" aria-live="polite">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-bull)]" aria-hidden />
+                    {thinking ? 'Thinking' : (status ?? 'Writing')}… {elapsed}s
+                  </p>
+                )}
+                {t.error && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-[var(--color-bear)]">{t.error}</p>
+                    {!busy && k === turns.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={retry}
+                        className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 text-micro text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
+                {t.meta && (
+                  <p className="mt-2 text-micro text-[var(--color-faint)]">
+                    {t.meta.model} · {t.meta.mode && MODE_LABEL[t.meta.mode] ? `${MODE_LABEL[t.meta.mode]} · ` : ''}
+                    {t.meta.requests} request{t.meta.requests === 1 ? '' : 's'} · {t.meta.seconds}s ·{' '}
+                    {t.meta.cost === null ? 'cost not reported' : t.meta.cost === 0 ? 'free' : `cost ${t.meta.cost}`}
+                  </p>
+                )}
+                {t.meta && !busy && k === turns.length - 1 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {FOLLOW_UPS.filter((f) => f.mode !== t.meta?.mode).map((f) => (
+                      <button
+                        key={f.label}
+                        type="button"
+                        onClick={() => void ask(f.text, undefined, f.mode)}
+                        className="rounded-full border border-[var(--color-border)] px-3 py-1 text-micro text-[var(--color-muted)] transition-colors hover:border-[var(--color-border-bright)] hover:text-[var(--color-text)]"
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ),
+          )}
+          <div ref={endRef} />
+        </div>
+      </div>
+      {/* Same column as the conversation above it, so the two edges line up. */}
+      <div className="shrink-0 pt-1 pb-3">
+        <div className="mx-auto w-full max-w-3xl px-4">{composer}</div>
+      </div>
+    </div>
+  );
+}
+
+function BarIcon({ path }: { path: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path d={path} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** A top-bar action: an icon, with its label from md up. */
+function BarButton({ onClick, label, path, pressed }: { onClick: () => void; label: string; path: string; pressed?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={pressed}
+      className={`flex h-9 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-xs transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] ${
+        pressed ? 'text-[var(--color-text)]' : 'text-[var(--color-muted)]'
+      }`}
+    >
+      <BarIcon path={path} />
+      <span className="hidden md:inline">{label}</span>
+    </button>
   );
 }
 

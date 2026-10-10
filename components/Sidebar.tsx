@@ -171,6 +171,13 @@ const ALL_HREFS = GROUPS.flatMap((g) => g.items.map((i) => i.href));
 
 const matches = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+/**
+ * Pages that fill the screen themselves and carry their own way back, so the
+ * navigation steps aside on every breakpoint. AI Analysis is a chat: the
+ * conversation gets the whole width, the way a chat app gives it.
+ */
+const FOCUS_ROUTES = ['/ai'];
+
 function isActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
   if (href === '/scorecard') return pathname.startsWith('/scorecard') || pathname.startsWith('/history');
@@ -270,6 +277,8 @@ export function Sidebar() {
       window.removeEventListener('keydown', onKey);
     };
   }, [drawerOpen]);
+
+  if (FOCUS_ROUTES.some((route) => matches(pathname, route))) return null;
 
   return (
     <>

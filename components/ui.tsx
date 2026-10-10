@@ -249,6 +249,7 @@ export function Panel({
   children,
   className = '',
   padded = false,
+  flat = false,
 }: {
   title?: string;
   subtitle?: string;
@@ -260,15 +261,35 @@ export function Panel({
    * children and a default would double-pad all of them.
    */
   padded?: boolean;
+  /**
+   * No card: no border, no fill, a sentence-case heading. For a panel that sits
+   * inside a column which is already a surface, like the /ai side column, where
+   * a card per section reads as a stack of boxes rather than one panel.
+   */
+  flat?: boolean;
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] ${className}`}
+      className={
+        flat
+          ? className
+          : `overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] ${className}`
+      }
     >
       {title && (
-        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border)] px-4 py-3">
+        <header
+          className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${
+            flat ? 'px-4 pt-4 pb-1' : 'border-b border-[var(--color-border)] px-4 py-3'
+          }`}
+        >
           <div className="min-w-0">
-            <h2 className="text-small font-semibold tracking-wide text-[var(--color-text)] uppercase">
+            <h2
+              className={
+                flat
+                  ? 'text-sm font-semibold text-[var(--color-text)]'
+                  : 'text-small font-semibold tracking-wide text-[var(--color-text)] uppercase'
+              }
+            >
               {title}
             </h2>
             {subtitle && <p className="mt-0.5 text-caption text-[var(--color-faint)]">{subtitle}</p>}

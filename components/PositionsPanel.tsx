@@ -198,7 +198,7 @@ function AddPosition({ symbols, defaultSymbol }: { symbols: { symbol: string; la
   );
 
   return (
-    <form onSubmit={submit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <form onSubmit={submit} className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
       {field(
         'Symbol',
         <select value={form.symbol} onChange={set('symbol')} className={INPUT}>
@@ -222,13 +222,13 @@ function AddPosition({ symbols, defaultSymbol }: { symbols: { symbol: string; la
       {field('Take profit', <input value={form.takeProfit} onChange={set('takeProfit')} inputMode="decimal" className={INPUT} />)}
       {field('Size', <input value={form.size} onChange={set('size')} maxLength={60} placeholder="0.5 lots" className={INPUT} />)}
       {field('Risk %', <input value={form.riskPct} onChange={set('riskPct')} inputMode="decimal" placeholder="1" className={INPUT} />)}
-      <div className="col-span-2 sm:col-span-4">
+      <div className="col-span-2 @xl:col-span-4">
         {field(
           'Thesis, in your words (the analyst checks it point by point)',
           <textarea value={form.thesis} onChange={set('thesis')} maxLength={1000} rows={3} className={`${INPUT} resize-y`} />,
         )}
       </div>
-      <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-4">
+      <div className="col-span-2 flex flex-wrap items-center gap-3 @xl:col-span-4">
         <button type="submit" disabled={busy || !form.entryPrice} className="rounded bg-[var(--color-bull)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
           {busy ? 'Saving…' : 'Add position'}
         </button>
@@ -246,6 +246,7 @@ export function PositionsPanel({
   defaultSymbol,
   title = 'Your positions',
   emptyText = 'No open positions. Add one and the thesis check runs on every page load and every ingest run.',
+  flat = false,
 }: {
   views: PositionView[];
   error: string | null;
@@ -254,9 +255,12 @@ export function PositionsPanel({
   defaultSymbol?: string;
   title?: string;
   emptyText?: string;
+  /** Borderless, for a column that is already a surface (the /ai side column). */
+  flat?: boolean;
 }) {
   return (
     <Panel
+      flat={flat}
       title={title}
       subtitle="Private to the passphrase holder · RED on structure, board band, tactical narrative or a fired flip"
     >
@@ -279,7 +283,7 @@ export function PositionsPanel({
       {!error && (
         <details className="border-t border-[var(--color-border)]">
           <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold text-[var(--color-muted)]">Add a position</summary>
-          <div className="px-4 pb-4">
+          <div className="@container px-4 pb-4">
             <AddPosition symbols={symbols} defaultSymbol={defaultSymbol} />
           </div>
         </details>

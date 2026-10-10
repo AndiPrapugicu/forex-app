@@ -2,13 +2,14 @@
  * AI Analysis: a fundamental analyst that reads the board, the rates, the
  * calendar, the news and the central banks' own words, and answers in prose.
  *
- * The chat is the page: it renders immediately, first and widest. The context
- * — what the analyst sees, then the market narrative — sits in a compact column
- * on the right that stays in view while a long answer scrolls (below the chat
- * on small screens). Both stream in under Suspense, because building them runs
- * the board pipeline, the news feeds, live search and the central-bank feeds.
- * Every question rebuilds the dossier on the server anyway, so what is shown
- * here is a preview of what the model sees, not a cache of it.
+ * Laid out as a chat app, on the whole screen: the app's navigation steps aside
+ * (see FOCUS_ROUTES in Sidebar.tsx) and the top bar leads back to the board.
+ * The chat renders immediately. The context — your position, what the analyst
+ * sees, the market narrative — sits in a side column on the right (a drawer on
+ * narrower screens; see AiWorkspace), streaming in under Suspense because
+ * building it runs the board pipeline, the news feeds, live search and the
+ * central-bank feeds. Every question rebuilds the dossier on the server anyway,
+ * so what is shown there is a preview of what the model sees, not a cache of it.
  */
 
 import { Suspense } from 'react';
@@ -17,7 +18,7 @@ import { cookies } from 'next/headers';
 import { ALL_SYMBOLS, findSymbol } from '@/config/symbols.config';
 import { AiAnalysisChat } from '@/components/AiAnalysisChat';
 import { AiSymbolPicker } from '@/components/AiSymbolPicker';
-import { PageHeader } from '@/components/primitives';
+import { AiWorkspace } from '@/components/AiWorkspace';
 import { SymbolSelect, type SwitcherOption } from '@/components/SymbolSelect';
 import { Panel, Skeleton } from '@/components/ui';
 import { DEFAULT_OPENROUTER_MODEL, getOpenRouterConfig } from '@/lib/ai/openrouter';
@@ -59,63 +60,56 @@ export default async function AiAnalysisPage({ searchParams }: { searchParams: P
   const analysis = loadAnalysisInputs(def, new Date(), pipeline, { positions: mine });
 
   return (
-    <div className="mx-auto w-full max-w-[1800px] px-3 py-4 md:px-6 md:py-6">
-      <PageHeader
-        title="AI Analysis"
-        description="A macro analyst on top of the board: rate differentials, policy, data surprises, news and positioning, in words."
-        info={
-          <>
-            Each question rebuilds a dossier from the board, the central-bank decision calendar, the economic calendar,
-            eight RSS feeds, live Google News searches, the banks&apos; own feeds and cross-asset prices, and sends it with
-            background files written from official sources. The model may cite only numbers from the dossier. It runs on
-            OpenRouter&apos;s free Nemotron model, and the server refuses any model that is not priced at zero. Nothing it
-            writes reaches a score.
-          </>
-        }
-        actions={
-          <Suspense
-            fallback={<SymbolSelect symbol={def.symbol} options={switcherOptions} hrefTemplate="/ai?symbol={symbol}" className="py-1 text-xs" />}
-          >
-            <ScoredPicker symbol={def.symbol} pipeline={pipeline} />
-          </Suspense>
-        }
-      />
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_440px] xl:items-start">
-        <div className="flex min-w-0 flex-col gap-4">
-          <AiAnalysisChat
-            key={def.symbol}
-            symbol={def.symbol}
-            label={def.label}
-            model={openRouter?.model ?? DEFAULT_OPENROUTER_MODEL}
-            accessConfigured={accessConfigured}
-            openRouterConfigured={openRouter !== null}
-            unlocked={unlocked}
-            hasPosition={mine.length > 0}
-          />
+    <AiWorkspace
+      side={
+        <>
           {positions && (
             <Suspense fallback={null}>
               <PositionsSection analysis={analysis} symbol={def.symbol} error={positions.error} durable={positions.durable} />
             </Suspense>
           )}
-        </div>
-        {/* Stays in view beside a long answer; scrolls on its own when taller than the screen. */}
-        <aside className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto xl:overscroll-contain">
           <Suspense fallback={<ContextSkeleton />}>
             <ContextCards def={def} analysis={analysis} />
           </Suspense>
           <Suspense fallback={<NarrativeSkeleton />}>
             <NarrativeSection analysis={analysis} />
           </Suspense>
-        </aside>
-      </div>
-    </div>
+          <section className="px-4 py-4">
+            <h2 className="text-sm font-semibold text-[var(--color-text)]">How it works</h2>
+            <p className="mt-1.5 text-micro leading-relaxed text-[var(--color-faint)]">
+              Each question rebuilds a dossier from the board, the central-bank decision calendar, the economic calendar, eight RSS
+              feeds, live Google News searches, the banks&apos; own feeds and cross-asset prices, and sends it with background files
+              written from official sources. The model may cite only numbers from the dossier. It runs on OpenRouter&apos;s free
+              Nemotron model, and the server refuses any model that is not priced at zero. Nothing it writes reaches a score.
+            </p>
+          </section>
+        </>
+      }
+    >
+      <AiAnalysisChat
+        key={def.symbol}
+        symbol={def.symbol}
+        label={def.label}
+        model={openRouter?.model ?? DEFAULT_OPENROUTER_MODEL}
+        accessConfigured={accessConfigured}
+        openRouterConfigured={openRouter !== null}
+        unlocked={unlocked}
+        hasPosition={mine.length > 0}
+        picker={
+          <Suspense
+            fallback={<SymbolSelect symbol={def.symbol} options={switcherOptions} hrefTemplate="/ai?symbol={symbol}" className="min-w-0 max-w-full py-1 text-xs" />}
+          >
+            <ScoredPicker symbol={def.symbol} pipeline={pipeline} />
+          </Suspense>
+        }
+      />
+    </AiWorkspace>
   );
 }
 
 function NarrativeSkeleton() {
   return (
-    <Panel title="Market narrative" subtitle="Reading the week…" padded>
+    <Panel flat title="Market narrative" subtitle="Reading the week…" padded>
       <div className="flex flex-col gap-3">
         <Skeleton className="h-10" />
         <Skeleton className="h-24" />
@@ -129,12 +123,12 @@ async function NarrativeSection({ analysis }: { analysis: Promise<AnalysisInputs
   const inputs = await analysis;
   if (!inputs.narrative) {
     return (
-      <Panel title="Market narrative" padded>
+      <Panel flat title="Market narrative" padded>
         <p className="text-micro text-[var(--color-uncertain)]">The narrative engine could not be built on this run; the analyst will answer from the dossier alone.</p>
       </Panel>
     );
   }
-  return <NarrativePanel pair={inputs.narrative.pair} computedAtUtc={inputs.narrative.state.at} compact />;
+  return <NarrativePanel pair={inputs.narrative.pair} computedAtUtc={inputs.narrative.state.at} compact flat />;
 }
 
 /** The passphrase holder's position on this symbol, with its thesis check. */
@@ -159,6 +153,7 @@ async function PositionsSection({
       defaultSymbol={symbol}
       title={`Your ${symbol} position`}
       emptyText={`No open ${symbol} position. Add one and the analyst checks its thesis.`}
+      flat
     />
   );
 }
@@ -167,7 +162,7 @@ const POSITION_SYMBOLS = ALL_SYMBOLS.map((s) => ({ symbol: s.symbol, label: s.la
 
 function ContextSkeleton() {
   return (
-    <Panel title="What the analyst sees" subtitle="Building the dossier…" padded>
+    <Panel flat title="What the analyst sees" subtitle="Building the dossier…" padded>
       <div className="flex flex-col gap-3">
         <Skeleton className="h-12" />
         <Skeleton className="h-12" />
@@ -232,7 +227,7 @@ async function ContextCards({ def, analysis }: { def: SymbolDefinition; analysis
   const rated = s.rates.filter((r) => r.rate !== null);
 
   return (
-    <Panel title="What the analyst sees" subtitle={`The dossier as of ${s.generatedAtUtc.slice(11, 16)} UTC. Every question rebuilds it.`}>
+    <Panel flat title="What the analyst sees" subtitle={`The dossier as of ${s.generatedAtUtc.slice(11, 16)} UTC. Every question rebuilds it.`}>
       <dl className="divide-y divide-[var(--color-border)] px-4">
         <Row label="Board score">
           {s.board ? (
@@ -324,7 +319,7 @@ async function ContextCards({ def, analysis }: { def: SymbolDefinition; analysis
         )}
       </dl>
 
-      <div className="flex flex-col gap-2 border-t border-[var(--color-border)] px-4 py-3">
+      <div className="flex flex-col gap-2 px-4 pt-1 pb-4">
         {typeof knowledge === 'string' ? (
           <p className="text-micro text-[var(--color-bear)]">Background files could not be read: {knowledge}</p>
         ) : (

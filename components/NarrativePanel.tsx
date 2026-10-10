@@ -34,11 +34,14 @@ export function NarrativePanel({
   computedAtUtc,
   children,
   compact = false,
+  flat = false,
 }: {
   pair: PairNarrative;
   computedAtUtc: string;
   children?: ReactNode;
   compact?: boolean;
+  /** Borderless, for a column that is already a surface (the /ai side column). */
+  flat?: boolean;
 }) {
   const against = pair.flips.filter((f) => f.role !== 'confirm').slice(0, FLIPS.shown);
   const confirms = pair.flips.filter((f) => f.role === 'confirm').slice(0, 4);
@@ -47,6 +50,7 @@ export function NarrativePanel({
 
   return (
     <Panel
+      flat={flat}
       title="Market narrative"
       subtitle={`A rule-based read of the week as of ${computedAtUtc.slice(11, 16)} UTC. Separate from the board score.`}
       action={
@@ -55,7 +59,7 @@ export function NarrativePanel({
         </Link>
       }
     >
-      <div className={`flex flex-col ${compact ? 'gap-3 px-3 py-3' : 'gap-4 px-4 py-4'}`}>
+      <div className={`flex flex-col ${flat ? 'gap-3 px-4 pt-2 pb-4' : compact ? 'gap-3 px-3 py-3' : 'gap-4 px-4 py-4'}`}>
         <div className="grid grid-cols-2 gap-3">
           <VerdictBadge verdict={pair.tactical} horizon={compact ? 'Tactical · ≤2 weeks' : 'Tactical · days to 2 weeks'} />
           <VerdictBadge verdict={pair.structural} horizon={compact ? 'Structural · 1–3 months' : 'Structural · 1 to 3 months'} />

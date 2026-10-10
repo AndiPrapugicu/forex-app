@@ -81,8 +81,10 @@ async function main() {
        * a confident "vs forecast" beside a cell that was scored off the prior
        * print. That exact bug shipped in the heatmap and hid its own symptom.
        */
-      const againstPrevious = compareFor(slot, cur) === 'previous' || !hasConsensus;
-      const reference = againstPrevious ? e?.previous : e?.consensus;
+      const againstPrevious =
+        r.referenceLabel === 'previous' || compareFor(slot, cur) === 'previous' || !hasConsensus;
+      // The scored reference when there is one: a revision reads against the estimate it revises.
+      const reference = r.reference ?? (againstPrevious ? e?.previous : e?.consensus);
       const basis = againstPrevious ? 'vs PREVIOUS' : 'vs forecast';
 
       const age = r.ageDays ?? 0;

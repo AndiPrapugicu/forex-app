@@ -110,7 +110,12 @@ function toRow(
    * symptom.
    */
   const againstPrevious = (result.referenceLabel ?? slot.compare ?? 'forecast') === 'previous';
-  const reference = (againstPrevious ? event?.previous : event?.consensus) ?? null;
+  const reference =
+    (event !== null && event === result.event && result.reference !== undefined
+      ? result.reference
+      : againstPrevious
+        ? event?.previous
+        : event?.consensus) ?? null;
 
   /**
    * Measured against whatever the SCORE used. This was previously always

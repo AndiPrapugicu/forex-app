@@ -74,6 +74,12 @@ export interface SlotResult {
    * prior print will describe itself as a beat against forecast.
    */
   referenceLabel?: 'forecast' | 'previous';
+  /**
+   * The number the cell was measured against, when it was scored. Read this
+   * rather than re-deriving it from `referenceLabel`: a revision's reference is
+   * the estimate it revises, which no field of the event itself names.
+   */
+  reference?: number;
   /** Per-sub-series detail for composite slots (PMI). Empty otherwise. */
   components?: ComponentResult[];
 }
@@ -118,6 +124,20 @@ export function normalizeZero(n: number): number {
 function ageInDays(iso: string, now: Date): number {
   return (now.getTime() - new Date(iso).getTime()) / 86_400_000;
 }
+
+function daysBetween(earlierIso: string, laterIso: string): number {
+  return (new Date(laterIso).getTime() - new Date(earlierIso).getTime()) / 86_400_000;
+}
+
+/**
+ * How close two releases of one series must land to be the same period
+ * published twice — a flash and its final, an estimate and its revision.
+ *
+ * Monthly series land 28 to 35 days apart, so anything inside 20 is a
+ * re-release rather than the next month. The euro area's flash-to-final PMIs
+ * run about 10 days and its GDP flash-to-revision 15.
+ */
+const SAME_PERIOD_DAYS = 20;
 
 /**
  * Picks the release that fills a slot for one currency.
@@ -171,18 +191,45 @@ export function resolveSeries(
 
   const hasReference = (e: NormalizedEvent) => referenceOf(e) !== null;
 
+  /** What `scoreSlot` can turn into a cell: a forecast, or failing that a prior print. */
+  const readable = (e: NormalizedEvent) => hasReference(e) || priorPrint(e) !== null;
+
   /**
-   * The best print ONE pattern can offer: THE MOST RECENT SCOREABLE ONE, and
-   * failing that simply the most recent.
+   * The best print ONE pattern can offer: THE NEWEST ONE, unless it is only a
+   * re-release of a print that carried a forecast.
    *
-   *  1. any non-null forecast — measurable;
-   *  2. anything released — unscoreable, but the card still shows the series and
-   *     says why it is blank rather than omitting the row.
+   *  1. the newest print, when it carries a forecast — measurable;
+   *  2. the newest print with NO forecast, when it is a new period — `scoreSlot`
+   *     reads it against the prior print, which is A1's rule (see there);
+   *  3. the newest forecast-bearing print, when the forecast-less one landed
+   *     within SAME_PERIOD_DAYS of it, or cannot be read against anything.
    *
-   * Tier 1 earned its place: UK core PPI's latest entry carries no consensus,
-   * and taking it dropped GBPUSD's PPI to a USD-only reading.
+   * THIS USED TO BE "THE NEWEST PRINT THAT HAS A FORECAST", AND THAT RULE
+   * OUTLIVED ITS REASON. It was written when a print with no forecast scored
+   * blank, so reaching back to one that could be scored was the only way to
+   * fill the column: UK core PPI's latest entry carried no consensus, and taking
+   * it dropped GBPUSD's PPI to a USD-only reading. Once `scoreSlot` learned to
+   * read a forecast-less print against the prior one, reaching back stopped
+   * filling a blank and started scoring a month that had already been replaced.
    *
-   * THERE USED TO BE A TIER ABOVE BOTH, AND IT WAS REMOVED ON EVIDENCE.
+   * The euro-area PPI is the case that showed it. Eurostat's YoY prints carry no
+   * consensus on FXStreet, so on 2026-10-08 the column was still scoring the
+   * 5 Aug release (4.6 against 4.6, a 0) two releases after it had been
+   * superseded:
+   *
+   *    5 Aug  PPI (YoY)  actual 4.6  forecast 4.6   <- what the old rule read
+   *    3 Sep  PPI (YoY)  actual 5.8  forecast -
+   *    5 Oct  PPI (YoY)  actual 8.2  forecast -     <- what A1 reads
+   *
+   * A1's EURO row scores PPI +1 that day, which is 8.2 against 5.8 and nothing
+   * else on the list. GBP's producer prices are untouched — that slot compares
+   * against the previous print on purpose, so every print there has a reference.
+   *
+   * Tier 3 keeps what the old rule got right. A flash and its final, or a GDP
+   * estimate and its revision, are one period published twice, and where only
+   * the earlier one was polled it is still the one a surprise can be read from.
+   *
+   * THERE USED TO BE A TIER ABOVE ALL OF THESE, AND IT WAS REMOVED ON EVIDENCE.
    *
    * The rule was: prefer the most recent INFORMATIVE print — one whose forecast
    * differs from the prior print — reaching back up to REVISION_WINDOW_DAYS to
@@ -215,8 +262,15 @@ export function resolveSeries(
    * measurement to re-run.
    */
   const pickWithin = (matches: NormalizedEvent[]): NormalizedEvent => {
+    const latest = newest(matches);
+    if (hasReference(latest)) return latest;
+
     const scoreable = matches.filter(hasReference);
-    return newest(scoreable.length > 0 ? scoreable : matches);
+    if (scoreable.length === 0) return latest;
+
+    const backed = newest(scoreable);
+    const samePeriod = daysBetween(backed.dateUtc, latest.dateUtc) <= SAME_PERIOD_DAYS;
+    return samePeriod || priorPrint(latest) === null ? backed : latest;
   };
 
   const isFresh = (e: NormalizedEvent) =>
@@ -227,12 +281,18 @@ export function resolveSeries(
    *
    * FRESHNESS OUTRANKS SCOREABILITY, and the order is the whole design:
    *
-   *   0  fresh and scoreable      what every column wants
-   *   1  fresh, no forecast       still describes the world as it is now, and
-   *                               `scoreSlot` can read it against its previous
-   *                               print rather than throwing it away
+   *   0  fresh and scoreable      what every column wants — against a forecast,
+   *                               or failing that against its previous print
+   *   1  fresh, unreadable        no forecast and no prior print either
    *   2  stale but scoreable      a real surprise, about a month that has ended
-   *   3  stale and unscoreable    kept only so the card can name the series
+   *   3  stale and unreadable     kept only so the card can name the series
+   *
+   * "Scoreable" includes the previous-print read since 2026-10-10. Before, a
+   * forecast ranked above it, and the euro-area PPI showed what that cost: the
+   * YoY print (8.2 against 5.8, the series the column is named for and the one
+   * A1 scores) lost to the same morning's MoM print (1.9 against a 1.9
+   * forecast) only because the MoM had been polled. Among equally readable
+   * prints, pattern order now decides, which is what the order is for.
    *
    * Putting 2 above 1 was tried and is wrong. New Zealand retail sales offers a
    * fresh Electronic Card print with no forecast against a quarterly Retail
@@ -241,7 +301,7 @@ export function resolveSeries(
    * column stays blank AND the fresher reading is discarded. The staleness
    * windows exist to say a number that old no longer describes anything.
    */
-  const rank = (e: NormalizedEvent) => (isFresh(e) ? 0 : 2) + (hasReference(e) ? 0 : 1);
+  const rank = (e: NormalizedEvent) => (isFresh(e) ? 0 : 2) + (readable(e) ? 0 : 1);
 
   let best: NormalizedEvent | null = null;
   for (const pattern of patterns) {
@@ -311,6 +371,69 @@ export function maxAgeFor(slot: SlotDefinition, currency: Currency): number {
  */
 export function priorPrint(event: NormalizedEvent): number | null {
   return event.revised ?? event.previous;
+}
+
+/** How far back the estimate a revision revises may sit. Quarters are ~90 days apart. */
+const REVISION_WINDOW_DAYS = 45;
+
+/**
+ * The preliminary estimate `event` revises, or null when `event` is not a
+ * revision.
+ *
+ * GDP is published several times per quarter — Japan's preliminary and second
+ * estimates, the US advance, second and third — and once the consensus has
+ * caught up with the first print, the revision's news is how far it moved the
+ * estimate, not how it landed against a forecast set from that same estimate.
+ * Japan is the case: on 2026-09-07 Q2 printed 0.4 against a 0.4 forecast,
+ * which is a 0, and against the 0.3 preliminary of 2026-08-16, which is +1. A1's
+ * JP-YEN row reads +1 on every board from 09-17 to 10-08.
+ *
+ * A REVISION IS TOLD APART FROM THE NEXT QUARTER BY THE PRELIMINARY FLAG, NOT BY
+ * TIME. The US releases GDP every month — 25 Jun Q1 third, 30 Jul Q2 advance,
+ * 26 Aug Q2 second — so every gap is under 45 days and every `previous` equals
+ * the release before it. What differs is the release before: an advance follows
+ * a FINAL estimate, a revision follows a PRELIMINARY one. All three conditions
+ * must hold:
+ *
+ *  - the same series printed within REVISION_WINDOW_DAYS before `event`;
+ *  - that print was flagged preliminary;
+ *  - its actual is exactly `event.previous`, so both describe one quarter.
+ *
+ * Against the other captured revisions it changes nothing, which is the check
+ * that it is the right rule rather than a JPY fit: the euro area's 14 Aug
+ * revision was 0.4 against a 0.4 flash (0, as A1's 08-23 card reconciles) and
+ * the US third estimate 2.2 against a 1.5 second (+1 either way).
+ */
+export function revisedEstimateOf(
+  event: NormalizedEvent,
+  events: readonly NormalizedEvent[],
+): NormalizedEvent | null {
+  const previous = event.previous;
+  if (previous === null) return null;
+
+  const earlier = events.filter(
+    (e) =>
+      e.name === event.name &&
+      e.currency === event.currency &&
+      (e.countryCode ?? null) === (event.countryCode ?? null) &&
+      e.actual !== null &&
+      e.dateUtc.slice(0, 10) < event.dateUtc.slice(0, 10),
+  );
+  if (earlier.length === 0) return null;
+
+  // The last release DAY, since two calendars can carry one release a few
+  // minutes apart and only one of them sets the preliminary flag.
+  const lastDay = earlier.reduce((day, e) => (e.dateUtc.slice(0, 10) > day ? e.dateUtc.slice(0, 10) : day), '');
+  if (daysBetween(lastDay, event.dateUtc.slice(0, 10)) > REVISION_WINDOW_DAYS) return null;
+
+  return (
+    earlier.find(
+      (e) =>
+        e.dateUtc.slice(0, 10) === lastDay &&
+        e.isPreliminary &&
+        Math.abs(e.actual! - previous) < TERNARY_EPSILON,
+    ) ?? null
+  );
 }
 
 /**
@@ -453,6 +576,13 @@ export function scoreSlot(
     referenceLabel = 'previous';
   }
 
+  // A revised estimate reads against the estimate it revises — see `revisedEstimateOf`.
+  const revises = slot.reviseAgainstEstimate ? revisedEstimateOf(event, events) : null;
+  if (revises) {
+    reference = revises.actual;
+    referenceLabel = 'previous';
+  }
+
   if (reference === null || reference === undefined || event.actual === null) {
     return {
       ...base,
@@ -489,15 +619,18 @@ export function scoreSlot(
     ageDays: Math.round(age),
     stale,
     referenceLabel,
+    reference,
     explanation:
       `${event.name}: ${event.actual}${event.unit ?? ''} vs ${reference}${event.unit ?? ''} ${referenceLabel}` +
       sigmaNote +
       (polarity === -1 ? ', inverted — higher is bearish here' : '') +
       // A cell built on last month's print is a weaker claim than one built on a
       // forecast, and must not read the same.
-      (referenceLabel === 'previous' && !againstPrevious
-        ? ' — no forecast is published for this series, so the direction is read against the prior print'
-        : '') +
+      (revises
+        ? ` — a revision, so it is read against the ${revises.dateUtc.slice(0, 10)} estimate it revises`
+        : referenceLabel === 'previous' && !againstPrevious
+          ? ' — no forecast is published for this series, so the direction is read against the prior print'
+          : '') +
       // Scored regardless, but a reader is owed the age of what they are reading.
       (stale ? ` — ${Math.round(age)} days old, past this series' ${maxAge}-day cadence` : ''),
   };

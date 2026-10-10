@@ -523,11 +523,12 @@ describe('resolution picks the most recent SCOREABLE print', () => {
 
   const matcher = { match: [/^Test Series$/i] };
 
-  it('skips a newer print that carries no forecast', () => {
+  it('skips a newer print that can be read against nothing at all', () => {
     /**
-     * The live case: UK core PPI's newest entry has an actual but no consensus,
-     * so it cannot produce a beat or a miss. Taking it anyway discarded an older
-     * print that could, and GBPUSD's PPI cell collapsed to a USD-only reading.
+     * No forecast AND no prior print: `scoreSlot` could only blank it. This was
+     * the rule for every forecast-less print once — UK core PPI's newest entry
+     * collapsed GBPUSD's PPI cell to a USD-only reading — and survives only for
+     * the print nothing can be measured against.
      */
     const events = [
       { ...base, name: 'Test Series', dateUtc: '2026-08-01T00:00:00Z', actual: 0.5, consensus: null },
@@ -537,6 +538,32 @@ describe('resolution picks the most recent SCOREABLE print', () => {
     const picked = resolveSeries(matcher, 'GBP', events)!;
     expect(picked.dateUtc).toBe('2026-07-01T00:00:00Z');
     expect(picked.consensus).toBe(0.4);
+  });
+
+  it('takes a newer print of a NEW period even with no forecast', () => {
+    /**
+     * REGRESSION: the euro-area PPI. Its YoY prints carry no consensus, so the
+     * old rule kept scoring 5 Aug (4.6 against 4.6) on 2026-10-08, two releases
+     * after 5 Oct printed 8.2 against a 5.8 previous. A1's EURO row reads +1.
+     */
+    const events = [
+      { ...base, name: 'Test Series', dateUtc: '2026-10-05T09:00:00Z', actual: 8.2, consensus: null, previous: 5.8 },
+      { ...base, name: 'Test Series', dateUtc: '2026-09-03T09:00:00Z', actual: 5.8, consensus: null, previous: 4.6 },
+      { ...base, name: 'Test Series', dateUtc: '2026-08-05T09:00:00Z', actual: 4.6, consensus: 4.6, previous: 5.9 },
+    ] as never[];
+
+    expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-10-05T09:00:00Z');
+  });
+
+  it('keeps the forecast-bearing print when the newer one is the same period republished', () => {
+    // A flash with a forecast and its final ten days later without one: one
+    // month, and only the flash was polled, so the flash is the surprise.
+    const events = [
+      { ...base, name: 'Test Series', dateUtc: '2026-09-01T08:00:00Z', actual: 52.1, consensus: null, previous: 51.0 },
+      { ...base, name: 'Test Series', dateUtc: '2026-08-22T08:00:00Z', actual: 52.0, consensus: 51.5, previous: 51.0 },
+    ] as never[];
+
+    expect(resolveSeries(matcher, 'GBP', events)!.dateUtc).toBe('2026-08-22T08:00:00Z');
   });
 
   it('still prefers the newest when both are scoreable', () => {
@@ -623,6 +650,26 @@ describe('resolution picks the most recent SCOREABLE print', () => {
     const twoPatterns = { match: [/^Card Sales$/i, /^Quarterly Sales$/i] };
 
     it('reaches a later pattern when the first can only offer an unscoreable print', () => {
+      // Unscoreable means no forecast AND no prior print — see the next test.
+      const events = [
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: null },
+        { ...base, name: 'Quarterly Sales', dateUtc: '2026-08-15T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
+      ] as never[];
+
+      const picked = resolveSeries(twoPatterns, 'GBP', events, 'forecast', {
+        now: new Date('2026-08-19T00:00:00Z'),
+        maxAgeDays: 75,
+      })!;
+      expect(picked.name).toBe('Quarterly Sales');
+    });
+
+    it('keeps the earlier pattern when its print can be read against the previous one', () => {
+      /**
+       * The euro-area PPI again, across patterns this time: YoY (first, no
+       * forecast, 8.2 against 5.8) and MoM (second, 1.9 against a 1.9 forecast)
+       * printed the same morning. Ranking the forecast higher switched the
+       * column to MoM and a 0; the label, and A1's +1, are the YoY.
+       */
       const events = [
         { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: -1.4 },
         { ...base, name: 'Quarterly Sales', dateUtc: '2026-08-15T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
@@ -632,7 +679,7 @@ describe('resolution picks the most recent SCOREABLE print', () => {
         now: new Date('2026-08-19T00:00:00Z'),
         maxAgeDays: 75,
       })!;
-      expect(picked.name).toBe('Quarterly Sales');
+      expect(picked.name).toBe('Card Sales');
     });
 
     it('keeps the earlier pattern when both offer equally good prints', () => {
@@ -671,10 +718,10 @@ describe('resolution picks the most recent SCOREABLE print', () => {
       expect(picked.name).toBe('Card Sales');
     });
 
-    it('without a freshness window, behaves exactly as it did before', () => {
-      // Callers that do not pass one must not be handed a different answer.
+    it('without a freshness window, ranks on scoreability alone', () => {
+      // Callers that do not pass one are not judged on age.
       const events = [
-        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: -1.4 },
+        { ...base, name: 'Card Sales', dateUtc: '2026-08-16T00:00:00Z', actual: 1.3, consensus: null, previous: null },
         { ...base, name: 'Quarterly Sales', dateUtc: '2026-05-21T00:00:00Z', actual: 0.9, consensus: 0.5, previous: 0.9 },
       ] as never[];
 
@@ -1496,5 +1543,89 @@ describe('parity: the US-DOLLAR card', () => {
 
     expect(total).toBe(-8);
     expect(biasFromScore(total)).toBe('Very Bearish');
+  });
+});
+
+/**
+ * GDP: a revised estimate is read against the estimate it revises.
+ *
+ * Japan's 2026-09-07 second estimate printed Q2 at 0.4, on its 0.4 forecast and
+ * up from the 0.3 preliminary of 08-16. A1's JP-YEN row scores GDP +1 on every
+ * board from 09-17 to 10-08. What separates a revision from the next quarter is
+ * the PRELIMINARY flag on the release before it, because the US publishes GDP
+ * every month and its gaps alone cannot tell an advance from a second estimate.
+ */
+describe('GDP revisions read against the estimate they revise', () => {
+  const gdp = SLOTS.find((s) => s.key === 'gdp')!;
+  const NOW = new Date('2026-10-08T13:00:00Z');
+  const print = (over: Partial<NormalizedEvent>): NormalizedEvent => ({
+    id: Math.random().toString(36).slice(2), seriesId: null,
+    name: 'Gross Domestic Product (QoQ)', currency: 'JPY', countryCode: 'JP',
+    dateUtc: '2026-09-07T23:50:00Z', impact: 'HIGH',
+    actual: 0.4, consensus: 0.4, previous: 0.3, revised: null, unit: '%',
+    ratioDeviation: null, isBetterThanExpected: null, isSpeech: false,
+    isPreliminary: false, source: 'fxstreet', actualSource: 'fxstreet',
+    sourceUrl: null, lastUpdated: null,
+    ...over,
+  });
+
+  const prelim = print({ dateUtc: '2026-08-16T23:50:00Z', actual: 0.3, consensus: 0.5, previous: 0.5, isPreliminary: true });
+  const second = print({});
+
+  it('is configured on the GDP slot', () => {
+    expect(gdp.reviseAgainstEstimate).toBe(true);
+  });
+
+  it('scores the Japanese second estimate against the preliminary, not the forecast', () => {
+    const r = scoreSlot(gdp, 'JPY', [prelim, second], NOW);
+    expect(r.event?.dateUtc).toBe('2026-09-07T23:50:00Z');
+    expect(r.reference).toBe(0.3);
+    expect(r.referenceLabel).toBe('previous');
+    expect(r.cell).toBe(1);
+    expect(r.explanation).toMatch(/revision/);
+  });
+
+  it('leaves a new quarter on its forecast: the release before it was final', () => {
+    // The US advance of Q2 follows Q1's THIRD estimate, 35 days earlier. Same
+    // gap as a revision, same `previous` arithmetic — but that print is final.
+    const q1Third = print({
+      name: 'Gross Domestic Product Annualized', currency: 'USD', countryCode: 'US',
+      dateUtc: '2026-06-25T12:30:00Z', actual: 2.1, consensus: 1.6, previous: 1.6, isPreliminary: false,
+    });
+    const q2Advance = print({
+      name: 'Gross Domestic Product Annualized', currency: 'USD', countryCode: 'US',
+      dateUtc: '2026-07-30T12:30:00Z', actual: 2.0, consensus: 1.8, previous: 2.1, isPreliminary: true,
+    });
+    const r = scoreSlot(gdp, 'USD', [q1Third, q2Advance], new Date('2026-08-01T00:00:00Z'));
+    expect(r.referenceLabel).toBe('forecast');
+    expect(r.cell).toBe(1); // 2.0 beats 1.8; against 2.1 it would have been -1
+  });
+
+  it('leaves a print alone when its previous is not the earlier estimate', () => {
+    const r = scoreSlot(gdp, 'JPY', [prelim, print({ previous: 0.2 })], NOW);
+    expect(r.referenceLabel).toBe('forecast');
+    expect(r.cell).toBe(0);
+  });
+
+  it('leaves a print alone when the earlier estimate is too far back to be the same quarter', () => {
+    const old = print({ dateUtc: '2026-06-07T23:50:00Z', actual: 0.3, isPreliminary: true });
+    const r = scoreSlot(gdp, 'JPY', [old, second], NOW);
+    expect(r.referenceLabel).toBe('forecast');
+  });
+
+  it('does not touch the euro-area flash-to-revision A1 reconciled at 0', () => {
+    const flash = print({
+      name: 'Gross Domestic Product s.a. (QoQ)', currency: 'EUR', countryCode: 'EMU',
+      dateUtc: '2026-07-30T09:00:00Z', actual: 0.4, consensus: 0.2, previous: -0.2, isPreliminary: true,
+    });
+    // `revised` 0 is what the feed actually carries on this row; the estimate it
+    // revises is the 0.4 flash, and that is what it must be read against.
+    const revision = print({
+      name: 'Gross Domestic Product s.a. (QoQ)', currency: 'EUR', countryCode: 'EMU',
+      dateUtc: '2026-08-14T09:00:00Z', actual: 0.4, consensus: 0.4, previous: 0.4, revised: 0, isPreliminary: true,
+    });
+    const r = scoreSlot(gdp, 'EUR', [flash, revision], new Date('2026-08-23T00:00:00Z'));
+    expect(r.reference).toBe(0.4);
+    expect(r.cell).toBe(0);
   });
 });

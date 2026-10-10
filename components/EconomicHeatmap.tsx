@@ -283,7 +283,7 @@ export function EconomicHeatmap({ data }: { data: CurrencyHeatmap }) {
                           }`}
                           title={
                             row.referenceLabel === 'previous'
-                              ? 'Not used — this indicator scores against the previous print'
+                              ? 'Not used — this print is scored against the previous one'
                               : undefined
                           }
                         >

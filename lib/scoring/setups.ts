@@ -252,7 +252,14 @@ function toLegs(currency: Currency, result: SlotResult | undefined, compare?: 'f
     currency,
     seriesName: event?.name ?? null,
     actual: event?.actual ?? null,
-    reference: (event === null ? null : referenceLabel === 'previous' ? priorPrint(event) : event.consensus) ?? null,
+    reference:
+      (event === null
+        ? null
+        : event === result.event && result.reference !== undefined
+          ? result.reference
+          : referenceLabel === 'previous'
+            ? priorPrint(event)
+            : event.consensus) ?? null,
     referenceLabel,
     consensus: event?.consensus ?? null,
     previous: event?.previous ?? null,

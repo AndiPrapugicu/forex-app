@@ -12,6 +12,15 @@
  * currencies whose series are never forecast at all; drop them and the slot
  * reaches past a fresh release to an older forecast one, or switches series.
  *
+ * SINCE 2026-10-10 THAT IS NO LONGER TRUE, AND THE COUNTERFACTUALS BELOW SAY SO.
+ * `resolveSeries` now takes the newest print of a new period even when it has
+ * no forecast, and ranks a print readable against the previous one as highly as
+ * a forecast-bearing one (the euro-area PPI showed the old rule scoring a print
+ * two releases out of date). So resolution no longer depends on the basis, and
+ * what each override still holds is the BASIS: the day a consensus appears for
+ * one of these series, the override keeps it scored against the prior print,
+ * which is what A1's cards show.
+ *
  * `npm run overrides` prints the same finding against the live calendar. These
  * tests pin it deterministically so nobody deletes one of these the way the
  * Canadian one deserved to be deleted.
@@ -71,14 +80,23 @@ describe('the CHF unemployment override keeps resolution on the fresh print', ()
     expect(r.cell).toBe(-1);
   });
 
-  it('would reach back a month without it — which is what it is for', () => {
-    // The counterfactual, stated explicitly so the cost of deleting the
-    // override is visible here rather than discovered on a live board.
+  it('no longer reaches back a month without it — the basis is what it holds now', () => {
+    // The counterfactual, stated explicitly. It used to resolve July here; a
+    // forecast-less print of a new month is now taken and read against the
+    // prior one, so the override no longer decides which print is read.
     const withoutOverride = resolveSeries(slot('unemployment'), 'CHF', events, 'forecast', {
       now: NOW,
       maxAgeDays: 60,
     });
-    expect(withoutOverride?.dateUtc).toBe('2026-07-06T07:00:00Z');
+    expect(withoutOverride?.dateUtc).toBe('2026-08-06T07:00:00Z');
+  });
+
+  it('still holds the basis once a consensus appears', () => {
+    const forecast = [stale, { ...fresh, consensus: 3.1 }];
+    const r = scoreSlot(slot('unemployment'), 'CHF', forecast, NOW);
+    // 3.0 against the 2.9 prior print, not against the 3.1 forecast.
+    expect(r.referenceLabel).toBe('previous');
+    expect(r.cell).toBe(-1);
   });
 });
 
@@ -110,12 +128,15 @@ describe('the CHF PPI override keeps the series, not just the basis', () => {
     expect(r.cell).toBe(0); // -2.1 against a -2.1 prior print
   });
 
-  it('would switch to month-on-month without it', () => {
+  it('no longer switches to month-on-month without it', () => {
+    // It used to: only the MoM print carried a forecast, so it outranked the
+    // YoY. A YoY print readable against its previous now ranks the same, and
+    // pattern order keeps the series the label names.
     const withoutOverride = resolveSeries(slot('ppi'), 'CHF', events, 'forecast', {
       now: NOW,
       maxAgeDays: 60,
     });
-    expect(withoutOverride?.name).toBe('Producer and Import Prices (MoM)');
+    expect(withoutOverride?.name).toBe('Producer and Import Prices (YoY)');
   });
 });
 

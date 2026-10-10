@@ -147,6 +147,13 @@ export interface SlotDefinition extends SeriesMatcher {
    */
   compareByCurrency?: Partial<Record<Currency, 'forecast' | 'previous'>>;
 
+  /**
+   * A revised estimate is scored against the estimate it revises, not against
+   * the consensus. See `revisedEstimateOf` in `lib/scoring/discrete.ts` for how
+   * a revision is told apart from the next period, and for the evidence.
+   */
+  reviseAgainstEstimate?: boolean;
+
   /** +1 = a higher reading is bullish for the currency. Economic slots only. */
   polarity?: 1 | -1;
 
@@ -301,6 +308,13 @@ export const SLOTS: SlotDefinition[] = [
     polarity: 1,
     // Quarterly, and often revised weeks later, so a long window is correct.
     maxAgeDays: 120,
+    /**
+     * Japan's second estimate is what moved this. On 2026-09-07 it printed Q2 at
+     * 0.4, exactly on its 0.4 forecast and up from the 0.3 preliminary. A1's
+     * JP-YEN row scores GDP +1 on every board from 09-17 to 10-08, which is the
+     * revision and not the forecast.
+     */
+    reviseAgainstEstimate: true,
     match: [
       /^Gross Domestic Product \(QoQ\)$/i,
       /^Gross Domestic Product s\.a\. \(QoQ\)$/i,
@@ -637,19 +651,14 @@ export const SLOTS: SlotDefinition[] = [
     scoring: true,
     polarity: 1,
     /**
-     * 90 DAYS, because the SCOREABLE print lags further than the series does.
+     * 90 DAYS, a leftover of a rule that no longer exists.
      *
-     * `resolveSeries` deliberately reaches past a release that carries no
-     * consensus, since a print with no forecast cannot produce a beat or a miss.
-     * UK core PPI's recent entries are exactly that, so the newest usable print
-     * sits two publication cycles back — measured at 61 days against a 60-day
-     * window, which dropped the GBP leg on every sterling pair and left GBPUSD
-     * reading +1 where A1 reads +2.
-     *
-     * The two rules were each right and were cancelling each other out. Widening
-     * here is the narrow fix; the real one is a consensus source for UK PPI, at
-     * which point the newest print scores directly and this window stops
-     * mattering.
+     * `resolveSeries` used to reach past a release that carried no consensus,
+     * and UK core PPI's newest usable print sat two publication cycles back —
+     * 61 days against a 60-day window, which dropped the GBP leg on every
+     * sterling pair. It no longer reaches back across periods (see
+     * `ppi:newest-print-of-a-new-period` in the ledger), so the window is only a
+     * freshness preference now, and wide is harmless.
      */
     maxAgeDays: 90,
     match: [/^Producer Price Index \(YoY\)$/i, /^Producer Price Index \(MoM\)$/i],

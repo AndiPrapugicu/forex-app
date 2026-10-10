@@ -2088,6 +2088,87 @@ export const PARITY_LEDGER: readonly ParityLedgerEntry[] = [
       'None. No connector and no page, and no forward accumulation — storing the weekly numbers is copying ' +
       'them. Reopen only with written permission from AAII or a licensed feed; that is the user\'s decision.',
   },
+  {
+    key: 'ppi:newest-print-of-a-new-period',
+    component: 'PPI YoY (EUR leg)',
+    symbol: 'EUR',
+    date: '2026-10-08',
+    ours: 'EUR 0: 5 Aug PPI (YoY) 4.6 against a 4.6 forecast, two releases out of date',
+    a1: 'EURO PPI +1 on the 10-08 board; EUR leg +1 on all three 09-17 frames',
+    classification: 'FIXED',
+    evidence:
+      'Eurostat PPI (YoY) carries no consensus on FXStreet: 5 Aug 4.6 vs 4.6, 3 Sep 5.8 vs -, 5 Oct 8.2 vs - ' +
+      '(previous 5.8). resolveSeries took the newest FORECAST-BEARING print, so it read 5 Aug; and the MoM ' +
+      'pattern (1.9 vs 1.9) outranked the YoY once that was fixed, because a forecast ranked above a prior ' +
+      'print. A1 reads 8.2 against 5.8 = +1 (and 5.8 against 4.6 on 09-17). board-parity PPI column, OURS ' +
+      'cells before -> after: 09-17 frames a 3 -> 0, b 2 -> 1, c 3 -> 0; 10-08 frames a 5 -> 1, b 3 -> 0; the ' +
+      '09-01 and 09-02 DOM captures unchanged. The survivors are USDZAR. No other column moved on any capture. ' +
+      'EURUSD on the 10-08 frame now equals A1 on all 18 cells. One other leg moved today: AUD Household ' +
+      'Spending 0.0 (29 Sep, no forecast) vs 1.1 previous = -1 where it read 27 Aug 1.1 vs 0.4 = +1; A1 AUD ' +
+      'retail is 0 (solved from seven AUD pairs), so that cell is wrong by one either way.',
+    confidence: 'PROVEN',
+    rootCause:
+      'The forecast-first rule predated the previous-print fallback in scoreSlot. Once a forecast-less print ' +
+      'could be read against the prior one, reaching back stopped filling a blank and started scoring a ' +
+      'month that had been replaced.',
+    productionAction:
+      'DONE 2026-10-10: resolveSeries takes the newest print unless a forecast-bearing print of the same ' +
+      'period landed within SAME_PERIOD_DAYS (20) before it, and ranks a print readable against its previous ' +
+      'as highly as one with a forecast, so pattern order keeps the series the label names.',
+  },
+  {
+    key: 'gdp:revision-against-estimate',
+    component: 'GDP (JPY leg)',
+    symbol: 'JPY',
+    date: '2026-10-08',
+    ours: 'JPY 0: 7 Sep second estimate 0.4 against a 0.4 forecast',
+    a1: 'JP-YEN GDP +1 on 09-17 and 10-08; every JPY pair GDP cell 0 against our +1',
+    classification: 'FIXED',
+    evidence:
+      'Japan Q2 GDP (QoQ): preliminary 16 Aug 0.3 (FXStreet isPreliminary true), second estimate 7 Sep 0.4 ' +
+      'against a 0.4 forecast and a 0.3 previous. Against the forecast 0, against the estimate it revises +1. ' +
+      'board-parity GDP column, OURS cells before -> after: 09-17 frames a 2 -> 0, b 3 -> 1, c 5 -> 0; 10-08 ' +
+      'frames a 11 -> 6, b 8 -> 3; 09-01 and 09-02 unchanged. Every other captured revision reads the same ' +
+      'either way: EUR 14 Aug 0.4 vs 0.4 flash (0, as their 08-23 card reconciles), EUR 7 Sep 0.6 vs 0.4, US ' +
+      '30 Sep 2.2 vs 1.5. The 10-08 survivors are the CAD leg (A1 +1, ours 0 off 29 Sep GDP (MoM) 0.0 vs 0.0) ' +
+      'and USDZAR.',
+    confidence: 'PROVEN',
+    rootCause:
+      'A revision was scored against a consensus set from the estimate it revises, so a revision that moved ' +
+      'the number read as no news.',
+    productionAction:
+      'DONE 2026-10-10: `reviseAgainstEstimate` on the GDP slot; revisedEstimateOf requires the release ' +
+      'before to be flagged preliminary, within 45 days, with its actual equal to the new previous. The flag ' +
+      'is what keeps a US advance (which follows a FINAL third estimate) on its forecast.',
+  },
+  {
+    key: 'board:livestream-2026-10-08',
+    component: 'board total',
+    symbol: '46 legible rows over two frames',
+    date: '2026-10-08',
+    ours: 'USDJPY +3 at the 13:00 rewind after the two fixes above (was +4); EURUSD -1',
+    a1: 'USDJPY +8 on Top Setups and +7 on its Forex Scorecard at 19:49 UTC; EURUSD -1',
+    classification: 'UNKNOWN',
+    evidence:
+      'fixtures/a1-video-top-setups-2026-10-08-{a,b}.csv, 30 and 27 rows, every row checksums to its printed ' +
+      'Score; the two frames differ on COPPER (Trend +2 vs -2), so they are two moments, rewound here to ' +
+      '13:00 UTC. board-parity agree before -> after both fixes: a 422 -> 431 of 540, b 362 -> 370 of 450. ' +
+      'USDJPY residual, 5 points: Rates 0/+1 (A1 legs USD, EUR, GBP, AUD, NZD, CAD +1 and CHF, JPY 0; every ' +
+      'next decision on the TradingView calendar, 28 Oct to 5 Nov, carries no consensus yet, so ours are all ' +
+      '0); CnsmrConf -2/0 (JPY 35.4 against FXStreet 35.3 forecast is +1, A1 reads -1, i.e. 35.5 previous or ' +
+      'a forecast at or above 35.5); PCE -1/0 (every non-dollar JPY cross reads -1, USDJPY 0 and JP-YEN -1, ' +
+      'which no leg vector fits; see pce:a1-scores-it-on-yen-crosses); Crowd -1/0 (their own scorecard reads ' +
+      '-1, their board 0).',
+    confidence: 'WEAK',
+    rootCause:
+      'Rates: A1 reads its projections page, our decision calendar has no consensus for the late-October ' +
+      'meetings yet. Consumer confidence: a forecast-source difference on JPY, as on 09-17. PCE and crowd: ' +
+      'A1 disagreeing with A1. CAD GDP: undecided, A1 +1 fits neither the 29 Sep MoM print nor its forecast.',
+    productionAction:
+      'NONE from this board beyond the two FIXED entries above. Re-measure the Rates column when TradingView ' +
+      'publishes a consensus for the 28 Oct Fed, BoC and RBNZ meetings; the 2-year spread was tried as a ' +
+      'proxy and does not separate USD (+77bp, A1 +1) from JPY (+68bp, A1 0).',
+  },
 ] as const;
 
 export function ledgerByClassification(): Record<ParityClassification, ParityLedgerEntry[]> {
